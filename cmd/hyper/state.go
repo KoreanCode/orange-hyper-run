@@ -1,0 +1,52 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+func readStateIfExists(root string) projectState {
+	state, _ := readState(filepath.Join(root, hyperDir, "state.json"))
+	return state
+}
+
+func readState(path string) (projectState, *hyperError) {
+	var state projectState
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return state, ioError(err)
+	}
+	if err := json.Unmarshal(body, &state); err != nil {
+		return state, newError(err.Error(), 1)
+	}
+	return state, nil
+}
+
+func initEventType(created, hasActiveGoal bool) string {
+	if created {
+		return "project_initialized"
+	}
+	if hasActiveGoal {
+		return "project_init_checked"
+	}
+	return "project_reinitialized"
+}
+
+func initSummary(plan planResult, hasActiveGoal bool) string {
+	if hasActiveGoal {
+		return "Loaded existing Hyper Run state and preserved the active runtime packet."
+	}
+	if plan.Created {
+		return "Created blank plan.md. Fill it in before creating the first runtime packet."
+	}
+	return "Loaded existing plan.md and refreshed Hyper Run project state."
+}
+
+func formatAutoLearn(result learnResult) string {
+	if result.Skipped {
+		return fmt.Sprintf("skipped (%s)", result.Reason)
+	}
+	return fmt.Sprintf("%s, inserted %d", result.State, result.Inserted)
+}

@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-20T00:00:00.000Z",
+  "stage": "Tiny MVP",
+  "dimensions": [
+    {
+      "id": "product_completeness",
+      "name": "Product completeness",
+      "status": "covered",
+      "score": 2,
+      "evidence": "plan.md defines product, MVP, and success criteria.",
+      "gap": "The product slice is still too vague to measure."
+    },
+    {
+      "id": "core_ux",
+      "name": "Core UX",
+      "status": "covered",
+      "score": 2,
+      "evidence": "GOAL-0001 readiness evidence: add, complete, delete, reload, and persisted task rendering were verified in one browser smoke pass.",
+      "gap": "The primary user flow is not yet proven usable."
+    },
+    {
+      "id": "persistence",
+      "name": "Data persistence",
+      "status": "emerging",
+      "score": 1,
+      "evidence": "The task list uses localStorage and reload persistence was smoke tested.",
+      "gap": "User data durability has not been proven."
+    },
+    {
+      "id": "error_handling",
+      "name": "Error handling",
+      "status": "missing",
+      "score": 0,
+      "evidence": "Failure, empty, or edge states are not yet handled.",
+      "gap": "Failure, empty, or edge states are not yet handled."
+    },
+    {
+      "id": "validation_coverage",
+      "name": "Validation coverage",
+      "status": "covered",
+      "score": 2,
+      "evidence": "GOAL-0001 readiness evidence: `npm run build` and one browser smoke pass covered the primary task-list flow.",
+      "gap": "The primary behavior does not have repeatable validation evidence."
+    },
+    {
+      "id": "security_baseline",
+      "name": "Security baseline",
+      "status": "missing",
+      "score": 0,
+      "evidence": "Basic security and misuse boundaries are not yet explicit.",
+      "gap": "Basic security and misuse boundaries are not yet explicit."
+    },
+    {
+      "id": "deployment_readiness",
+      "name": "Deployment readiness",
+      "status": "missing",
+      "score": 0,
+      "evidence": "The project is not yet proven runnable outside the local development path.",
+      "gap": "The project is not yet proven runnable outside the local development path."
+    },
+    {
+      "id": "operations_docs",
+      "name": "Operations and docs",
+      "status": "missing",
+      "score": 0,
+      "evidence": "Operational notes, setup, rollback, or handoff docs are not sufficient.",
+      "gap": "Operational notes, setup, rollback, or handoff docs are not sufficient."
+    },
+    {
+      "id": "maintainability",
+      "name": "Maintainability",
+      "status": "missing",
+      "score": 0,
+      "evidence": "The codebase has not accumulated enough maintainability evidence.",
+      "gap": "The codebase has not accumulated enough maintainability evidence."
+    }
+  ],
+  "stage_gate": {
+    "current_stage": "Tiny MVP",
+    "next_stage": "Usable MVP",
+    "status": "ready",
+    "required_axes": [
+      "product_completeness",
+      "core_ux",
+      "validation_coverage"
+    ],
+    "blocking_gaps": [],
+    "required_evidence": [
+      "Product and MVP slice are measurable.",
+      "One core user flow works locally.",
+      "Minimal validation evidence exists."
+    ],
+    "advancement": {
+      "candidate": true,
+      "recommendation": "Tiny MVP gate is ready. Recommend updating plan.md Current Stage to Usable MVP after evidence review.",
+      "plan_change": "Current Stage -> Usable MVP",
+      "required_evidence": [
+        "Product and MVP slice are measurable.",
+        "One core user flow works locally.",
+        "Minimal validation evidence exists."
+      ]
+    }
+  },
+  "next_pressure": {
+    "axis": "stage_advancement",
+    "axis_name": "Stage advancement",
+    "status": "candidate",
+    "reason": "Tiny MVP gate is ready. Recommend updating plan.md Current Stage to Usable MVP after evidence review.",
+    "recommended_goal": "Review readiness evidence and update plan.md Current Stage to Usable MVP if the evidence is accepted.",
+    "work_boundary": "Do not auto-edit plan.md. Review evidence first, then update Current Stage only when the user accepts the stage advancement.",
+    "validation_signal": "Record the stage advancement decision or reason for staying in the current stage."
+  }
+}

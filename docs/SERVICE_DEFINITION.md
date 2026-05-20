@@ -1,0 +1,155 @@
+# Hyper Run Service Definition
+
+Hyper Run is a harness-less project growth runtime that turns a human-owned `plan.md` into repeated execution packets, evidence, and durable learning so a small MVP can grow into a larger project without starting from a heavy harness.
+
+## Target User
+
+Hyper Run is for builders who use Codex Desktop or CLI agents to develop projects over many sessions and want a simple way to keep direction, execution state, validation evidence, and reusable learning attached to the project.
+
+The primary user is not looking for a generic task manager, a static spec system, or a full autonomous platform. They want to start with a lightweight plan, run the next coherent step, preserve what was learned, and let the project accumulate enough structure to justify generated harnesses later.
+
+## Problem
+
+Agent work often fails to scale from small tasks to large projects because each session loses context, treats every request as a fresh task, or over-invests in static specs before the product shape is known.
+
+Harness-first systems can help once the project has stable workflows, but they are too heavy at the beginning. A tiny MVP needs quick execution, not a large fixed process. A growing project needs memory, evidence, and repeatable run boundaries before it needs a complete harness.
+
+## Product Promise
+
+Hyper Run promises a small, repeatable project loop:
+
+1. Start from a human-owned `plan.md`.
+2. Generate one runtime packet for the next execution episode.
+3. Let Codex Desktop or another agent execute that packet inside the current repo.
+4. Record validation evidence, changed files, decisions, reusable patterns, blockers, and next steps.
+5. Learn only durable signals that should influence future runs.
+6. Retrieve similar prior context when the next runtime packet is created.
+7. Measure service readiness across product, UX, persistence, validation, security, deployment, operations, and maintainability.
+8. Grow toward generated skills, agents, validators, or harnesses only when the project has earned that structure.
+
+## What Hyper Run Is
+
+- A local project runtime around `plan.md`, `.hyper/`, and the `hyper` CLI.
+- A command convention for Codex Desktop through `$hyper run`.
+- A runtime packet generator for the next coherent execution episode.
+- A local evidence and learning layer backed by files and SQLite.
+- A service-readiness gate that keeps tiny MVP work moving toward usable, beta, and service-quality stages.
+- A harness-less starting point that can later create project-specific harnesses when the evidence shows they are useful.
+
+## What Hyper Run Is Not
+
+- Not a replacement for Codex Desktop or the coding agent.
+- Not a cloud agent platform.
+- Not a static SPEC manager.
+- Not a project management app.
+- Not a test framework.
+- Not a required TUI.
+- Not a promise that every run will complete without user judgment, credentials, or validation.
+
+## Relationship To Harnesses
+
+Hyper Run sits above a harness in the project lifecycle.
+
+A harness is useful after the project has repeated workflows, stable validation paths, and clear execution boundaries. Hyper Run exists before that point. It lets the project run harness-less, gather evidence, and discover what harnesses are worth generating.
+
+The intended path is:
+
+```text
+plan.md
+  -> runtime packets
+  -> evidence and Learn signals
+  -> repeated patterns
+  -> generated validators, skills, agents, or harnesses when needed
+```
+
+## Run Contract
+
+One `hyper run` creates exactly one runtime packet. That packet is complete when the executing agent has:
+
+- Read `plan.md`, `goal.md`, and `tasks.md`.
+- Checked the packet's `Stage Gate` and selected readiness pressure.
+- Implemented the smallest coherent step for the current episode.
+- Run the safest available validation or recorded why validation is blocked.
+- Updated `evidence.md` with validation output, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers.
+- Updated `next.md` with the next recommended runtime episode and structured Learn Notes.
+- Stopped before destructive actions, missing credentials, unclear product scope, or repeated validation failure.
+
+`hyper run` should not be treated as an infinite background loop. The infinite part is the repeated project growth loop, not a single unchecked command.
+
+## Learn Role
+
+Learn is not a summary system.
+
+Learn extracts durable signals from completed or blocked runtime packets:
+
+- `decision`: a product or technical choice future runs should respect
+- `pattern`: a reusable implementation or validation approach
+- `constraint`: a boundary future runs must not violate
+- `failure`: a blocker or failed approach future runs should avoid repeating
+
+Learn should ignore ordinary progress notes, changed-file lists, and temporary observations unless they contain a durable decision, pattern, constraint, or failure.
+
+## Service Readiness Role
+
+Readiness is the part of Hyper Run that makes "keep going until service quality" concrete.
+
+Hyper Run writes `.hyper/readiness/state.json` with readiness axes, the current stage gate, blocking gaps, and the next selected pressure. The next runtime packet uses that state to decide what should be advanced now, what evidence is required, and when not to claim stage advancement.
+
+Readiness evidence is progressive. When `evidence.md` contains axis-labeled lines such as `Data persistence: Customer records survive reload`, the next `hyper run` marks that axis as `covered`, removes the matching gate gap, and selects the next weakest pressure instead of repeating the solved one.
+
+Readiness evidence also has a basic quality bar. A vague label such as `Validation coverage: tested` is treated as emerging evidence, not covered evidence. Covered evidence should include the proof shape expected by the axis: commands or smoke tests for validation, browser or screenshot proof for UX, reload/restart/storage proof for persistence, hosted/build/release proof for deployment, and docs/runbook/rollback proof for operations.
+
+When all required axes for the current gate are covered, Hyper Run creates a stage advancement candidate. It recommends the exact `plan.md` `Current Stage` change but does not apply it automatically. This keeps stage movement human-reviewed while still making the project state explicit.
+
+Beta and Service Quality stages can generate quiet validator candidates for repeatable smoke, security, deployment, and operations checks. They remain candidates until repeated evidence promotes them to active validators.
+
+The default readiness path is:
+
+```text
+Tiny MVP -> Usable MVP -> Beta -> Service Quality
+```
+
+Readiness does not replace Learn or Growth. Learn extracts durable signals. Growth turns repeated signals into behavior and capabilities. Readiness asks whether the project is becoming a usable service and selects the weakest missing axis for the next run.
+
+## Service Boundary
+
+Hyper Run should stay small at the user-facing layer:
+
+- `hyper init` initializes project-local runtime files.
+- `hyper run [focus]` creates the next runtime packet.
+- `hyper resume` resumes the active packet.
+- `hyper status` shows current runtime state.
+- `hyper update` updates the native binary.
+
+New capabilities should usually become generated project knowledge under `.hyper/` before they become permanent top-level commands.
+
+## Success Criteria
+
+Hyper Run is successful when a user can:
+
+- Start a project with only `hyper init`, `plan.md`, and `hyper run`.
+- Build a tiny MVP without designing a harness first.
+- Continue the same project across many sessions with useful context retrieval.
+- See clear evidence of what changed, what passed, what failed, and what should happen next.
+- Accumulate enough Learn signals to create project-specific validators, skills, agents, or harnesses only when those structures are justified.
+
+## Current MVP Boundary
+
+The current product should stay focused on:
+
+- Native CLI installation and update.
+- Project-local initialization.
+- Runtime packet generation.
+- Codex Desktop `$hyper` routing.
+- Evidence and next-step templates.
+- Durable Learn extraction.
+- Project Growth Engine pressure state.
+- Service Readiness state and Stage Gate runtime compilation.
+- Similar signal clustering and noisy signal filtering.
+- Capability lifecycle from repeated pressure to active structure.
+- Growth-informed runtime packet compilation.
+- Quiet validator, skill, and harness candidates behind thresholds.
+- Similar-context retrieval.
+- A clear Golden Path example.
+
+Everything else should be evaluated through the run contract before becoming product surface area.
