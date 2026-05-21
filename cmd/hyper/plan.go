@@ -86,7 +86,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	stage := firstRuntimeValue(plan["Current Stage"], "Tiny MVP")
 	buildStyle := firstRuntimeValue(plan["Build Style"], "Detect from project")
 	product := firstRuntimeValue(plan["Product"], "the current project")
-	objective := firstRuntimeValue(strings.TrimSpace(focus), readiness.NextPressure.RecommendedGoal, plan["Current Focus"], fmt.Sprintf("Advance %s for %s", stage, product))
+	objective := runtimeObjective(focus, plan, stage, product, readiness)
 	validation := applyReadinessValidation(applyGrowthValidation(applyStageValidation(validationForBuildStyle(buildStyle), stage), growth), readiness)
 	stopCondition := applyReadinessStopConditions(applyGrowthStopConditions(firstRuntimeValue(plan["Success Criteria"], stageDoneCondition(stage)), growth), readiness)
 	scope := runtimeWorkBoundary(objective, stage, plan, growth, readiness)
@@ -94,7 +94,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	docs := episodeDocs{
 		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, readiness),
 		Tasks:    buildTasksDoc(goalID, buildStyle, readiness),
-		Evidence: fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\nPending.\n\n## Active Capability Evidence\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID),
+		Evidence: buildEvidenceDoc(goalID, readiness),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
 		Next:     fmt.Sprintf("# %s Next\n\n## Recommended Next Goal\n\nPending.\n\n## Learn Notes\n\n- Decision: Pending.\n- Pattern: Pending.\n- Constraint: Pending.\n- Failure: Pending.\n", goalID),
 	}
@@ -109,6 +109,26 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 		StopCondition: stopCondition,
 		Docs:          docs,
 	}
+}
+
+func runtimeObjective(focus string, plan map[string]string, stage, product string, readiness readinessState) string {
+	focus = strings.TrimSpace(focus)
+	readinessGoal := strings.TrimSpace(readiness.NextPressure.RecommendedGoal)
+	if focus != "" && readinessGoal != "" && broadRuntimeFocus(focus) {
+		return fmt.Sprintf("Translate `%s` into the smallest %s step for %s: %s", oneLine(focus), stage, readiness.NextPressure.AxisName, readinessGoal)
+	}
+	if focus != "" {
+		return focus
+	}
+	return firstRuntimeValue(readinessGoal, plan["Current Focus"], fmt.Sprintf("Advance %s for %s", stage, product))
+}
+
+func broadRuntimeFocus(focus string) bool {
+	normalized := normalizeLabel(focus)
+	return hasAny(normalized,
+		"service", "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better",
+		"실서비스", "서비스", "품질", "고도화", "업그레이드", "완성", "개선", "베타", "프로덕션",
+	)
 }
 
 func firstRuntimeValue(values ...string) string {
@@ -334,7 +354,7 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 ## Evidence Required
 
 - Command output or reason validation could not run
-- Readiness evidence for the selected pressure
+- Readiness evidence in axis-slot format, for example "%s: proof"
 - Active capability evidence when required validators are present
 - Changed file summary
 - Decisions that should persist into future runs
@@ -345,7 +365,7 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, targetUsers, buildStyle, currentFocus, buildStageGateDoc(readiness), workBoundary, validation, stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, targetUsers, buildStyle, currentFocus, buildStageGateDoc(readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
 }
 
 func buildStageGateDoc(readiness readinessState) string {
@@ -382,9 +402,38 @@ func buildTasksDoc(goalID, buildStyle string, readiness readinessState) string {
 	}
 	readinessTask := ""
 	if readiness.NextPressure.AxisName != "" {
-		readinessTask = "- [ ] Capture readiness evidence for " + readiness.NextPressure.AxisName + "\n"
+		readinessTask = "- [ ] Fill the `" + readiness.NextPressure.AxisName + ":` readiness evidence slot with concrete proof\n"
 	}
 	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with the next recommended runtime episode and Learn Notes\n", goalID, browserTask, readinessTask)
+}
+
+func buildEvidenceDoc(goalID string, readiness readinessState) string {
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Active Capability Evidence\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
+}
+
+func readinessEvidenceTemplate(readiness readinessState) string {
+	defs := readinessDimensionDefs()
+	lines := []string{}
+	if readiness.NextPressure.AxisName != "" && readiness.NextPressure.Axis != "stage_advancement" {
+		lines = append(lines, readiness.NextPressure.AxisName+": Pending.")
+	}
+	for _, def := range defs {
+		if readiness.NextPressure.Axis == def.ID {
+			continue
+		}
+		lines = append(lines, def.Name+": Pending.")
+	}
+	if readiness.NextPressure.Axis == "stage_advancement" {
+		lines = append(lines, "Stage advancement: Pending.")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func readinessEvidenceExampleAxis(readiness readinessState) string {
+	if readiness.NextPressure.AxisName != "" && readiness.NextPressure.Axis != "stage_advancement" {
+		return readiness.NextPressure.AxisName
+	}
+	return "Validation coverage"
 }
 
 func runtimeContinuation(similar []similarContext) string {

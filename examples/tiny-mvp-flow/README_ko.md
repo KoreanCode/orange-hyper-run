@@ -11,10 +11,11 @@ hyper init
 # plan.md를 채웁니다
 hyper run "Build the smallest local task list MVP"
 # Codex Desktop이 GOAL-0001을 실행하고 evidence.md / next.md를 업데이트합니다
+hyper complete
 hyper run "Add persistence polish after the core flow works"
 ```
 
-두 번째 `hyper run`은 다음 runtime packet을 만들기 전에 이전 active runtime packet에서 자동으로 학습합니다. `hyper internal learn`은 learning을 수동으로 확인하거나 디버깅할 때만 사용합니다.
+`hyper complete`는 packet을 닫고 Learn, Growth, Readiness를 갱신합니다. 두 번째 `hyper run`은 이 갱신된 project state에서 시작해야 합니다. `hyper internal learn`은 learning을 수동으로 확인하거나 디버깅할 때만 사용합니다.
 
 Codex Desktop에서는 다음처럼 사용합니다.
 
@@ -54,7 +55,7 @@ plan.md
 - `plan.md`는 사람이 관리하는 가벼운 product brief로 남습니다.
 - `goal.md`는 permanent spec이 아니라 runtime packet입니다.
 - `tasks.md`는 한 episode를 위한 execution checklist입니다.
-- `evidence.md`는 validation, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, blockers를 기록합니다.
+- `evidence.md`는 validation, axis-slot readiness evidence, active capability evidence, changed files, decisions, reusable patterns, blockers를 기록합니다.
 - `next.md`는 다음 runtime episode를 추천하고 structured Learn Notes를 남깁니다.
 - `.hyper/memories/`는 이후 packet이 가져올 durable signal을 저장합니다.
 - `.hyper/growth/state.json`은 다음 packet의 boundary와 validation behavior를 바꾸는 pressure를 저장합니다.
@@ -64,4 +65,4 @@ plan.md
 
 ## Golden Path 결과
 
-`GOAL-0001` 이후 프로젝트에는 작동하는 local MVP flow 하나와 다음 작업으로 이어갈 evidence가 생깁니다. 다음 `hyper run`은 같은 결정을 다시 발견하지 않아야 합니다. Tiny MVP에서는 localStorage가 storage 선택이고, browser smoke test가 validation pattern이며, credentials가 생기기 전까지 external service가 scope 밖이라는 것을 알고 시작해야 합니다.
+`GOAL-0001`과 `hyper complete` 이후 프로젝트에는 작동하는 local MVP flow 하나와 다음 작업으로 이어갈 evidence가 생깁니다. 다음 `hyper run`은 같은 결정을 다시 발견하지 않아야 합니다. Tiny MVP에서는 localStorage가 storage 선택이고, browser smoke test가 validation pattern이며, credentials가 생기기 전까지 external service가 scope 밖이라는 것을 알고 시작해야 합니다.

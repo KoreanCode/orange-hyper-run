@@ -39,8 +39,9 @@ func memoriesForDerivedState(state goalState, goalID, evidenceText, nextText str
 	case "blocked":
 		memories = appendMemoryIfUseful(memories, "failure", fmt.Sprintf("%s blocked: %s", goalID, state.Reason), 0.8)
 	case "completed":
-		memories = appendMemoryIfUseful(memories, "pattern", fmt.Sprintf("%s validated: %s", goalID, firstNonBlank(firstUsefulLine(sectionBody(evidenceText, "Validation")), state.Reason)), 0.65)
-		memories = appendMemoryIfUseful(memories, "decision", fmt.Sprintf("%s next runtime episode: %s", goalID, firstNonBlank(firstUsefulLine(sectionBody(nextText, "Recommended Next Goal")), "See next.md")), 0.6)
+		if validation := firstUsefulValidationMemory(sectionBody(evidenceText, "Validation")); validation != "" {
+			memories = appendMemoryIfUseful(memories, "pattern", fmt.Sprintf("%s validation pattern: %s", goalID, validation), 0.65)
+		}
 	case "waiting_user":
 		memories = appendMemoryIfUseful(memories, "constraint", fmt.Sprintf("%s waiting for user: %s", goalID, state.Reason), 0.8)
 	}
@@ -98,10 +99,31 @@ func usefulSectionLines(text, heading string) []string {
 
 func appendMemoryIfUseful(memories []memory, kind, text string, confidence float64) []memory {
 	text = oneLine(text)
-	if text == "" || isPlaceholder(text) {
+	if text == "" || isPlaceholder(text) || noisyMemoryText(text) {
 		return memories
 	}
 	return append(memories, memory{Kind: kind, Text: text, Confidence: confidence})
+}
+
+func firstUsefulValidationMemory(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
+		if trimmed != "" && !isPlaceholder(trimmed) && !noisyMemoryText(trimmed) {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func noisyMemoryText(text string) bool {
+	normalized := strings.ToLower(oneLine(text))
+	if normalized == "" {
+		return true
+	}
+	return hasAny(normalized,
+		"hyper run created", "`hyper run` created", "created goal-", "created `goal-", "runtime packet created",
+		"created runtime packet", "screenshot saved", "screenshot path", "pending.", "no learnable signal",
+	)
 }
 
 func dedupeMemories(memories []memory) []memory {

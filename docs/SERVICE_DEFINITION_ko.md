@@ -72,9 +72,10 @@ plan.md
 - 실행 가능한 가장 안전한 validation을 돌렸거나, validation이 막힌 이유를 기록했습니다.
 - `evidence.md`에 validation output, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, blockers를 기록했습니다.
 - `next.md`에 다음 추천 runtime episode와 structured Learn Notes를 기록했습니다.
+- `hyper complete`를 실행해 Learn, Growth, Readiness가 완료된 packet 기준으로 갱신되었습니다.
 - destructive action, missing credentials, unclear product scope, repeated validation failure 앞에서 멈췄습니다.
 
-`hyper run` 하나를 무한 background loop로 보면 안 됩니다. 무한한 것은 unchecked command 하나가 아니라, 반복되는 프로젝트 성장 loop입니다.
+`hyper run` 하나를 무한 background loop로 보면 안 됩니다. 무한한 것은 unchecked command 하나가 아니라, 반복되는 프로젝트 성장 loop입니다. 이전 active packet의 evidence가 아직 pending이면 새 `hyper run`은 차단됩니다.
 
 ## Learn 역할
 
@@ -95,7 +96,7 @@ Readiness는 "service quality까지 계속 간다"는 말을 구체적인 실행
 
 Hyper Run은 `.hyper/readiness/state.json`에 readiness axis, current stage gate, blocking gap, next selected pressure를 씁니다. 다음 runtime packet은 이 state를 사용해 지금 무엇을 진행해야 하는지, 어떤 evidence가 필요한지, 언제 stage advancement를 주장하면 안 되는지 판단합니다.
 
-Readiness evidence는 누적 진행도로 반영됩니다. `evidence.md`에 `Data persistence: Customer records survive reload` 같은 axis-labeled line이 있으면, 다음 `hyper run`은 해당 axis를 `covered`로 올리고, 관련 gate gap을 제거하고, 해결된 pressure를 반복하지 않고 다음으로 약한 pressure를 선택합니다.
+Readiness evidence는 누적 진행도로 반영됩니다. 새 evidence 파일에는 모든 readiness axis 슬롯이 들어갑니다. `evidence.md`에 `Data persistence: Customer records survive reload` 같은 axis-labeled line이 있으면, `hyper complete`와 `hyper status`는 해당 axis를 `covered`로 올리고, 관련 gate gap을 제거하고, 해결된 pressure를 반복하지 않고 다음으로 약한 pressure를 선택합니다.
 
 Readiness evidence에는 기본 품질 기준도 있습니다. `Validation coverage: tested`처럼 모호한 label은 covered가 아니라 emerging evidence로 봅니다. Covered evidence는 axis에 맞는 proof shape이 있어야 합니다. Validation은 command 또는 smoke test, UX는 browser 또는 screenshot proof, persistence는 reload/restart/storage proof, deployment는 hosted/build/release proof, operations는 docs/runbook/rollback proof가 필요합니다.
 
@@ -117,6 +118,7 @@ Hyper Run의 user-facing layer는 작게 유지해야 합니다.
 
 - `hyper init`: project-local runtime files를 초기화합니다.
 - `hyper run [focus]`: 다음 runtime packet을 만듭니다.
+- `hyper complete`: active packet을 닫고 Learn, Growth, Readiness를 갱신합니다.
 - `hyper resume`: active packet을 재개합니다.
 - `hyper status`: 현재 runtime state를 보여줍니다.
 - `hyper update`: native binary를 업데이트합니다.
@@ -127,7 +129,7 @@ Hyper Run의 user-facing layer는 작게 유지해야 합니다.
 
 Hyper Run은 사용자가 다음을 할 수 있을 때 성공입니다.
 
-- `hyper init`, `plan.md`, `hyper run`만으로 프로젝트를 시작합니다.
+- `hyper init`, `plan.md`, `hyper run`, `hyper complete`만으로 프로젝트를 시작합니다.
 - Harness를 먼저 설계하지 않고 tiny MVP를 만듭니다.
 - 여러 세션에 걸쳐 같은 프로젝트를 이어가며 유용한 context를 회수합니다.
 - 무엇이 바뀌었고, 무엇이 통과했고, 무엇이 실패했고, 다음에 무엇을 해야 하는지 evidence로 확인합니다.

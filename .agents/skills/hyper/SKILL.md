@@ -20,6 +20,7 @@ Learn role:
 Command mapping:
 - `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.
 - `$hyper run [focus]`: run `hyper run [focus]`, read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.
+- `$hyper complete`: run `hyper complete` after evidence and next notes are written so project readiness is refreshed.
 - `$hyper resume`: run `hyper resume`, read the active runtime packet path, and continue the same evidence and next-step rules.
 - `hyper run [focus]`: treat this the same as `$hyper run [focus]` when the user is speaking inside Codex Desktop.
 
@@ -30,4 +31,5 @@ Execution rules:
 4. Run the safest available validation, or record why validation is blocked.
 5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, decisions, reusable patterns, and blockers.
 6. Write the active runtime packet's `next.md` with the next recommended runtime episode and Learn Notes.
-7. Do not start another `hyper run` before evidence and next notes are written.
+7. Run `hyper complete` to close the current packet and refresh Learn, Growth, and Readiness.
+8. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.

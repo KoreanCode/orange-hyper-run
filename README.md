@@ -14,6 +14,8 @@ The project command model is:
 ```bash
 hyper init
 hyper run [focus]
+hyper complete
+hyper status
 hyper version
 hyper update [source]
 ```
@@ -74,6 +76,8 @@ cd my-project
 hyper init
 # Fill in plan.md
 hyper run "Build the smallest usable MVP"
+# After evidence.md and next.md are updated
+hyper complete
 ```
 
 ## Install From Source
@@ -130,6 +134,7 @@ cd ../my-project
 ../orange-hyper-run/dist/hyper init
 # Fill in plan.md
 ../orange-hyper-run/dist/hyper run "Build the smallest usable MVP"
+../orange-hyper-run/dist/hyper complete
 ```
 
 ## Project Setup
@@ -178,7 +183,7 @@ How do we know this stage is done?
 What should the next run advance?
 ```
 
-If `plan.md` does not exist, `hyper run` stops and asks you to initialize the project first.
+If `plan.md` does not exist, `hyper run` stops and asks you to initialize the project first. If `plan.md` is still sparse but README or docs contain product planning material, Hyper Run writes `.hyper/plan-candidates.md` with import candidates for the user to review.
 
 ## What `hyper init` Creates
 
@@ -242,17 +247,23 @@ plan.md
       next.md
 ```
 
-Each run creates a runtime packet that can be handed to Codex Desktop or another execution agent. It is not a long-lived SPEC; it is the next execution episode derived from `plan.md`, logs, evidence, memory, and current project state. The default handoff is prompt-based and includes:
+Each run creates a runtime packet that can be handed to Codex Desktop or another execution agent. It is not a long-lived SPEC; it is the next execution episode derived from `plan.md`, logs, evidence, memory, and current project state. Hyper Run will block a new `hyper run` while the previous active packet still has pending evidence. The default handoff is prompt-based and includes:
 
 ```text
 Read .hyper/goals/GOAL-0001/goal.md as a runtime packet and complete it checkpoint by checkpoint.
 ```
 
-`evidence.md` includes `Readiness Evidence` and `Active Capability Evidence` so stage-gate progress and required active validators can be confirmed separately from general validation output.
+`evidence.md` includes axis-slot `Readiness Evidence` and `Active Capability Evidence` so stage-gate progress and required active validators can be confirmed separately from general validation output.
 
 ## Learning Loop
 
-After a runtime packet is completed or blocked, update its `evidence.md` and `next.md`.
+After a runtime packet is completed or blocked, update its `evidence.md` and `next.md`, then run:
+
+```bash
+hyper complete
+```
+
+`hyper complete` closes the active packet, learns durable signals, refreshes Growth and Readiness, and updates `.hyper/state.json`.
 
 Learn is not a generic summary. It extracts only durable signals that should influence future work:
 
@@ -285,7 +296,7 @@ Use `Learn Notes` for explicit structured signals:
 - Failure: The previous API path failed because the required token was missing.
 ```
 
-The next `hyper run` automatically learns from the previous active runtime packet before creating the next one. Manual learning remains available for debugging:
+The next `hyper run` also checks the previous active runtime packet before creating the next one. Manual learning remains available for debugging:
 
 ```bash
 hyper internal learn
@@ -309,7 +320,7 @@ After Growth is updated, Hyper Run writes `.hyper/readiness/state.json`. This st
 
 The next runtime packet includes a `Stage Gate` section. Hyper Run uses the current stage to choose the next gate, finds the weakest missing readiness axis, and turns that into a concrete pressure for the next episode. This pressure affects `Current Episode`, `Work Boundary`, `Validation Signals`, and `Stop When`.
 
-Record readiness progress with axis-labeled evidence:
+Record readiness progress with axis-labeled evidence. New packets include slots for every readiness axis:
 
 ```text
 ## Readiness Evidence
@@ -319,7 +330,7 @@ Data persistence: User records survive reload using SQLite or localStorage.
 Validation coverage: The primary flow is covered by a repeatable smoke test.
 ```
 
-On the next `hyper run`, axis-labeled readiness evidence moves that axis to `covered`, removes it from the stage gate blocking gaps, and prevents the same pressure from being selected again.
+On `hyper complete` and `hyper status`, axis-labeled readiness evidence moves that axis to `covered`, removes it from the stage gate blocking gaps, and prevents the same pressure from being selected again.
 
 Evidence must be specific enough for the axis. For example, `Validation coverage: tested` is only emerging evidence, while `Validation coverage: \`go test ./...\` passed and is repeatable` is covered evidence. UX evidence should mention a smoke pass, browser verification, or screenshot. Deployment evidence should include a build, release, hosted URL, CI, or deploy proof.
 
@@ -359,6 +370,7 @@ The user still runs `hyper run`; the project grows by making the next packet mor
 ```bash
 hyper init
 hyper run "Add customer persistence"
+hyper complete
 hyper status
 hyper resume
 hyper update

@@ -72,9 +72,10 @@ One `hyper run` creates exactly one runtime packet. That packet is complete when
 - Run the safest available validation or recorded why validation is blocked.
 - Updated `evidence.md` with validation output, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers.
 - Updated `next.md` with the next recommended runtime episode and structured Learn Notes.
+- Run `hyper complete` so Learn, Growth, and Readiness refresh from the completed packet.
 - Stopped before destructive actions, missing credentials, unclear product scope, or repeated validation failure.
 
-`hyper run` should not be treated as an infinite background loop. The infinite part is the repeated project growth loop, not a single unchecked command.
+`hyper run` should not be treated as an infinite background loop. The infinite part is the repeated project growth loop, not a single unchecked command. A new `hyper run` is blocked while the previous active packet still has pending evidence.
 
 ## Learn Role
 
@@ -95,7 +96,7 @@ Readiness is the part of Hyper Run that makes "keep going until service quality"
 
 Hyper Run writes `.hyper/readiness/state.json` with readiness axes, the current stage gate, blocking gaps, and the next selected pressure. The next runtime packet uses that state to decide what should be advanced now, what evidence is required, and when not to claim stage advancement.
 
-Readiness evidence is progressive. When `evidence.md` contains axis-labeled lines such as `Data persistence: Customer records survive reload`, the next `hyper run` marks that axis as `covered`, removes the matching gate gap, and selects the next weakest pressure instead of repeating the solved one.
+Readiness evidence is progressive. New evidence files include slots for every readiness axis. When `evidence.md` contains axis-labeled lines such as `Data persistence: Customer records survive reload`, `hyper complete` and `hyper status` mark that axis as `covered`, remove the matching gate gap, and select the next weakest pressure instead of repeating the solved one.
 
 Readiness evidence also has a basic quality bar. A vague label such as `Validation coverage: tested` is treated as emerging evidence, not covered evidence. Covered evidence should include the proof shape expected by the axis: commands or smoke tests for validation, browser or screenshot proof for UX, reload/restart/storage proof for persistence, hosted/build/release proof for deployment, and docs/runbook/rollback proof for operations.
 
@@ -117,6 +118,7 @@ Hyper Run should stay small at the user-facing layer:
 
 - `hyper init` initializes project-local runtime files.
 - `hyper run [focus]` creates the next runtime packet.
+- `hyper complete` closes the active packet and refreshes Learn, Growth, and Readiness.
 - `hyper resume` resumes the active packet.
 - `hyper status` shows current runtime state.
 - `hyper update` updates the native binary.
@@ -127,7 +129,7 @@ New capabilities should usually become generated project knowledge under `.hyper
 
 Hyper Run is successful when a user can:
 
-- Start a project with only `hyper init`, `plan.md`, and `hyper run`.
+- Start a project with only `hyper init`, `plan.md`, `hyper run`, and `hyper complete`.
 - Build a tiny MVP without designing a harness first.
 - Continue the same project across many sessions with useful context retrieval.
 - See clear evidence of what changed, what passed, what failed, and what should happen next.

@@ -138,6 +138,20 @@ func insertGoal(db *sql.DB, goalID, runID string, ep episode, status, now string
 	return nil
 }
 
+func updateRunAndGoalStatus(db *sql.DB, runID, goalID, status, now string) *hyperError {
+	if strings.TrimSpace(goalID) != "" {
+		if _, err := db.Exec(`update goals set status = ?, completed_at = ? where id = ?`, status, now, goalID); err != nil {
+			return dbError(err)
+		}
+	}
+	if strings.TrimSpace(runID) != "" {
+		if _, err := db.Exec(`update runs set status = ?, ended_at = ? where id = ?`, status, now, runID); err != nil {
+			return dbError(err)
+		}
+	}
+	return nil
+}
+
 func insertEvent(db *sql.DB, event map[string]any) *hyperError {
 	eventType, _ := event["type"].(string)
 	runID, _ := event["run_id"].(string)

@@ -113,6 +113,7 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertNotContains(t, goal, "## Non-goals")
 	evidence := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"))
 	assertContains(t, evidence, "## Readiness Evidence")
+	assertContains(t, evidence, "Core UX: Pending.")
 	assertContains(t, evidence, "## Active Capability Evidence")
 	assertContains(t, evidence, "## Decisions")
 	assertContains(t, evidence, "## Reusable Patterns")
@@ -161,6 +162,59 @@ func TestStatusAndResumeUseActiveState(t *testing.T) {
 	assertContains(t, resume.Stdout, "Execution adapter: prompt")
 }
 
+func TestRunBlocksPendingActiveGoal(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+
+	_, err := runCLI(args("run", "Start another packet"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected pending active goal to block next run")
+	}
+	assertContains(t, err.Message, "Current runtime packet is still active")
+	assertContains(t, err.Message, "hyper complete")
+}
+
+func TestCompleteLearnsAndRefreshesReadiness(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed and primary CLI smoke passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke passed for create and complete flow.\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Decisions\n\nKeep notes local-first.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n\n## Learn Notes\n\n- Pattern: Run go test before handoff.\n")
+
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Completed runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "State: completed")
+	assertContains(t, out.Stdout, "Readiness gate: Tiny MVP -> Usable MVP (ready)")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "readiness", "state.json")), `"candidate": true`)
+
+	status, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Last run: RUN-0001")
+	assertContains(t, status.Stdout, "Last runtime packet: GOAL-0001")
+	assertNotContains(t, status.Stdout, "Active run: RUN-0001")
+}
+
+func TestCompleteRejectsActivePacket(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected active packet to block complete")
+	}
+	assertContains(t, err.Message, "Current runtime packet is still active")
+	assertContains(t, err.Message, ".hyper/goals/GOAL-0001/evidence.md")
+	assertContains(t, err.Message, ".hyper/goals/GOAL-0001/next.md")
+}
+
 func TestStatusDerivesReadinessForLegacyState(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -178,6 +232,21 @@ func TestStatusDerivesReadinessForLegacyState(t *testing.T) {
 	assertNotContains(t, status.Stdout, "Readiness: not recorded")
 }
 
+func TestStatusRefreshesReadinessFromLatestEvidence(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+
+	status, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Readiness gate: Tiny MVP -> Usable MVP (ready)")
+	assertContains(t, status.Stdout, "Stage advancement:")
+}
+
 func TestInitPreservesActiveGoal(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -193,6 +262,21 @@ func TestInitPreservesActiveGoal(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl")), "project_init_checked")
 }
 
+func TestInitWritesPlanImportCandidates(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "docs", "PICKACHAT_PLAN.md"), "# Pickachat 기획안\n\n## 제품 한 줄 정의\n\n지도 기반 채팅 서비스입니다.\n\n## MVP\n\n지도에서 핀을 만들고 메시지를 보냅니다.\n\n## 첫 버전 완료 기준\n\n빌드와 smoke validation이 통과합니다.\n")
+
+	out, err := runCLI(args("init"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Plan import candidates: .hyper/plan-candidates.md")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "plan-candidates.md")), "docs/PICKACHAT_PLAN.md")
+}
+
 func TestAutoLearnFeedsNextGoalContext(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CRM", "Build a tiny CRM MVP")
@@ -204,7 +288,7 @@ func TestAutoLearnFeedsNextGoalContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second run failed: %v", err)
 	}
-	assertContains(t, out.Stdout, "Auto learn: completed, inserted 2")
+	assertContains(t, out.Stdout, "Auto learn: completed, inserted 1")
 	assertContains(t, out.Stdout, "Similar context: ")
 	assertContains(t, strings.ToLower(readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0002", "goal.md"))), "customer records persisted")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "RUN-0001.jsonl")), "auto_learn_completed")
@@ -439,6 +523,19 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	}
 }
 
+func TestBroadFocusIsRewrittenThroughReadinessPressure(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+
+	if _, err := runCLI(args("run", "실서비스 수준으로 업그레이드"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
+	assertContains(t, goal, "Translate `실서비스 수준으로 업그레이드` into the smallest Tiny MVP step")
+	assertContains(t, goal, "- Current focus: 실서비스 수준으로 업그레이드")
+}
+
 func TestStageAdvancementCandidateWhenGateReady(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
@@ -520,13 +617,28 @@ func TestLearnExtractsDurableSignals(t *testing.T) {
 		t.Fatalf("learn failed: %v", err)
 	}
 
-	assertContains(t, out.Stdout, "Candidate memories: 8")
-	assertContains(t, out.Stdout, "Inserted memories: 8")
+	assertContains(t, out.Stdout, "Candidate memories: 7")
+	assertContains(t, out.Stdout, "Inserted memories: 7")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "decisions.md")), "Keep storage local-first")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "patterns.md")), "table-driven tests")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "constraints.md")), "external services")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "failures.md")), "WebSocket path failed")
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "decisions.md")), "Changed Files")
+}
+
+func TestLearnIgnoresHyperRunMetaProgress(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny chat", "Build a tiny chat MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`hyper run` created `GOAL-0001`.\n\n## Changed Files\n\nPending.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nContinue.\n")
+
+	out, err := runCLI(args("internal", "learn"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("learn failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Candidate memories: 0")
+	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "patterns.md")), "hyper run")
 }
 
 func TestGoalStateDerivation(t *testing.T) {

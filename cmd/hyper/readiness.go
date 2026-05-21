@@ -53,19 +53,15 @@ func readReadinessStateIfExists(root string) readinessState {
 }
 
 func readinessStateForStatus(root string, growth growthState) readinessState {
-	state := readReadinessStateIfExists(root)
-	if state.Version != 0 {
-		return state
-	}
 	planBody := readIfExists(filepath.Join(root, planFile))
 	if strings.TrimSpace(planBody) == "" {
-		return state
+		return readReadinessStateIfExists(root)
 	}
 	evidence, err := loadReadinessEvidence(root, readinessDimensionDefs())
 	if err != nil {
-		return state
+		return readReadinessStateIfExists(root)
 	}
-	state = deriveReadinessState(parsePlan(planBody), growth, evidence)
+	state := deriveReadinessState(parsePlan(planBody), growth, evidence)
 	state.UpdatedAt = nowISO()
 	return state
 }
@@ -87,13 +83,13 @@ func readinessDimensions(plan map[string]string, growth growthState, evidence []
 	corpus := readinessCorpus(plan, growth)
 	dimensions := make([]readinessDimension, 0, len(readinessDimensionDefs()))
 	for _, def := range readinessDimensionDefs() {
-		status, score, evidence := readinessDimensionStatus(def, plan, growth, evidence, corpus)
+		status, score, evidenceText := readinessDimensionStatus(def, plan, growth, evidence, corpus)
 		dimensions = append(dimensions, readinessDimension{
 			ID:       def.ID,
 			Name:     def.Name,
 			Status:   status,
 			Score:    score,
-			Evidence: evidence,
+			Evidence: evidenceText,
 			Gap:      def.Gap,
 		})
 	}
@@ -166,10 +162,12 @@ func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readine
 		}
 		goalID := entry.Name()
 		body := readIfExists(filepath.Join(goalsDir, goalID, "evidence.md"))
-		for _, line := range usefulSectionLines(body, "Readiness Evidence") {
-			record, ok := parseReadinessEvidenceLine(goalID, line, defs)
-			if ok {
-				records = append(records, record)
+		for _, heading := range []string{"Readiness Evidence", "Validation"} {
+			for _, line := range usefulSectionLines(body, heading) {
+				record, ok := parseReadinessEvidenceLine(goalID, line, defs)
+				if ok {
+					records = append(records, record)
+				}
 			}
 		}
 	}

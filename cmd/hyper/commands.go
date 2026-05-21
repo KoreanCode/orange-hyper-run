@@ -18,6 +18,10 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
+	planCandidatePath, err := maybeWritePlanImportCandidates(root, planResult.Body)
+	if err != nil {
+		return commandOutput{}, err
+	}
 
 	db, err := openDB(root)
 	if err != nil {
@@ -95,6 +99,9 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if hasActiveGoal {
 		lines = append(lines, "Active runtime packet preserved: "+state.CurrentGoalID)
 	}
+	if planCandidatePath != "" {
+		lines = append(lines, "Plan import candidates: "+planCandidatePath)
+	}
 	next := []string{"  Fill in plan.md", "  hyper run [focus]"}
 	if hasActiveGoal {
 		next = []string{"  hyper resume"}
@@ -122,6 +129,10 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 	if err := ensureCodexDesktopRules(root); err != nil {
 		return commandOutput{}, err
 	}
+	planCandidatePath, err := maybeWritePlanImportCandidates(root, planResult.Body)
+	if err != nil {
+		return commandOutput{}, err
+	}
 
 	db, err := openDB(root)
 	if err != nil {
@@ -136,6 +147,9 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 	}
 
 	previous := readStateIfExists(root)
+	if blocked := blockingActiveGoal(root, previous); blocked != "" {
+		return commandOutput{}, newError(blocked, 2)
+	}
 	autoLearn, err := learnGoalFromState(root, previous, db, "auto_learn_completed", false)
 	if err != nil {
 		return commandOutput{}, err
@@ -237,7 +251,7 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 		return commandOutput{}, err
 	}
 
-	return stdout(strings.Join([]string{
+	lines := []string{
 		"Project: " + state.Project,
 		"Stage: " + episode.Stage,
 		"Run: " + runID,
@@ -247,12 +261,18 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 		"Readiness pressure: " + readinessPressureSummary(readiness),
 		fmt.Sprintf("Similar context: %d", len(similar)),
 		"Runtime packet file: " + state.CurrentGoalPath,
+	}
+	if planCandidatePath != "" {
+		lines = append(lines, "Plan import candidates: "+planCandidatePath)
+	}
+	lines = append(lines,
 		"",
 		"Loaded plan.md as the product brief.",
 		"",
 		renderExecutionHandoff(handoff),
 		"",
-	}, "\n")), nil
+	)
+	return stdout(strings.Join(lines, "\n")), nil
 }
 
 func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
@@ -292,9 +312,15 @@ func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Runtime packet reason: " + derived.Reason,
 	}
 	lines = append(lines, readinessStatusLines(readiness)...)
+	runLabel := "Last run"
+	packetLabel := "Last runtime packet"
+	if state.Status == "active" {
+		runLabel = "Active run"
+		packetLabel = "Current runtime packet"
+	}
 	lines = append(lines,
-		"Active run: "+state.ActiveRunID,
-		"Current runtime packet: "+state.CurrentGoalID,
+		runLabel+": "+state.ActiveRunID,
+		packetLabel+": "+state.CurrentGoalID,
 		"Runtime packet file: "+state.CurrentGoalPath,
 		fmt.Sprintf("Runs recorded: %d", runs),
 		fmt.Sprintf("Runtime packets recorded: %d", goals),
@@ -304,6 +330,102 @@ func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"",
 	)
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
+	root := fsys.root()
+	statePath := filepath.Join(root, hyperDir, "state.json")
+	if !exists(statePath) {
+		return commandOutput{}, newError("No Hyper Run state found. Start with `hyper init`.", 2)
+	}
+	state, err := readState(statePath)
+	if err != nil {
+		return commandOutput{}, err
+	}
+	if strings.TrimSpace(state.CurrentGoalID) == "" {
+		return commandOutput{}, newError("No active runtime packet found. Start with `hyper run`.", 2)
+	}
+	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
+	if derived.State == "active" {
+		goalDir := strings.TrimSuffix(state.CurrentGoalPath, "goal.md")
+		return commandOutput{}, newError("Current runtime packet is still active.\n\nUpdate "+goalDir+"evidence.md and "+goalDir+"next.md, or run `hyper resume` to continue it.", 2)
+	}
+
+	db, err := openDB(root)
+	if err != nil {
+		return commandOutput{}, err
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		return commandOutput{}, err
+	}
+	if err := ensureMemoryFiles(root); err != nil {
+		return commandOutput{}, err
+	}
+
+	result, err := learnGoalFromState(root, state, db, "runtime_packet_completed", true)
+	if err != nil {
+		return commandOutput{}, err
+	}
+	growth, err := updateGrowthState(root, db)
+	if err != nil {
+		return commandOutput{}, err
+	}
+	readiness := readReadinessStateIfExists(root)
+	if planBody := readIfExists(filepath.Join(root, planFile)); strings.TrimSpace(planBody) != "" {
+		readiness, err = updateReadinessState(root, planBody, growth)
+		if err != nil {
+			return commandOutput{}, err
+		}
+	}
+	now := nowISO()
+	if err := updateRunAndGoalStatus(db, state.ActiveRunID, state.CurrentGoalID, derived.State, now); err != nil {
+		return commandOutput{}, err
+	}
+	state.Status = derived.State
+	state.UpdatedAt = now
+	if err := writeJSON(statePath, state); err != nil {
+		return commandOutput{}, err
+	}
+	event := map[string]any{
+		"type":               "runtime_packet_closed",
+		"run_id":             state.ActiveRunID,
+		"goal_id":            state.CurrentGoalID,
+		"state":              derived.State,
+		"reason":             derived.Reason,
+		"inserted_memories":  result.Inserted,
+		"readiness_gate":     readiness.StageGate.Status,
+		"readiness_pressure": readiness.NextPressure.Axis,
+		"created_at":         nowISO(),
+	}
+	if err := insertEvent(db, event); err != nil {
+		return commandOutput{}, err
+	}
+	if err := appendJSONL(filepath.Join(root, hyperDir, "logs", state.ActiveRunID+".jsonl"), event); err != nil {
+		return commandOutput{}, err
+	}
+
+	line := "Memory files updated."
+	if result.MemoryCount == 0 {
+		line = "No learnable signal yet."
+	}
+	return stdout(strings.Join([]string{
+		"Completed runtime packet: " + state.CurrentGoalID,
+		"State: " + derived.State,
+		"Reason: " + derived.Reason,
+		fmt.Sprintf("Candidate memories: %d", result.MemoryCount),
+		fmt.Sprintf("Inserted memories: %d", result.Inserted),
+		fmt.Sprintf("Growth pressures: %d", len(growth.Pressures)),
+		fmt.Sprintf("Capability candidates: %d", len(growth.Candidates)),
+		"Readiness gate: " + readinessGateSummary(readiness),
+		"Readiness pressure: " + readinessPressureSummary(readiness),
+		line,
+		"",
+		"Next:",
+		"  hyper status",
+		"  hyper run [next focus]",
+		"",
+	}, "\n")), nil
 }
 
 func resumeHyper(fsys fsRoot) (commandOutput, *hyperError) {
@@ -326,6 +448,33 @@ func resumeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		renderExecutionHandoff(handoff),
 		"",
 	}, "\n")), nil
+}
+
+func blockingActiveGoal(root string, state projectState) string {
+	if strings.TrimSpace(state.CurrentGoalID) == "" {
+		return ""
+	}
+	if state.Status != "" && state.Status != "active" {
+		return ""
+	}
+	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
+	if derived.State != "active" {
+		return ""
+	}
+	path := state.CurrentGoalPath
+	if strings.TrimSpace(path) == "" {
+		path = fmt.Sprintf(".hyper/goals/%s/goal.md", state.CurrentGoalID)
+	}
+	return strings.Join([]string{
+		"Current runtime packet is still active: " + state.CurrentGoalID,
+		"Reason: " + derived.Reason,
+		"",
+		"Finish it before creating another packet:",
+		"  hyper resume",
+		"  update " + strings.TrimSuffix(path, "goal.md") + "evidence.md",
+		"  update " + strings.TrimSuffix(path, "goal.md") + "next.md",
+		"  hyper complete",
+	}, "\n")
 }
 
 func learnCurrentGoal(fsys fsRoot) (commandOutput, *hyperError) {

@@ -15,4 +15,5 @@ Behavior:
 - Run the safest available validation or record why validation is blocked.
 - Update `evidence.md` with validation output, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers.
 - Write `next.md` with the next recommended runtime episode and Learn Notes.
-- Do not start another `hyper run` until evidence and next notes are written.
+- Run `hyper complete` after evidence and next notes are written.
+- Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.

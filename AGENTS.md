@@ -18,7 +18,8 @@ Required workflow:
 5. Run the safest available validation or record why validation is blocked.
 6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers.
 7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.
-8. Do not start another `hyper run` until evidence and next notes are written.
+8. Run `hyper complete` so Learn, Growth, and Readiness refresh from the completed packet.
+9. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.
 
 Use `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.
 <!-- hyper-run:end -->
