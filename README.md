@@ -7,53 +7,82 @@
 
 # Hyper Run
 
-Hyper Run is a harness-less project growth runtime. It starts from a human-owned `plan.md`, creates a concrete runtime packet for the next episode, records execution in `.hyper/`, and learns reusable context from completed or blocked work.
+Hyper Run helps an AI coding workflow keep moving from a tiny MVP to a larger product.
 
-The project command model is:
+You write a simple `plan.md`. Hyper Run turns it into the next small work packet, stores progress under `.hyper/`, and uses completed evidence to make the next packet more specific.
+
+It is meant for developers who use Codex Desktop or a CLI assistant and want one repeatable project loop:
+
+```bash
+hyper run
+```
+
+## Why Use It?
+
+AI coding sessions often lose project context:
+
+- the next task becomes too broad
+- previous decisions are forgotten
+- validation evidence is scattered
+- small MVP work does not naturally grow into service quality
+
+Hyper Run keeps that context inside the project. It does not try to be a full project manager. It creates the next focused runtime packet and learns from the result.
+
+## Core Ideas
+
+Hyper Run has a few internal concepts, but they are simple:
+
+| Concept | Simple meaning |
+| --- | --- |
+| `plan.md` | The human-written product brief. It says what the product is, who it is for, and what stage it is in. |
+| Runtime packet | The next small work bundle generated from `plan.md` and project history. Usually this is `.hyper/goals/GOAL-0001/goal.md`. |
+| Evidence | Proof that the work was done and checked. This goes in `evidence.md`. |
+| Learn | The step that extracts reusable decisions, patterns, constraints, and failures from completed work. It is not a generic summary. |
+| Growth | The project noticing repeated pressure. For example, if every run needs the same validation, Hyper Run can suggest a validator candidate. |
+| Readiness | A simple stage gate that checks whether the project is ready to move from Tiny MVP to Usable MVP, Beta, and Service Quality. |
+| Capability candidate | A suggested validator, skill, or harness. It is only a candidate until enough repeated evidence proves it should be active. |
+
+The key idea is **harness-less growth**. A project does not need a harness on day one. It starts with `plan.md`, runs small packets, records evidence, and only creates stronger structure when the project repeatedly proves it needs that structure.
+
+## Basic Flow
 
 ```bash
 hyper init
-hyper run [focus]
+# edit plan.md once
+
+hyper run "Build the smallest usable MVP"
+# implement the generated packet
+# update evidence.md and next.md
+
 hyper complete
 hyper status
-hyper version
-hyper update [source]
+hyper run "Next improvement"
 ```
 
-In Codex Desktop, use the same idea as a command convention:
+In Codex Desktop you can use the same idea as a project command:
 
 ```text
-$hyper
 $hyper init
 $hyper run
 ```
 
-`$hyper run` means: run the CLI in the current workspace, read the generated runtime packet, execute the current episode, update evidence, and write the next recommended runtime episode.
+`$hyper run` means Codex should run the native `hyper` CLI, read the generated `.hyper/goals/.../goal.md`, implement it, update evidence, and prepare the next recommendation.
 
-`hyper init` writes local Codex Desktop rules into `AGENTS.md`, `.agents/skills/hyper/SKILL.md`, `.agents/skills/hyper-run/SKILL.md`, `.hyper/codex-desktop.md`, and `.hyper/commands/hyper-run.md` so the `$hyper run` workflow is part of the project, not just this README.
+## Install
 
-The `hyper` skill is intentionally thin. It only lets Codex Desktop catch `$hyper run` and route it back to the native CLI plus `.hyper/` state. Product strategy, learning, validation evidence, and generated harnesses stay outside the static skill.
-
-For the product boundary and example workflow, see:
-
-- [Service Definition](docs/SERVICE_DEFINITION.md)
-- [Tiny MVP Flow Example](examples/tiny-mvp-flow/README.md)
-
-## Requirements
-
-- No runtime dependency when installed from a release binary
-- Go 1.21 or newer when building from source
-- A project directory where Hyper Run can create `plan.md` and `.hyper/`
-
-## Install Native Binary
-
-Install the latest native binary to `~/.local/bin/hyper`:
+Install the latest native binary:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KoreanCode/orange-hyper-run/main/install.sh | sh
 ```
 
-Manual install:
+Check it:
+
+```bash
+hyper version
+```
+
+Manual macOS ARM install:
 
 ```bash
 mkdir -p ~/.local/bin
@@ -61,28 +90,16 @@ curl -fsSL https://github.com/KoreanCode/orange-hyper-run/releases/latest/downlo
 chmod +x ~/.local/bin/hyper
 ```
 
-Use `hyper-darwin-amd64` for Intel macOS, `hyper-linux-amd64` for Linux x64, and `hyper-linux-arm64` for Linux ARM64. Make sure `~/.local/bin` is on your `PATH`.
+Other release binaries:
 
-Check the installed binary:
+- `hyper-darwin-amd64` for Intel macOS
+- `hyper-linux-amd64` for Linux x64
+- `hyper-linux-arm64` for Linux ARM64
+- `hyper-windows-amd64.exe` for Windows x64
 
-```bash
-hyper version
-```
-
-Then run Hyper Run inside any target project:
-
-```bash
-cd my-project
-hyper init
-# Fill in plan.md
-hyper run "Build the smallest usable MVP"
-# After evidence.md and next.md are updated
-hyper complete
-```
+Make sure `~/.local/bin` is on your `PATH`.
 
 ## Install From Source
-
-If you prefer source installation:
 
 ```bash
 go install github.com/KoreanCode/orange-hyper-run/cmd/hyper@latest
@@ -90,13 +107,11 @@ go install github.com/KoreanCode/orange-hyper-run/cmd/hyper@latest
 
 ## Update
 
-Update the current native executable from the latest GitHub release:
-
 ```bash
 hyper update
 ```
 
-`hyper update` first tries to replace the currently running executable. If that path is not writable, it installs the latest binary to `~/.local/bin/hyper` and warns if that directory is not on `PATH`.
+This downloads the latest GitHub release. If Hyper Run cannot replace the current executable, it installs to `~/.local/bin/hyper`.
 
 To update from a fork:
 
@@ -104,44 +119,21 @@ To update from a fork:
 hyper update github:OWNER/orange-hyper-run
 ```
 
-You can also pass a direct binary URL:
-
-```bash
-hyper update https://example.com/hyper-darwin-arm64
-```
-
-To force a user-local install path:
-
-```bash
-HYPER_INSTALL_PATH="$HOME/.local/bin/hyper" hyper update
-```
-
-Release binaries are built by the GitHub Actions release workflow when a `v*` tag is pushed.
-
-## Local Development Install
-
-From this repository:
-
-```bash
-go test ./...
-go build -o dist/hyper ./cmd/hyper
-```
-
-Then run the local binary from another project directory:
-
-```bash
-cd ../my-project
-../orange-hyper-run/dist/hyper init
-# Fill in plan.md
-../orange-hyper-run/dist/hyper run "Build the smallest usable MVP"
-../orange-hyper-run/dist/hyper complete
-```
-
 ## Project Setup
 
-Run `hyper init` once in the target project. It installs the local `.hyper/` runtime settings and creates a blank draft `plan.md` if one does not already exist.
+Run this once inside your project:
 
-Hyper Run works best after the user reviews `plan.md` at the project root:
+```bash
+hyper init
+```
+
+It creates:
+
+- `plan.md`
+- `.hyper/`
+- Codex Desktop routing files such as `AGENTS.md` and `.agents/skills/...`
+
+Then fill in `plan.md` in plain language:
 
 ```markdown
 # Product Plan
@@ -156,7 +148,7 @@ Who is it for?
 
 ## MVP
 
-What is the smallest coherent product?
+What is the smallest useful version?
 
 ## Current Stage
 
@@ -168,11 +160,11 @@ Web app
 
 ## Non-goals
 
-What should Hyper Run avoid for now?
+What should not be built yet?
 
 ## Constraints
 
-Technical, product, time, or UX constraints.
+Technical or product constraints.
 
 ## Success Criteria
 
@@ -180,207 +172,118 @@ How do we know this stage is done?
 
 ## Current Focus
 
-What should the next run advance?
+What should the next run improve?
 ```
 
-If `plan.md` does not exist, `hyper run` stops and asks you to initialize the project first. If `plan.md` is still sparse but README or docs contain product planning material, Hyper Run writes `.hyper/plan-candidates.md` with import candidates for the user to review.
+If `plan.md` is sparse, Hyper Run may create `.hyper/plan-candidates.md` from README or docs so you can copy useful product context into `plan.md`.
 
-## What `hyper init` Creates
+## What `hyper run` Does
+
+`hyper run` creates a new runtime packet:
 
 ```text
-AGENTS.md
-.agents/
-  skills/
-    hyper/
-      SKILL.md
-    hyper-run/
-      SKILL.md
-.hyper/
-  codex-desktop.md
-  commands/
-    hyper-run.md
-  capabilities/
-    candidates/
-      harness/
-      skill/
-      validator/
-    active/
-      harness/
-      skill/
-      validator/
-    retired/
-      harness/
-      skill/
-      validator/
-  growth/
-    state.json
-  readiness/
-    state.json
-  hyper.sqlite
-  state.json
-  logs/
-  memories/
-    decisions.md
-    patterns.md
-    failures.md
-    constraints.md
-  validators/
-    generated/
-  skills/
-    generated/
-  harnesses/
-    generated/
-plan.md
+.hyper/goals/GOAL-0001/
+  goal.md
+  tasks.md
+  evidence.md
+  review.md
+  next.md
 ```
 
-## What `hyper run` Creates
+The important files are:
 
-```text
-.hyper/
-  logs/
-  goals/
-    GOAL-0001/
-      goal.md
-      tasks.md
-      evidence.md
-      review.md
-      next.md
-```
+- `goal.md`: what to build now
+- `tasks.md`: checkpoints for this run
+- `evidence.md`: proof of what changed and what was validated
+- `next.md`: what should happen next
 
-Each run creates a runtime packet that can be handed to Codex Desktop or another execution agent. It is not a long-lived SPEC; it is the next execution episode derived from `plan.md`, logs, evidence, memory, and current project state. Hyper Run will block a new `hyper run` while the previous active packet still has pending evidence. The default handoff is prompt-based and includes:
+Hyper Run blocks a new `hyper run` if the previous packet still has pending evidence. Finish the current packet with `hyper complete` first.
 
-```text
-Read .hyper/goals/GOAL-0001/goal.md as a runtime packet and complete it checkpoint by checkpoint.
-```
+## What `hyper complete` Does
 
-`evidence.md` includes axis-slot `Readiness Evidence` and `Active Capability Evidence` so stage-gate progress and required active validators can be confirmed separately from general validation output.
-
-## Learning Loop
-
-After a runtime packet is completed or blocked, update its `evidence.md` and `next.md`, then run:
+After implementation, update `evidence.md` and `next.md`, then run:
 
 ```bash
 hyper complete
 ```
 
-`hyper complete` closes the active packet, learns durable signals, refreshes Growth and Readiness, and updates `.hyper/state.json`.
+This closes the current packet and updates project memory:
 
-Learn is not a generic summary. It extracts only durable signals that should influence future work:
+- decisions to keep
+- reusable patterns
+- failures or blockers
+- constraints
+- readiness progress
 
-- decisions that should remain true
-- reusable implementation or validation patterns
-- blockers and failures to avoid repeating
-- constraints that future runtime packets must respect
+The next `hyper run` uses that information.
 
-The strongest Learn signals come from these sections:
+## Readiness In Simple Terms
 
-```text
-evidence.md
-  Validation
-  Readiness Evidence
-  Decisions
-  Reusable Patterns
-  Blocker
-
-next.md
-  Recommended Next Goal
-  Learn Notes
-```
-
-Use `Learn Notes` for explicit structured signals:
+Hyper Run tries to grow the project stage by stage:
 
 ```text
-- Decision: Keep auth local-first until the MVP is usable.
-- Pattern: Validate the main user flow with the existing Playwright smoke test.
-- Constraint: Do not add paid services without credentials.
-- Failure: The previous API path failed because the required token was missing.
+Tiny MVP -> Usable MVP -> Beta -> Service Quality
 ```
 
-The next `hyper run` also checks the previous active runtime packet before creating the next one. Manual learning remains available for debugging:
+It checks whether the project has evidence for things like:
 
-```bash
-hyper internal learn
-```
-
-Hyper Run stores reusable memories in SQLite and `.hyper/memories/`. Future `hyper run` calls retrieve similar prior context and include it in the next runtime packet under `Continue From`. Learn does not treat changed files or long notes as memory unless they contain a durable decision, pattern, failure, or constraint.
-
-## Service Readiness Model
-
-After Growth is updated, Hyper Run writes `.hyper/readiness/state.json`. This state is the bridge from tiny MVP work to service-level quality. It tracks project readiness across these axes:
-
-- product completeness
+- product clarity
 - core UX
-- data persistence
+- persistence
 - error handling
-- validation coverage
-- security baseline
-- deployment readiness
-- operations and docs
+- validation
+- security
+- deployment
+- docs
 - maintainability
 
-The next runtime packet includes a `Stage Gate` section. Hyper Run uses the current stage to choose the next gate, finds the weakest missing readiness axis, and turns that into a concrete pressure for the next episode. This pressure affects `Current Episode`, `Work Boundary`, `Validation Signals`, and `Stop When`.
-
-Record readiness progress with axis-labeled evidence. New packets include slots for every readiness axis:
+You record this in `evidence.md`:
 
 ```text
 ## Readiness Evidence
 
-Core UX: The primary add/edit flow works in the browser.
-Data persistence: User records survive reload using SQLite or localStorage.
-Validation coverage: The primary flow is covered by a repeatable smoke test.
+Core UX: Browser smoke test passed for create and complete flow.
+Validation coverage: `go test ./...` passed and is repeatable.
+Data persistence: Records survive reload using SQLite.
 ```
 
-On `hyper complete` and `hyper status`, axis-labeled readiness evidence moves that axis to `covered`, removes it from the stage gate blocking gaps, and prevents the same pressure from being selected again.
+When enough evidence exists, `hyper status` shows the next stage is ready. Hyper Run recommends the stage change, but it does not edit `plan.md` automatically.
 
-Evidence must be specific enough for the axis. For example, `Validation coverage: tested` is only emerging evidence, while `Validation coverage: \`go test ./...\` passed and is repeatable` is covered evidence. UX evidence should mention a smoke pass, browser verification, or screenshot. Deployment evidence should include a build, release, hosted URL, CI, or deploy proof.
-
-When a stage gate becomes ready, Hyper Run does not edit `plan.md` automatically. It emits a stage advancement candidate in the next runtime packet and recommends the exact `Current Stage` change for the user to accept or reject.
-
-Beta and Service Quality stages also create quiet validator candidates under `.hyper/validators/generated/` and `.hyper/capabilities/candidates/validator/`. These are not required behavior until they are promoted to active validators.
-
-The goal is not to add a heavy process. The user still runs `hyper run`; the project gradually learns what service quality means for itself.
-
-## Project Growth Engine
-
-After Learn runs, Hyper Run updates `.hyper/growth/state.json`. This is not a user-facing planning report. It is the project-local growth state that changes how the next runtime packet is compiled.
-
-Growth pressure comes from repeated or durable Learn signals:
-
-- stable decisions and constraints affect `Work Boundary`
-- repeated validation patterns affect `Validation Signals`
-- recurring failures affect `Stop When`
-- repeated patterns can create quiet candidates under `.hyper/validators/generated/` or `.hyper/skills/generated/`
-- active validators under `.hyper/capabilities/active/validator/` become required behavior in the next runtime packet's `Validation Signals`
-- a harness candidate is generated only after multiple repeated pressures cross the harness threshold
-
-Phase 1 stabilization keeps pressure cleaner by clustering similar Learn signals instead of requiring exact text matches, ignoring noisy progress-only signals, and classifying pressure as `stable_decision`, `repeated_validation`, `implementation_pattern`, `recurring_constraint`, or `recurring_failure`.
-
-Phase 2 adds a capability lifecycle:
-
-```text
-observed -> repeated -> promotable -> active -> retired
-```
-
-Lifecycle metadata is written under `.hyper/capabilities/`. Legacy candidate files under `.hyper/validators/generated/`, `.hyper/skills/generated/`, and `.hyper/harnesses/generated/` are still written for discoverability, but activation depends on the lifecycle status. Candidate and promotable validators do not become required behavior until an active validator exists under `.hyper/capabilities/active/validator/`.
-
-The user still runs `hyper run`; the project grows by making the next packet more specific.
-
-## Useful Commands
+## Commands
 
 ```bash
-hyper init
-hyper run "Add customer persistence"
-hyper complete
-hyper status
-hyper resume
-hyper update
-hyper version
-hyper internal learn
+hyper init                  # install Hyper Run files in this project
+hyper run [focus]           # create the next runtime packet
+hyper complete              # close the current packet and learn from it
+hyper status                # show current stage, gaps, and readiness
+hyper resume                # print the current handoff again
+hyper update                # update the native binary
+hyper version               # show version and binary path
+hyper internal learn        # debug/manual learning command
 ```
 
-## Current Status
+## Local Development
 
-This is a native Go MVP implementation. It intentionally avoids a TUI and keeps the surface area small: one user-facing command, local files, SQLite logs, prompt-based execution handoff, and lightweight learning.
+From this repository:
+
+```bash
+go test ./...
+go build -o dist/hyper ./cmd/hyper
+```
+
+Then test it in another project:
+
+```bash
+cd ../my-project
+../orange-hyper-run/dist/hyper init
+../orange-hyper-run/dist/hyper run "Build the smallest usable MVP"
+../orange-hyper-run/dist/hyper complete
+```
+
+## More Detail
+
+- [Service Definition](docs/SERVICE_DEFINITION.md)
+- [Tiny MVP Flow Example](examples/tiny-mvp-flow/README.md)
 
 ## License
 
