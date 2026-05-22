@@ -17,8 +17,9 @@ func learnGoalFromState(root string, state projectState, db *sql.DB, eventType s
 	nextText := readIfExists(filepath.Join(goalDir, "next.md"))
 	derived := deriveGoalState(evidenceText, nextText)
 	memories := memoriesForDerivedState(derived, goalID, evidenceText, nextText)
+	quality := memoryQualityCounts(memories)
 	if len(memories) == 0 && !recordWhenEmpty {
-		return learnResult{Skipped: true, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID}, nil
+		return learnResult{Skipped: true, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID, Quality: quality}, nil
 	}
 	inserted := 0
 	for _, mem := range memories {
@@ -33,14 +34,23 @@ func learnGoalFromState(root string, state projectState, db *sql.DB, eventType s
 			}
 		}
 	}
-	event := map[string]any{"type": eventType, "run_id": runID, "goal_id": goalID, "state": derived.State, "inserted_memories": inserted, "created_at": nowISO()}
+	event := map[string]any{"type": eventType, "run_id": runID, "goal_id": goalID, "state": derived.State, "inserted_memories": inserted, "memory_quality": quality, "created_at": nowISO()}
 	if err := insertEvent(db, event); err != nil {
 		return learnResult{}, err
 	}
 	if err := appendJSONL(filepath.Join(root, hyperDir, "logs", runID+".jsonl"), event); err != nil {
 		return learnResult{}, err
 	}
-	return learnResult{Skipped: false, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID, Inserted: inserted, MemoryCount: len(memories)}, nil
+	return learnResult{Skipped: false, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID, Inserted: inserted, MemoryCount: len(memories), Quality: quality}, nil
+}
+
+func memoryQualityCounts(memories []memory) map[string]int {
+	counts := map[string]int{}
+	for _, mem := range memories {
+		quality := firstNonBlank(mem.Quality, "weak")
+		counts[quality]++
+	}
+	return counts
 }
 
 func buildSimilarityQuery(plan map[string]string, ep episode, focus string) string {

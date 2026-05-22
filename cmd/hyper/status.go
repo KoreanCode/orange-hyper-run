@@ -34,6 +34,8 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"Runtime packet file: "+state.CurrentGoalPath,
 		"",
 	)
+	lines = append(lines, statusActionLines(state, derived, readiness, growth)...)
+	lines = append(lines, "")
 	lines = append(lines, pressureDashboardLines(growth)...)
 	lines = append(lines, "")
 	lines = append(lines, readinessDashboardLines(readiness)...)
@@ -50,6 +52,52 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"",
 	)
 	return lines
+}
+
+func statusActionLines(state projectState, derived goalState, readiness readinessState, growth growthState) []string {
+	lines := []string{"Action:"}
+	lines = append(lines, "  Next action: "+statusNextCommand(state, derived, readiness))
+	lines = append(lines, "  Why now: "+statusActionReason(state, derived, readiness, growth))
+	lines = append(lines, "  Do not do yet: "+statusDoNotDoYet(state, derived, readiness, growth))
+	return lines
+}
+
+func statusActionReason(state projectState, derived goalState, readiness readinessState, growth growthState) string {
+	if derived.State == "active" {
+		return "The current runtime packet is still open; evidence and next.md decide what the project learns."
+	}
+	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
+		return "The packet evidence says " + derived.State + " while state.json still says " + state.Status + "; repair before trusting automation."
+	}
+	if readiness.StageGate.Advancement.Candidate {
+		return readiness.StageGate.Advancement.Recommendation
+	}
+	if readiness.NextPressure.Reason != "" {
+		return readiness.NextPressure.Reason
+	}
+	if visibleGrowthPressureCount(growth.Pressures) > 0 {
+		return "The pressure ledger has project-specific signals that should shape the next packet."
+	}
+	return firstNonBlank(derived.Reason, "No runtime packet is active.")
+}
+
+func statusDoNotDoYet(state projectState, derived goalState, readiness readinessState, growth growthState) string {
+	if derived.State == "active" {
+		return "Do not start another `hyper run` until this packet is completed or blocked."
+	}
+	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
+		return "Do not create another packet until `hyper repair` or `hyper complete` reconciles state."
+	}
+	if readiness.StageGate.Status == "not_ready" {
+		return "Do not advance " + readiness.StageGate.CurrentStage + " until blocking readiness gaps are closed."
+	}
+	if visibleGrowthCandidateCount(growth.Candidates) > 0 && activeStructureCount(growth.Candidates) == 0 {
+		return "Do not treat candidates as active harnesses or validators before promotion."
+	}
+	if readiness.StageGate.Advancement.Candidate {
+		return "Do not edit plan.md Current Stage unless the user accepts the stage advancement."
+	}
+	return "Do not add broad structure unless repeated evidence creates pressure for it."
 }
 
 func displayProjectStatus(state projectState, derived goalState) string {
@@ -180,6 +228,9 @@ func readinessDashboardLines(readiness readinessState) []string {
 }
 
 func statusNextCommand(state projectState, derived goalState, readiness readinessState) string {
+	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
+		return "hyper repair"
+	}
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return "hyper run [focus]"
 	}

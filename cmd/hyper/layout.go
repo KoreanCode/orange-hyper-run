@@ -283,5 +283,6 @@ func appendMemoryMarkdown(root string, mem memory) *hyperError {
 	default:
 		return nil
 	}
-	return appendText(filepath.Join(root, rel), "- "+mem.Text+"\n")
+	quality := firstNonBlank(mem.Quality, "weak")
+	return appendText(filepath.Join(root, rel), "- ["+quality+"] "+mem.Text+"\n")
 }

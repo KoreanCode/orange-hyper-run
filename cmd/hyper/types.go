@@ -56,6 +56,7 @@ type memory struct {
 	Kind       string
 	Text       string
 	Confidence float64
+	Quality    string
 }
 
 type learnResult struct {
@@ -66,6 +67,7 @@ type learnResult struct {
 	GoalID      string
 	Inserted    int
 	MemoryCount int
+	Quality     map[string]int
 }
 
 type similarContext struct {

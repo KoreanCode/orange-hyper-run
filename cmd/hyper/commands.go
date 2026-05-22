@@ -291,27 +291,32 @@ func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
-	db, err := openDB(root)
-	if err != nil {
-		return commandOutput{}, err
-	}
-	defer db.Close()
-	if err := ensureSchema(db); err != nil {
-		return commandOutput{}, err
-	}
 	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
-	runs, err := countRows(db, "runs")
-	if err != nil {
-		return commandOutput{}, err
-	}
-	goals, err := countRows(db, "goals")
-	if err != nil {
-		return commandOutput{}, err
-	}
+	runs, goals := statusDBCounts(root)
 	growth := readGrowthStateIfExists(root)
 	readiness := readinessStateForStatus(root, growth)
 	lines := statusDashboardLines(state, derived, readiness, growth, runs, goals)
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func statusDBCounts(root string) (int, int) {
+	if !exists(filepath.Join(root, hyperDir, "hyper.sqlite")) {
+		return 0, 0
+	}
+	db, err := openDB(root)
+	if err != nil {
+		return 0, 0
+	}
+	defer db.Close()
+	runs, runErr := countRows(db, "runs")
+	if runErr != nil {
+		runs = 0
+	}
+	goals, goalErr := countRows(db, "goals")
+	if goalErr != nil {
+		goals = 0
+	}
+	return runs, goals
 }
 
 func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
@@ -397,6 +402,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Reason: " + derived.Reason,
 		fmt.Sprintf("Candidate memories: %d", result.MemoryCount),
 		fmt.Sprintf("Inserted memories: %d", result.Inserted),
+		"Memory quality: " + formatMemoryQuality(result),
 		fmt.Sprintf("Growth pressures: %d", visibleGrowthPressureCount(growth.Pressures)),
 		fmt.Sprintf("Capability candidates: %d", visibleGrowthCandidateCount(growth.Candidates)),
 		"Pressure ledger: " + growthLoopStateSummary(growth),
@@ -506,6 +512,7 @@ func learnCurrentGoal(fsys fsRoot) (commandOutput, *hyperError) {
 		"Reason: " + result.Reason,
 		fmt.Sprintf("Candidate memories: %d", result.MemoryCount),
 		fmt.Sprintf("Inserted memories: %d", result.Inserted),
+		"Memory quality: " + formatMemoryQuality(result),
 		fmt.Sprintf("Growth pressures: %d", visibleGrowthPressureCount(growth.Pressures)),
 		fmt.Sprintf("Capability candidates: %d", visibleGrowthCandidateCount(growth.Candidates)),
 		"Pressure ledger: " + growthLoopStateSummary(growth),

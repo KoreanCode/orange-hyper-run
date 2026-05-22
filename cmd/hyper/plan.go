@@ -92,8 +92,8 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	scope := runtimeWorkBoundary(objective, stage, plan, growth, readiness)
 	nonGoals := firstRuntimeValue(plan["Non-goals"], "No explicit non-goals recorded in plan.md.")
 	docs := episodeDocs{
-		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, readiness),
-		Tasks:    buildTasksDoc(goalID, buildStyle, readiness),
+		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
+		Tasks:    buildTasksDoc(goalID, buildStyle, stage, readiness, growth),
 		Evidence: buildEvidenceDoc(goalID, readiness),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
 		Next:     fmt.Sprintf("# %s Next\n\n## Recommended Next Goal\n\nPending.\n\n## Learn Notes\n\n- Decision: Pending.\n- Pattern: Pending.\n- Constraint: Pending.\n- Failure: Pending.\n", goalID),
@@ -379,7 +379,7 @@ func validationForBuildStyle(buildStyle string) string {
 	return common + "\n- If validation cannot run, document the blocker in evidence.md."
 }
 
-func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage, buildStyle, workBoundary, validation, stopCondition string, similar []similarContext, readiness readinessState) string {
+func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage, buildStyle, workBoundary, validation, stopCondition string, similar []similarContext, growth growthState, readiness readinessState) string {
 	currentFocus := firstRuntimeValue(strings.TrimSpace(focus), plan["Current Focus"], "Continue the current stage.")
 	product := firstRuntimeValue(plan["Product"], "the current project")
 	targetUsers := firstRuntimeValue(plan["Target Users"], "Not specified yet.")
@@ -421,6 +421,14 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 
 %s
 
+## Stage Runtime Behavior
+
+%s
+
+## Active Capabilities
+
+%s
+
 ## Growth Principles
 
 %s
@@ -448,7 +456,42 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), formatGrowthPrinciples(), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+}
+
+func stageRuntimeBehaviorDoc(stage, buildStyle string, readiness readinessState) string {
+	lines := []string{
+		"- Build style: " + compactText(firstRuntimeValue(buildStyle, "Detect from project"), 140),
+		"- Stage behavior: " + compactText(firstRuntimeValue(stageRuntimeBoundary(stage), stageGrowthContract(stage)), 180),
+		"- Done means: " + compactText(strings.ReplaceAll(stageDoneCondition(stage), "\n", " "), 220),
+	}
+	if readiness.NextPressure.AxisName != "" {
+		lines = append(lines, "- This packet should move readiness pressure: "+readiness.NextPressure.AxisName)
+	}
+	if readiness.StageGate.Status == "ready" {
+		lines = append(lines, "- Gate is ready; only recommend stage advancement, do not silently edit plan.md.")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func activeCapabilitiesDoc(growth growthState) string {
+	candidates := visibleGrowthCandidates(growth.Candidates)
+	lines := []string{}
+	for _, candidate := range candidates {
+		if candidate.Status != "active" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- Active %s %s: %s", candidate.Kind, displayGrowthCandidateName(candidate), compactText(candidate.Signal, 180)))
+	}
+	for _, signal := range growth.RuntimeBehavior.ValidationSignals {
+		if strings.Contains(signal, "Required active validator") {
+			lines = append(lines, signal)
+		}
+	}
+	if len(lines) == 0 {
+		return "- None active. Candidate structures are informational until promoted."
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatGrowthPrinciples() string {
@@ -486,7 +529,7 @@ func buildStageGateDoc(readiness readinessState) string {
 	return strings.Join(lines, "\n")
 }
 
-func buildTasksDoc(goalID, buildStyle string, readiness readinessState) string {
+func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, growth growthState) string {
 	browserTask := ""
 	if hasAny(normalizeLabel(buildStyle), "web", "local app", "game") {
 		browserTask = "- [ ] Capture browser screenshot and console evidence when UI changes are made\n"
@@ -495,7 +538,11 @@ func buildTasksDoc(goalID, buildStyle string, readiness readinessState) string {
 	if readiness.NextPressure.AxisName != "" {
 		readinessTask = "- [ ] Fill the `" + readiness.NextPressure.AxisName + ":` readiness evidence slot with concrete proof\n"
 	}
-	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with the next recommended runtime episode and Learn Notes\n", goalID, browserTask, readinessTask)
+	activeTask := ""
+	if activeStructureCount(growth.Candidates) > 0 {
+		activeTask = "- [ ] Run or explicitly block every active capability listed in goal.md\n"
+	}
+	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with the next recommended runtime episode and Learn Notes\n", goalID, stage, browserTask, readinessTask, activeTask)
 }
 
 func buildEvidenceDoc(goalID string, readiness readinessState) string {

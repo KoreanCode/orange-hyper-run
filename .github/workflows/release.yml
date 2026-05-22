@@ -36,6 +36,16 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/hyper-linux-amd64 ./cmd/hyper
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/hyper-windows-amd64.exe ./cmd/hyper
 
+      - name: Verify release assets
+        run: |
+          test -s dist/hyper-darwin-arm64
+          test -s dist/hyper-darwin-amd64
+          test -s dist/hyper-linux-arm64
+          test -s dist/hyper-linux-amd64
+          test -s dist/hyper-windows-amd64.exe
+          chmod +x dist/hyper-linux-amd64
+          ./dist/hyper-linux-amd64 version
+
       - name: Create checksums
         run: |
           cd dist

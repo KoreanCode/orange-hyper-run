@@ -50,18 +50,21 @@ func findSimilarContext(db *sql.DB, query string, limit int) ([]similarContext, 
 	}
 	goalRows.Close()
 
-	memRows, err := db.Query(`select id, kind, text from memories where stale_at is null order by created_at desc limit 200`)
+	memRows, err := db.Query(`select id, kind, text, coalesce(quality, '') from memories where stale_at is null order by created_at desc limit 200`)
 	if err != nil {
 		return nil, dbError(err)
 	}
 	for memRows.Next() {
 		var id int64
-		var kind, text string
-		if err := memRows.Scan(&id, &kind, &text); err != nil {
+		var kind, text, quality string
+		if err := memRows.Scan(&id, &kind, &text, &quality); err != nil {
 			memRows.Close()
 			return nil, dbError(err)
 		}
-		candidates = append(candidates, similarContext{Source: "memory", ID: strconv.FormatInt(id, 10), Kind: kind, Text: text})
+		if memoryQualityIsIgnored(quality) {
+			continue
+		}
+		candidates = append(candidates, similarContext{Source: "memory", ID: strconv.FormatInt(id, 10), Kind: firstNonBlank(quality, kind), Text: text})
 	}
 	memRows.Close()
 

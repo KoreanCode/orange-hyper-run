@@ -61,6 +61,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 
 	checks = append(checks, doctorStateChecks(root)...)
+	checks = append(checks, doctorGrowthMigrationCheck(root))
 	checks = append(checks, doctorDBCheck(root))
 	checks = append(checks, doctorCodexChecks(root)...)
 
@@ -96,18 +97,35 @@ func doctorStateChecks(root string) []doctorCheck {
 	if err != nil {
 		return []doctorCheck{{"state.json", "FAIL", err.Message}}
 	}
-	checks := []doctorCheck{{"state.json", "OK", "status=" + firstNonBlank(state.Status, "unknown")}}
+	consistency := currentStateConsistency(root, state)
+	stateStatus := "OK"
+	stateDetail := "status=" + firstNonBlank(state.Status, "unknown")
+	if !consistency.Consistent {
+		stateStatus = "WARN"
+		stateDetail = consistency.Reason + " Run `hyper repair`."
+	}
+	checks := []doctorCheck{{"state.json", stateStatus, stateDetail}}
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		checks = append(checks, doctorCheck{"Current packet", "OK", "none active"})
 		return checks
 	}
-	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
 	status := "OK"
-	if derived.State == "active" {
+	if consistency.Derived.State == "active" {
 		status = "WARN"
 	}
-	checks = append(checks, doctorCheck{"Current packet", status, state.CurrentGoalID + " is " + derived.State + "; " + derived.Reason})
+	checks = append(checks, doctorCheck{"Current packet", status, state.CurrentGoalID + " is " + consistency.Derived.State + "; " + consistency.Derived.Reason})
 	return checks
+}
+
+func doctorGrowthMigrationCheck(root string) doctorCheck {
+	growth := readGrowthStateIfExists(root)
+	if growth.Version == 0 {
+		return doctorCheck{"Growth migration", "OK", "no growth state yet"}
+	}
+	if growthMigrationNeeded(growth) {
+		return doctorCheck{"Growth migration", "WARN", "legacy or noisy growth entries found; run `hyper migrate`"}
+	}
+	return doctorCheck{"Growth migration", "OK", "growth state uses current rules"}
 }
 
 func doctorDBCheck(root string) doctorCheck {

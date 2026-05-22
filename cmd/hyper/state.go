@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func readStateIfExists(root string) projectState {
@@ -49,4 +50,21 @@ func formatAutoLearn(result learnResult) string {
 		return fmt.Sprintf("skipped (%s)", result.Reason)
 	}
 	return fmt.Sprintf("%s, inserted %d", result.State, result.Inserted)
+}
+
+func formatMemoryQuality(result learnResult) string {
+	if len(result.Quality) == 0 {
+		return "none"
+	}
+	order := []string{"durable", "weak", "passive", "one_off"}
+	parts := []string{}
+	for _, key := range order {
+		if result.Quality[key] > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d", key, result.Quality[key]))
+		}
+	}
+	if len(parts) == 0 {
+		return "none"
+	}
+	return strings.Join(parts, ", ")
 }

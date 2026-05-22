@@ -21,9 +21,10 @@ const (
 )
 
 type memoryRecord struct {
-	ID   int64
-	Kind string
-	Text string
+	ID      int64
+	Kind    string
+	Text    string
+	Quality string
 }
 
 type pressureAccumulator struct {
@@ -84,7 +85,7 @@ func readGrowthStateIfExists(root string) growthState {
 }
 
 func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
-	rows, err := db.Query(`select id, kind, text from memories where stale_at is null order by created_at asc, id asc`)
+	rows, err := db.Query(`select id, kind, text, coalesce(quality, '') from memories where stale_at is null order by created_at asc, id asc`)
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -92,7 +93,7 @@ func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
 	records := []memoryRecord{}
 	for rows.Next() {
 		var record memoryRecord
-		if err := rows.Scan(&record.ID, &record.Kind, &record.Text); err != nil {
+		if err := rows.Scan(&record.ID, &record.Kind, &record.Text, &record.Quality); err != nil {
 			return nil, dbError(err)
 		}
 		records = append(records, record)
@@ -103,6 +104,9 @@ func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
 func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 	accs := []*pressureAccumulator{}
 	for _, record := range records {
+		if memoryQualityIsIgnored(record.Quality) {
+			continue
+		}
 		signal := memorySignal(record.Text)
 		if signal == "" || isNoisyGrowthSignal(signal) {
 			continue
@@ -792,8 +796,10 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 	if err := removeConflictingLifecycleCopies(root, candidate); err != nil {
 		return err
 	}
-	if err := writeText(filepath.Join(root, candidate.GeneratedPath), body); err != nil {
-		return err
+	if strings.TrimSpace(candidate.GeneratedPath) != "" {
+		if err := writeText(filepath.Join(root, candidate.GeneratedPath), body); err != nil {
+			return err
+		}
 	}
 	if err := writeText(filepath.Join(root, candidate.LifecyclePath), body); err != nil {
 		return err

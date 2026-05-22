@@ -68,6 +68,7 @@ create table if not exists memories (
   text text not null,
   source_event_ids text,
   confidence real,
+  quality text,
   created_at text not null,
   last_used_at text,
   stale_at text
@@ -97,6 +98,34 @@ create table if not exists harness_candidates (
   promoted_at text
 );`)
 	if err != nil {
+		return dbError(err)
+	}
+	if err := ensureColumn(db, "memories", "quality", "text"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureColumn(db *sql.DB, table, column, definition string) *hyperError {
+	rows, err := db.Query("pragma table_info(" + table + ")")
+	if err != nil {
+		return dbError(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return dbError(err)
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if _, err := db.Exec("alter table " + table + " add column " + column + " " + definition); err != nil {
 		return dbError(err)
 	}
 	return nil
@@ -176,7 +205,7 @@ func insertMemoryIfNew(db *sql.DB, mem memory) (bool, *hyperError) {
 	if count > 0 {
 		return false, nil
 	}
-	_, err := db.Exec(`insert into memories (project_id, kind, text, source_event_ids, confidence, created_at, last_used_at, stale_at) values (?, ?, ?, ?, ?, ?, ?, ?)`, "default", mem.Kind, mem.Text, nil, mem.Confidence, nowISO(), nil, nil)
+	_, err := db.Exec(`insert into memories (project_id, kind, text, source_event_ids, confidence, quality, created_at, last_used_at, stale_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`, "default", mem.Kind, mem.Text, nil, mem.Confidence, mem.Quality, nowISO(), nil, nil)
 	if err != nil {
 		return false, dbError(err)
 	}

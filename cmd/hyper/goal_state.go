@@ -103,7 +103,40 @@ func appendMemoryIfUseful(memories []memory, kind, text string, confidence float
 	if text == "" || isPlaceholder(text) || noisyMemoryText(text) {
 		return memories
 	}
-	return append(memories, memory{Kind: kind, Text: text, Confidence: confidence})
+	quality := memoryQuality(kind, text, confidence)
+	if memoryQualityIsIgnored(quality) {
+		return memories
+	}
+	return append(memories, memory{Kind: kind, Text: text, Confidence: confidence, Quality: quality})
+}
+
+func memoryQuality(kind, text string, confidence float64) string {
+	normalized := normalizeSentence(text)
+	if normalized == "" || noisyMemoryText(text) || isPassiveNoChangeText(normalized) {
+		return "passive"
+	}
+	if hasAny(normalized, "changed files", "notes:", "screenshot path", "screenshot saved") {
+		return "one_off"
+	}
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "decision", "constraint", "failure":
+		return "durable"
+	case "pattern":
+		if confidence >= 0.75 || hasAny(normalized, "reusable pattern", "learn pattern", "before every", "before each", "repeatable") {
+			return "durable"
+		}
+		return "weak"
+	default:
+		if confidence >= 0.8 {
+			return "durable"
+		}
+		return "weak"
+	}
+}
+
+func memoryQualityIsIgnored(quality string) bool {
+	quality = strings.ToLower(strings.TrimSpace(quality))
+	return quality == "passive" || quality == "one_off"
 }
 
 func firstUsefulValidationMemory(text string) string {
