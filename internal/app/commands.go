@@ -291,6 +291,7 @@ func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
+	state = refreshStateFromPlanForStatus(root, state)
 	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
 	runs, goals := statusDBCounts(root)
 	growth := readGrowthStateIfExists(root)

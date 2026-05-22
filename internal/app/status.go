@@ -2,8 +2,29 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
+
+func refreshStateFromPlanForStatus(root string, state projectState) projectState {
+	planBody := readIfExists(filepath.Join(root, planFile))
+	if strings.TrimSpace(planBody) == "" {
+		return state
+	}
+	plan := parsePlan(planBody)
+	if staleProjectName(state.Project) {
+		state.Project = readinessProductName(plan)
+	}
+	if strings.TrimSpace(state.Stage) == "" {
+		state.Stage = normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
+	}
+	return state
+}
+
+func staleProjectName(project string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(project))
+	return normalized == "" || normalized == "unknown project" || normalized == "the product"
+}
 
 func statusDashboardLines(state projectState, derived goalState, readiness readinessState, growth growthState, runs, goals int) []string {
 	project := compactText(firstNonBlank(state.Project, "Unknown project"), 120)

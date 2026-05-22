@@ -389,6 +389,58 @@ func TestInitWritesPlanImportCandidates(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "plan-candidates.md")), "docs/PICKACHAT_PLAN.md")
 }
 
+func TestParsePlanUnderstandsKoreanProductPlans(t *testing.T) {
+	plan := parsePlan(`# LLog 서비스 기획 및 앱 개발 계획서
+
+## 1. 제품 정의
+
+### 프로젝트명
+
+**LLog / 엘로그**
+
+### 한 줄 소개
+
+LLog는 사주 기반 운세를 매일 확인하고 기록하는 운세 캘린더 앱입니다.
+
+## 4. 타깃 사용자
+
+20~35세 여성 사용자
+
+## 5. MVP 목표
+
+첫 번째 버전의 목표는 운세 확인, 캘린더, 하루 기록, 간단 리포트까지 이어지는 루프입니다.
+
+## 11. 모바일 앱 개발 방향
+
+React Native + Expo + TypeScript
+
+## 13. 성공 지표
+
+첫 사용자 테스트에서 프로필 입력부터 리포트까지 완료합니다.
+
+## 19. 우선순위
+
+반드시 먼저 만들 것은 온보딩, 홈, 캘린더, 기록, 리포트입니다.
+`)
+	if got := plan["Product"]; got != "LLog / 엘로그" {
+		t.Fatalf("expected Korean product alias, got %q", got)
+	}
+	assertContains(t, plan["Target Users"], "20~35세")
+	assertContains(t, plan["MVP"], "운세 확인")
+	assertContains(t, plan["Build Style"], "React Native")
+	assertContains(t, plan["Success Criteria"], "프로필 입력")
+	assertContains(t, plan["Current Focus"], "온보딩")
+}
+
+func TestStatusRefreshesUnknownProjectFromPlan(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# LLog 서비스 기획 및 앱 개발 계획서\n\n## 1. 제품 정의\n\n### 프로젝트명\n\n**LLog / 엘로그**\n")
+	state := refreshStateFromPlanForStatus(root, projectState{Project: "Unknown project", Stage: "Tiny MVP"})
+	if state.Project != "LLog / 엘로그" {
+		t.Fatalf("expected status project to come from plan.md, got %q", state.Project)
+	}
+}
+
 func TestAutoLearnFeedsNextGoalContext(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CRM", "Build a tiny CRM MVP")
