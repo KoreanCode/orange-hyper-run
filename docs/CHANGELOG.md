@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1 - 2026-05-22
+
+- Split the CLI entrypoint from the application runtime package.
+- Add Proof Contract sections for functional, surface, and operational proof.
+- Add Surface Proof Evidence templates, readiness extraction, growth pressure learning, and proof gap status output.
+- Improve readiness inference from real project runs.
+- Read Korean product plan aliases in status output.
+
 ## v0.5.0 - 2026-05-22
 
 - Add PR/push CI for tests, vet, staticcheck, and govulncheck.

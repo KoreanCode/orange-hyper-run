@@ -1,5 +1,13 @@
 # 변경 기록
 
+## v0.5.1 - 2026-05-22
+
+- CLI entrypoint와 application runtime package를 분리했습니다.
+- functional, surface, operational proof를 담는 Proof Contract 섹션을 추가했습니다.
+- Surface Proof Evidence 템플릿, readiness 추출, growth pressure 학습, proof gap status 출력을 추가했습니다.
+- 실제 프로젝트 실행 evidence에서 readiness를 더 잘 추론하도록 개선했습니다.
+- status 출력에서 한국어 product plan alias를 읽도록 개선했습니다.
+
 ## v0.5.0 - 2026-05-22
 
 - PR/push마다 test, vet, staticcheck, govulncheck가 도는 CI를 추가합니다.
