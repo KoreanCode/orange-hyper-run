@@ -100,6 +100,10 @@ Readiness evidence is progressive. New evidence files include slots for every re
 
 Readiness evidence also has a basic quality bar. A vague label such as `Validation coverage: tested` is treated as emerging evidence, not covered evidence. Covered evidence should include the proof shape expected by the axis: commands or smoke tests for validation, browser or screenshot proof for UX, reload/restart/storage proof for persistence, hosted/build/release proof for deployment, and docs/runbook/rollback proof for operations.
 
+Runtime packets include a Proof Contract with three evidence boundaries: Functional Proof, Surface Proof, and Operational Proof. Surface Proof is required only when the packet changes a user-facing screen or flow. It should connect screenshots or browser smoke evidence to the affected surface, primary user action, checked states, viewport, and remaining surface gaps.
+
+Surface Proof is intentionally evidence-first. Repeated surface evidence can become visual-smoke, responsive-check, accessibility, Figma handoff, or design-system candidates, but those candidates are not required behavior until repeated proof promotes them.
+
 When all required axes for the current gate are covered, Hyper Run creates a stage advancement candidate. It recommends the exact `plan.md` `Current Stage` change but does not apply it automatically. This keeps stage movement human-reviewed while still making the project state explicit.
 
 Beta and Service Quality stages can generate quiet validator candidates for repeatable smoke, security, deployment, and operations checks. They remain candidates until repeated evidence promotes them to active validators.

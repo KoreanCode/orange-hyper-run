@@ -37,6 +37,7 @@ Hyper Run has a few internal concepts, but they are simple:
 | `plan.md` | The human-written product brief. It says what the product is, who it is for, and what stage it is in. |
 | Runtime packet | The next small work bundle generated from `plan.md` and project history. Usually this is `.hyper/goals/GOAL-0001/goal.md`. |
 | Evidence | Proof that the work was done and checked. This goes in `evidence.md`. |
+| Proof Contract | The runtime packet's short proof boundary: functional proof, surface proof, and operational proof. |
 | Learn | The step that extracts what the project repeatedly needed, failed at, or proved. It is not a generic summary. |
 | Pressure Ledger | The project ledger of unresolved or repeated pressure. For example, if every run needs the same validation, Hyper Run can suggest a validator candidate. |
 | Readiness | Stage contracts that check whether the project is ready to move from Tiny MVP to Usable MVP, Beta, and Service Quality. |
@@ -49,6 +50,14 @@ Execution -> Evidence -> Pressure Ledger -> Capability candidate -> Structure wh
 ```
 
 This is the main difference from a harness-first workflow. A harness usually starts with a predefined workflow. Hyper Run starts with execution evidence and lets the project earn validators, skills, agents, or harnesses only when repeated pressure makes them useful.
+
+Each runtime packet also asks for proof in three plain areas:
+
+- Functional proof: the smallest useful behavior works.
+- Surface proof: if a user-facing screen changed, a real user can understand the screen, take the primary action, and see the result or recovery state.
+- Operational proof: the safest available build, test, smoke, setup, or handoff path is repeatable, or the blocker is documented.
+
+Surface proof is not a design harness. Screenshot, browser, responsive, accessibility, Figma, or design-system checks only become stronger candidates after repeated evidence shows the project needs them.
 
 ## Principles
 

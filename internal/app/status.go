@@ -38,6 +38,8 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"Method: " + growthRuntimeDefinition,
 		"Protocol: " + runtimeProtocolDefinition,
 		"Pressure ledger: " + growthLoopStateSummary(growth),
+		"Proof: " + proofStatusSummary(derived, readiness),
+		"Next proof gap: " + nextProofGap(readiness),
 		"Principles: " + growthPrinciplesLine(),
 		"Status: " + displayProjectStatus(state, derived),
 		"Runtime packet state: " + derived.State,
@@ -73,6 +75,48 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"",
 	)
 	return lines
+}
+
+func proofStatusSummary(derived goalState, readiness readinessState) string {
+	if readiness.Version == 0 {
+		return "not recorded"
+	}
+	functional := "pending"
+	if derived.State == "completed" {
+		functional = "covered"
+	} else if derived.State == "blocked" {
+		functional = "blocked"
+	}
+	return fmt.Sprintf("functional %s, surface %s, operational %s",
+		functional,
+		proofAxisStatus(readiness, "core_ux"),
+		proofAxisStatus(readiness, "validation_coverage"),
+	)
+}
+
+func proofAxisStatus(readiness readinessState, axis string) string {
+	for _, dim := range readiness.Dimensions {
+		if dim.ID == axis {
+			return firstNonBlank(dim.Status, "missing")
+		}
+	}
+	return "missing"
+}
+
+func nextProofGap(readiness readinessState) string {
+	if readiness.Version == 0 {
+		return "not selected"
+	}
+	switch {
+	case proofAxisStatus(readiness, "core_ux") != "covered":
+		return "surface proof for the primary user flow"
+	case proofAxisStatus(readiness, "validation_coverage") != "covered":
+		return "repeatable validation proof"
+	case readiness.NextPressure.AxisName != "":
+		return readiness.NextPressure.AxisName
+	default:
+		return "none"
+	}
 }
 
 func statusActionLines(state projectState, derived goalState, readiness readinessState, growth growthState) []string {

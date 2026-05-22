@@ -114,6 +114,10 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, goal, "## Stage Gate")
 	assertContains(t, goal, "## Stage Runtime Behavior")
 	assertContains(t, goal, "## Active Capabilities")
+	assertContains(t, goal, "## Proof Contract")
+	assertContains(t, goal, "Functional Proof")
+	assertContains(t, goal, "Surface Proof")
+	assertContains(t, goal, "Operational Proof")
 	assertContains(t, goal, "Next readiness pressure")
 	assertContains(t, goal, "Capture readiness evidence")
 	assertNotContains(t, goal, "## Scope")
@@ -121,6 +125,8 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	evidence := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"))
 	assertContains(t, evidence, "## Readiness Evidence")
 	assertContains(t, evidence, "Core UX: Pending.")
+	assertContains(t, evidence, "## Surface Proof Evidence")
+	assertContains(t, evidence, "- Target surface: Pending.")
 	assertContains(t, evidence, "## Active Capability Evidence")
 	assertContains(t, evidence, "## Decisions")
 	assertContains(t, evidence, "## Reusable Patterns")
@@ -157,6 +163,8 @@ func TestStatusAndResumeUseActiveState(t *testing.T) {
 	assertContains(t, status.Stdout, "Stage contract:")
 	assertContains(t, status.Stdout, "Method: Evidence-first project growth protocol")
 	assertContains(t, status.Stdout, "Pressure ledger:")
+	assertContains(t, status.Stdout, "Proof:")
+	assertContains(t, status.Stdout, "Next proof gap:")
 	assertContains(t, status.Stdout, "Principles:")
 	assertContains(t, status.Stdout, "Readiness gate:")
 	assertContains(t, status.Stdout, "Readiness pressure:")
@@ -776,6 +784,65 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongDeploy.Status != "covered" {
 		t.Fatalf("expected strong deployment evidence to be covered, got %+v", strongDeploy)
 	}
+}
+
+func TestSurfaceProofEvidenceProgressesReadiness(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nCreate and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nOne customer note flow works locally.\n")
+
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed.\n\n## Surface Proof Evidence\n\n- Evidence: Browser smoke verified the primary action create customer note flow at mobile 390x844 and desktop 1440x900; screenshots captured and passed.\n\n## Changed Files\n\nsrc/App.tsx\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage readiness.\n")
+
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("second run failed: %v", err)
+	}
+
+	state := readReadinessStateIfExists(root)
+	dims := readinessDimensionMap(state.Dimensions)
+	if dims["core_ux"].Status != "covered" {
+		t.Fatalf("expected surface proof to cover core UX, got %+v", dims["core_ux"])
+	}
+	if dims["validation_coverage"].Status != "covered" {
+		t.Fatalf("expected surface proof to cover validation coverage, got %+v", dims["validation_coverage"])
+	}
+	status, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Proof: functional pending, surface covered, operational covered")
+}
+
+func TestRepeatedSurfaceProofCreatesVisualSmokeCandidate(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+	insertTestMemory(t, db, "pattern", "GOAL-0001 surface proof evidence: Browser smoke verified primary action create note flow at mobile and desktop; screenshots captured and passed.")
+	insertTestMemory(t, db, "pattern", "GOAL-0002 surface proof evidence: Browser smoke verified primary action create note flow at mobile and desktop; screenshots captured and passed.")
+
+	state, hyperErr := updateGrowthState(root, db)
+	if hyperErr != nil {
+		t.Fatalf("growth failed: %v", hyperErr)
+	}
+	if len(state.Pressures) == 0 || state.Pressures[0].PressureType != "surface_validation" {
+		t.Fatalf("expected surface validation pressure, got %+v", state.Pressures)
+	}
+	if len(state.Candidates) == 0 || !strings.HasPrefix(state.Candidates[0].Name, "validator-visual-smoke-") {
+		t.Fatalf("expected visual smoke validator candidate, got %+v", state.Candidates)
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"pressure_type": "surface_validation"`)
 }
 
 func TestReadinessEvidenceDoesNotDowngradeCompletePlan(t *testing.T) {

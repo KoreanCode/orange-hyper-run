@@ -567,6 +567,10 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 
 %s
 
+## Proof Contract
+
+%s
+
 ## Work Boundary
 
 %s
@@ -580,6 +584,7 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 - Command output or reason validation could not run
 - Readiness evidence in axis-slot format, for example "%s: proof"
 - Active capability evidence when required validators are present
+- Surface proof evidence when this packet changes a user-facing screen or flow
 - Changed file summary
 - Decisions that should persist into future runs
 - Reusable patterns that should guide similar future work
@@ -590,7 +595,38 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+}
+
+func proofContractDoc(stage, buildStyle string, readiness readinessState) string {
+	lines := []string{
+		"- Functional Proof: prove the smallest useful behavior works for this runtime packet.",
+		"- Surface Proof: required only when user-facing screens or flows change; prove a target user can understand the screen, take the primary action, and see the result or recovery state.",
+		"- Operational Proof: prove the safest available build, test, smoke, setup, or handoff path is repeatable, or document why it is blocked.",
+	}
+	normalizedBuild := normalizeLabel(buildStyle)
+	if hasAny(normalizedBuild, "web", "local app", "game", "desktop") {
+		lines = append(lines,
+			"- Surface proof should name the affected surface, primary user action, checked states, viewport(s), screenshot or browser smoke evidence, and remaining surface gaps.",
+		)
+	}
+	normalizedStage := normalizeLabel(stage)
+	if strings.Contains(normalizedStage, "tiny") && strings.Contains(normalizedStage, "mvp") {
+		lines = append(lines, "- Tiny MVP surface proof can be manual browser smoke plus screenshot evidence for one core flow; do not create visual regression or accessibility harnesses yet.")
+	} else if strings.Contains(normalizedStage, "usable") && strings.Contains(normalizedStage, "mvp") {
+		lines = append(lines, "- Usable MVP surface proof should cover the primary flow states touched by this packet and record mobile or desktop gaps that should become future pressure.")
+	} else if strings.Contains(normalizedStage, "beta") {
+		lines = append(lines, "- Beta surface proof may create visual smoke, accessibility, or responsive-check candidates only after repeated evidence.")
+	} else if strings.Contains(normalizedStage, "service") || strings.Contains(normalizedStage, "production") {
+		lines = append(lines, "- Service Quality surface proof should run active visual or accessibility validators when promoted, or document why they are blocked.")
+	}
+	if readiness.NextPressure.Axis == "core_ux" {
+		lines = append(lines, "- Current readiness pressure is Core UX, so surface proof should directly support that axis.")
+	}
+	if readiness.NextPressure.Axis == "validation_coverage" {
+		lines = append(lines, "- Current readiness pressure is Validation coverage, so any surface proof should include repeatable browser smoke or command evidence when available.")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func stageRuntimeBehaviorDoc(stage, buildStyle string, readiness readinessState) string {
@@ -680,7 +716,7 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 }
 
 func buildEvidenceDoc(goalID string, readiness readinessState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
 }
 
 func readinessEvidenceTemplate(readiness readinessState) string {

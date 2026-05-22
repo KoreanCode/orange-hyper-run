@@ -31,6 +31,7 @@ func deriveGoalState(evidenceText, nextText string) goalState {
 func memoriesForDerivedState(state goalState, goalID, evidenceText, nextText string) []memory {
 	memories := []memory{}
 	memories = appendSectionMemories(memories, goalID, evidenceText, "Readiness Evidence", "pattern", 0.7)
+	memories = appendSurfaceProofMemories(memories, goalID, evidenceText)
 	memories = appendSectionMemories(memories, goalID, evidenceText, "Pressure Signals", "pattern", 0.7)
 	memories = appendSectionMemories(memories, goalID, evidenceText, "Decisions", "decision", 0.75)
 	memories = appendSectionMemories(memories, goalID, evidenceText, "Reusable Patterns", "pattern", 0.75)
@@ -47,6 +48,46 @@ func memoriesForDerivedState(state goalState, goalID, evidenceText, nextText str
 		memories = appendMemoryIfUseful(memories, "constraint", fmt.Sprintf("%s waiting for user: %s", goalID, state.Reason), 0.8)
 	}
 	return dedupeMemories(memories)
+}
+
+func appendSurfaceProofMemories(memories []memory, goalID, text string) []memory {
+	for _, line := range usefulSectionLines(text, "Surface Proof Evidence") {
+		signal := surfaceProofValue(line)
+		if !usefulSurfaceProofMemory(signal) {
+			continue
+		}
+		kind := "pattern"
+		confidence := 0.72
+		if surfaceProofGapSignal(signal) {
+			kind = "failure"
+			confidence = 0.8
+		}
+		memories = appendMemoryIfUseful(memories, kind, fmt.Sprintf("%s surface proof evidence: %s", goalID, signal), confidence)
+	}
+	return memories
+}
+
+func usefulSurfaceProofMemory(text string) bool {
+	normalized := normalizeSentence(text)
+	if normalized == "" || isPlaceholder(normalized) || noisyMemoryText(text) {
+		return false
+	}
+	if looksLikeSurfaceProof(text) {
+		return true
+	}
+	return hasAny(normalized,
+		"overflow", "overlap", "text clipping", "clipped", "responsive", "breakpoint", "mobile", "desktop",
+		"missing state", "empty state", "loading state", "error state", "accessibility", "focus", "keyboard",
+		"figma", "design token", "component contract", "console error", "network error",
+	)
+}
+
+func surfaceProofGapSignal(text string) bool {
+	normalized := normalizeSentence(text)
+	return hasAny(normalized,
+		"gap", "risk", "failed", "failure", "missing", "blocked", "overflow", "overlap", "clipped",
+		"not checked", "not verified", "could not", "cannot", "console error", "network error",
+	)
 }
 
 func appendSectionMemories(memories []memory, goalID, text, heading, kind string, confidence float64) []memory {

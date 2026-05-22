@@ -213,6 +213,7 @@ func memorySignal(text string) string {
 		"learn pattern:",
 		"learn constraint:",
 		"learn failure:",
+		"surface proof evidence:",
 		"validated:",
 		"next runtime episode:",
 		"blocked:",
@@ -344,6 +345,9 @@ func growthClassification(kind, signal string) (string, string) {
 	case "failure":
 		return "recurring_failure", "stop_condition"
 	case "pattern":
+		if isSurfaceValidationPattern(signal) {
+			return "surface_validation", "validation"
+		}
 		if isValidationPattern(signal) {
 			return "repeated_validation", "validation"
 		}
@@ -356,6 +360,12 @@ func growthClassification(kind, signal string) (string, string) {
 func isValidationPattern(signal string) bool {
 	normalized := strings.ToLower(signal)
 	return hasAny(normalized, "test", "build", "smoke", "validate", "validation", "playwright", "browser", "go test", "npm run", "pytest")
+}
+
+func isSurfaceValidationPattern(signal string) bool {
+	normalized := strings.ToLower(signal)
+	return hasAny(normalized, "surface", "screen", "route", "viewport", "mobile", "desktop", "screenshot", "browser", "visual", "responsive", "accessibility", "focus", "keyboard") &&
+		hasAny(normalized, "smoke", "verified", "passed", "checked", "captured", "screenshot", "validation", "primary action", "flow")
 }
 
 func sortedGoalIDs(goals map[string]bool) []string {
@@ -516,7 +526,12 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 		}
 		switch pressure.Effect {
 		case "validation":
-			candidate := growthCandidateForPressure("validator", "validator", "validators", "Repeated validation pressure crossed the validator threshold.", pressure)
+			prefix := validatorCandidatePrefix(pressure)
+			reason := "Repeated validation pressure crossed the validator threshold."
+			if pressure.PressureType == "surface_validation" {
+				reason = "Repeated surface proof pressure crossed the validator threshold."
+			}
+			candidate := growthCandidateForPressure("validator", prefix, "validators", reason, pressure)
 			if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
 				return nil, err
 			}
@@ -563,6 +578,20 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 	return candidates, nil
 }
 
+func validatorCandidatePrefix(pressure growthPressure) string {
+	if pressure.PressureType != "surface_validation" {
+		return "validator"
+	}
+	normalized := strings.ToLower(pressure.Signal)
+	if hasAny(normalized, "responsive", "breakpoint", "overflow", "clipped", "text fit", "layout shift") {
+		return "validator-responsive-check"
+	}
+	if hasAny(normalized, "accessibility", "focus", "keyboard", "contrast", "aria") {
+		return "validator-accessibility-check"
+	}
+	return "validator-visual-smoke"
+}
+
 func growthCandidateForPressure(kind, prefix, generatedDir, reason string, pressure growthPressure) growthCandidate {
 	name := growthCandidateName(prefix, pressure)
 	status := capabilityStatusForEvidence(pressure.GoalCount)
@@ -595,6 +624,7 @@ func cleanCandidateSignal(signal string) string {
 	prefixes := []string{
 		"validation pattern:",
 		"readiness evidence:",
+		"surface proof evidence:",
 		"pressure signals:",
 		"learn pattern:",
 		"pattern:",
