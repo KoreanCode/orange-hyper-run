@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"database/sql"
@@ -114,6 +114,10 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, goal, "## Stage Gate")
 	assertContains(t, goal, "## Stage Runtime Behavior")
 	assertContains(t, goal, "## Active Capabilities")
+	assertContains(t, goal, "## Proof Contract")
+	assertContains(t, goal, "Functional Proof")
+	assertContains(t, goal, "Surface Proof")
+	assertContains(t, goal, "Operational Proof")
 	assertContains(t, goal, "Next readiness pressure")
 	assertContains(t, goal, "Capture readiness evidence")
 	assertNotContains(t, goal, "## Scope")
@@ -121,6 +125,8 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	evidence := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"))
 	assertContains(t, evidence, "## Readiness Evidence")
 	assertContains(t, evidence, "Core UX: Pending.")
+	assertContains(t, evidence, "## Surface Proof Evidence")
+	assertContains(t, evidence, "- Target surface: Pending.")
 	assertContains(t, evidence, "## Active Capability Evidence")
 	assertContains(t, evidence, "## Decisions")
 	assertContains(t, evidence, "## Reusable Patterns")
@@ -157,6 +163,8 @@ func TestStatusAndResumeUseActiveState(t *testing.T) {
 	assertContains(t, status.Stdout, "Stage contract:")
 	assertContains(t, status.Stdout, "Method: Evidence-first project growth protocol")
 	assertContains(t, status.Stdout, "Pressure ledger:")
+	assertContains(t, status.Stdout, "Proof:")
+	assertContains(t, status.Stdout, "Next proof gap:")
 	assertContains(t, status.Stdout, "Principles:")
 	assertContains(t, status.Stdout, "Readiness gate:")
 	assertContains(t, status.Stdout, "Readiness pressure:")
@@ -387,6 +395,58 @@ func TestInitWritesPlanImportCandidates(t *testing.T) {
 	}
 	assertContains(t, out.Stdout, "Plan import candidates: .hyper/plan-candidates.md")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "plan-candidates.md")), "docs/PICKACHAT_PLAN.md")
+}
+
+func TestParsePlanUnderstandsKoreanProductPlans(t *testing.T) {
+	plan := parsePlan(`# LLog 서비스 기획 및 앱 개발 계획서
+
+## 1. 제품 정의
+
+### 프로젝트명
+
+**LLog / 엘로그**
+
+### 한 줄 소개
+
+LLog는 사주 기반 운세를 매일 확인하고 기록하는 운세 캘린더 앱입니다.
+
+## 4. 타깃 사용자
+
+20~35세 여성 사용자
+
+## 5. MVP 목표
+
+첫 번째 버전의 목표는 운세 확인, 캘린더, 하루 기록, 간단 리포트까지 이어지는 루프입니다.
+
+## 11. 모바일 앱 개발 방향
+
+React Native + Expo + TypeScript
+
+## 13. 성공 지표
+
+첫 사용자 테스트에서 프로필 입력부터 리포트까지 완료합니다.
+
+## 19. 우선순위
+
+반드시 먼저 만들 것은 온보딩, 홈, 캘린더, 기록, 리포트입니다.
+`)
+	if got := plan["Product"]; got != "LLog / 엘로그" {
+		t.Fatalf("expected Korean product alias, got %q", got)
+	}
+	assertContains(t, plan["Target Users"], "20~35세")
+	assertContains(t, plan["MVP"], "운세 확인")
+	assertContains(t, plan["Build Style"], "React Native")
+	assertContains(t, plan["Success Criteria"], "프로필 입력")
+	assertContains(t, plan["Current Focus"], "온보딩")
+}
+
+func TestStatusRefreshesUnknownProjectFromPlan(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# LLog 서비스 기획 및 앱 개발 계획서\n\n## 1. 제품 정의\n\n### 프로젝트명\n\n**LLog / 엘로그**\n")
+	state := refreshStateFromPlanForStatus(root, projectState{Project: "Unknown project", Stage: "Tiny MVP"})
+	if state.Project != "LLog / 엘로그" {
+		t.Fatalf("expected status project to come from plan.md, got %q", state.Project)
+	}
 }
 
 func TestAutoLearnFeedsNextGoalContext(t *testing.T) {
@@ -698,6 +758,18 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongUX.Status != "covered" {
 		t.Fatalf("expected strong UX evidence to be covered, got %+v", strongUX)
 	}
+	inferred := inferReadinessEvidenceFromValidationLine("GOAL-0001", "`npm run check` passed.")
+	if len(inferred) != 1 || inferred[0].Axis != "validation_coverage" || inferred[0].Status != "covered" {
+		t.Fatalf("expected validation command to infer covered validation evidence, got %+v", inferred)
+	}
+	inferred = inferReadinessEvidenceFromValidationLine("GOAL-0001", "Browser validation at mobile viewport passed the core flow.")
+	axes := map[string]string{}
+	for _, record := range inferred {
+		axes[record.Axis] = record.Status
+	}
+	if axes["validation_coverage"] != "covered" || axes["core_ux"] != "covered" {
+		t.Fatalf("expected browser validation flow to infer validation and core UX coverage, got %+v", inferred)
+	}
 	weakDeploy, ok := parseReadinessEvidenceLine("GOAL-0001", "Deployment readiness: URL documented.", defs)
 	if !ok {
 		t.Fatal("expected weak deployment evidence to parse")
@@ -712,6 +784,65 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongDeploy.Status != "covered" {
 		t.Fatalf("expected strong deployment evidence to be covered, got %+v", strongDeploy)
 	}
+}
+
+func TestSurfaceProofEvidenceProgressesReadiness(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nCreate and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nOne customer note flow works locally.\n")
+
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed.\n\n## Surface Proof Evidence\n\n- Evidence: Browser smoke verified the primary action create customer note flow at mobile 390x844 and desktop 1440x900; screenshots captured and passed.\n\n## Changed Files\n\nsrc/App.tsx\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage readiness.\n")
+
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("second run failed: %v", err)
+	}
+
+	state := readReadinessStateIfExists(root)
+	dims := readinessDimensionMap(state.Dimensions)
+	if dims["core_ux"].Status != "covered" {
+		t.Fatalf("expected surface proof to cover core UX, got %+v", dims["core_ux"])
+	}
+	if dims["validation_coverage"].Status != "covered" {
+		t.Fatalf("expected surface proof to cover validation coverage, got %+v", dims["validation_coverage"])
+	}
+	status, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Proof: functional pending, surface covered, operational covered")
+}
+
+func TestRepeatedSurfaceProofCreatesVisualSmokeCandidate(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+	insertTestMemory(t, db, "pattern", "GOAL-0001 surface proof evidence: Browser smoke verified primary action create note flow at mobile and desktop; screenshots captured and passed.")
+	insertTestMemory(t, db, "pattern", "GOAL-0002 surface proof evidence: Browser smoke verified primary action create note flow at mobile and desktop; screenshots captured and passed.")
+
+	state, hyperErr := updateGrowthState(root, db)
+	if hyperErr != nil {
+		t.Fatalf("growth failed: %v", hyperErr)
+	}
+	if len(state.Pressures) == 0 || state.Pressures[0].PressureType != "surface_validation" {
+		t.Fatalf("expected surface validation pressure, got %+v", state.Pressures)
+	}
+	if len(state.Candidates) == 0 || !strings.HasPrefix(state.Candidates[0].Name, "validator-visual-smoke-") {
+		t.Fatalf("expected visual smoke validator candidate, got %+v", state.Candidates)
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"pressure_type": "surface_validation"`)
 }
 
 func TestReadinessEvidenceDoesNotDowngradeCompletePlan(t *testing.T) {
@@ -857,6 +988,10 @@ func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
 	completed = deriveGoalState("## Validation\n\nSmoke passed.\n\n## Blocker\n\nNo blocker for this episode. Validation used local MySQL.\n", "## Recommended Next Goal\n\nShip next slice.\n")
 	if completed.State != "completed" {
 		t.Fatalf("expected no-blocker sentence to complete, got %+v", completed)
+	}
+	completed = deriveGoalState("## Validation\n\nSmoke passed.\n\n## Blocker\n\nNo blocker for this packet.\n", "## Recommended Next Goal\n\nShip next slice.\n")
+	if completed.State != "completed" {
+		t.Fatalf("expected no-blocker packet sentence to complete, got %+v", completed)
 	}
 	kind, value := parseLearnNote("- Failure: None in this episode.")
 	if kind != "" || value != "" {

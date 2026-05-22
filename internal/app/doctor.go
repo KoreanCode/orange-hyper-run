@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"database/sql"
@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/KoreanCode/orange-hyper-run/internal/buildinfo"
 )
 
 type doctorCheck struct {
@@ -36,7 +38,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			checks = append(checks, doctorCheck{"PATH", "WARN", "`hyper` is not found on PATH"})
 		}
 	}
-	checks = append(checks, doctorCheck{"Version", "OK", version + " (" + runtime.GOOS + "/" + runtime.GOARCH + ")"})
+	checks = append(checks, doctorCheck{"Version", "OK", buildinfo.Version + " (" + runtime.GOOS + "/" + runtime.GOARCH + ")"})
 	checks = append(checks, doctorCheck{"Update URL", "OK", resolveUpdateURL("")})
 
 	planPath := filepath.Join(root, planFile)

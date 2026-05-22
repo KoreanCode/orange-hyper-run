@@ -29,7 +29,8 @@ jobs:
         run: |
           mkdir -p dist
           BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          LDFLAGS="-s -w -X main.version=$GITHUB_REF_NAME -X main.commit=$GITHUB_SHA -X main.buildDate=$BUILD_DATE"
+          BUILDINFO_PKG="github.com/KoreanCode/orange-hyper-run/internal/buildinfo"
+          LDFLAGS="-s -w -X $BUILDINFO_PKG.Version=$GITHUB_REF_NAME -X $BUILDINFO_PKG.Commit=$GITHUB_SHA -X $BUILDINFO_PKG.BuildDate=$BUILD_DATE"
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o dist/hyper-darwin-arm64 ./cmd/hyper
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o dist/hyper-darwin-amd64 ./cmd/hyper
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o dist/hyper-linux-arm64 ./cmd/hyper

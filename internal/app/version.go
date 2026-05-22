@@ -1,15 +1,11 @@
-package main
+package app
 
 import (
 	"os"
 	"runtime"
 	"strings"
-)
 
-var (
-	version   = "dev"
-	commit    = "unknown"
-	buildDate = "unknown"
+	"github.com/KoreanCode/orange-hyper-run/internal/buildinfo"
 )
 
 func versionHyper() (commandOutput, *hyperError) {
@@ -19,9 +15,9 @@ func versionHyper() (commandOutput, *hyperError) {
 	}
 	return stdout(strings.Join([]string{
 		"Hyper Run",
-		"Version: " + version,
-		"Commit: " + commit,
-		"Build date: " + buildDate,
+		"Version: " + buildinfo.Version,
+		"Commit: " + buildinfo.Commit,
+		"Build date: " + buildinfo.BuildDate,
 		"Go: " + runtime.Version(),
 		"Platform: " + runtime.GOOS + "/" + runtime.GOARCH,
 		"Executable: " + executable,

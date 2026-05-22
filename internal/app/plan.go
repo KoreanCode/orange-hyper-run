@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -78,7 +78,139 @@ func parsePlan(body string) map[string]string {
 			result[current] = strings.TrimSpace(existing + line)
 		}
 	}
+	augmentPlanAliases(result, body)
 	return result
+}
+
+func augmentPlanAliases(plan map[string]string, body string) {
+	for heading, value := range plan {
+		canonical := canonicalPlanKey(heading)
+		if canonical == "" {
+			continue
+		}
+		setPlanAliasIfMissing(plan, canonical, value)
+	}
+	if firstRuntimeValue(plan["Product"]) == "" {
+		setPlanAliasIfMissing(plan, "Product", firstMarkdownHeading(body, "# "))
+	}
+}
+
+func canonicalPlanKey(heading string) string {
+	normalized := compactPlanHeading(heading)
+	aliases := map[string]string{
+		"product":           "Product",
+		"productdefinition": "Product",
+		"service":           "Product",
+		"servicedefinition": "Product",
+		"projectname":       "Product",
+		"oneliner":          "Product",
+		"제품":                "Product",
+		"제품정의":              "Product",
+		"서비스":               "Product",
+		"서비스정의":             "Product",
+		"프로젝트명":             "Product",
+		"한줄소개":              "Product",
+		"targetusers":       "Target Users",
+		"users":             "Target Users",
+		"타깃사용자":             "Target Users",
+		"타겟사용자":             "Target Users",
+		"대상사용자":             "Target Users",
+		"mvp":               "MVP",
+		"mvpgoal":           "MVP",
+		"mvpscope":          "MVP",
+		"mvp목표":             "MVP",
+		"mvp범위":             "MVP",
+		"mvp핵심범위":           "MVP",
+		"첫검증상품":             "MVP",
+		"buildstyle":        "Build Style",
+		"stack":             "Build Style",
+		"technicalstack":    "Build Style",
+		"기술스택":              "Build Style",
+		"기술선택":              "Build Style",
+		"기본기술선택":            "Build Style",
+		"모바일앱개발방향":          "Build Style",
+		"nongoals":          "Non-goals",
+		"non-goals":         "Non-goals",
+		"제외범위":              "Non-goals",
+		"mvp제외범위":           "Non-goals",
+		"나중에만들것":            "Non-goals",
+		"constraints":       "Constraints",
+		"risks":             "Constraints",
+		"제약":                "Constraints",
+		"제약사항":              "Constraints",
+		"리스크":               "Constraints",
+		"법적운영리스크":           "Constraints",
+		"successcriteria":   "Success Criteria",
+		"successmetrics":    "Success Criteria",
+		"성공지표":              "Success Criteria",
+		"성공기준":              "Success Criteria",
+		"완료기준":              "Success Criteria",
+		"currentfocus":      "Current Focus",
+		"priority":          "Current Focus",
+		"priorities":        "Current Focus",
+		"우선순위":              "Current Focus",
+		"반드시먼저만들것":          "Current Focus",
+	}
+	return aliases[normalized]
+}
+
+func compactPlanHeading(heading string) string {
+	heading = strings.ToLower(strings.TrimSpace(heading))
+	heading = strings.TrimLeft(heading, "0123456789.:-_ )(")
+	var builder strings.Builder
+	for _, r := range heading {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r >= '가' && r <= '힣' {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
+
+func setPlanAliasIfMissing(plan map[string]string, key, value string) {
+	if firstRuntimeValue(plan[key]) != "" {
+		return
+	}
+	value = planAliasValue(key, value)
+	if value == "" {
+		return
+	}
+	plan[key] = value
+}
+
+func planAliasValue(key, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if key == "Product" {
+		return firstUsefulPlanLine(value)
+	}
+	return value
+}
+
+func firstUsefulPlanLine(value string) string {
+	for _, line := range strings.Split(value, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "###") || strings.HasPrefix(trimmed, "|") || strings.HasPrefix(trimmed, ">") {
+			continue
+		}
+		trimmed = strings.TrimSpace(strings.Trim(trimmed, "*_`"))
+		if isPlaceholder(trimmed) {
+			continue
+		}
+		return trimmed
+	}
+	return ""
+}
+
+func firstMarkdownHeading(body, prefix string) string {
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, prefix) && !strings.HasPrefix(trimmed, prefix+"#") {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+		}
+	}
+	return ""
 }
 
 func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext, growth growthState, readiness readinessState) episode {
@@ -173,6 +305,8 @@ func isNoIssueText(normalized string) bool {
 	}
 	return strings.HasPrefix(normalized, "no blocker for this episode") ||
 		strings.HasPrefix(normalized, "no blockers for this episode") ||
+		strings.HasPrefix(normalized, "no blocker for this packet") ||
+		strings.HasPrefix(normalized, "no blockers for this packet") ||
 		strings.HasPrefix(normalized, "no runtime blocker was found") ||
 		strings.HasPrefix(normalized, "no remaining blocker for this packet") ||
 		strings.HasPrefix(normalized, "no remaining blockers for this packet") ||
@@ -433,6 +567,10 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 
 %s
 
+## Proof Contract
+
+%s
+
 ## Work Boundary
 
 %s
@@ -446,6 +584,7 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 - Command output or reason validation could not run
 - Readiness evidence in axis-slot format, for example "%s: proof"
 - Active capability evidence when required validators are present
+- Surface proof evidence when this packet changes a user-facing screen or flow
 - Changed file summary
 - Decisions that should persist into future runs
 - Reusable patterns that should guide similar future work
@@ -456,7 +595,38 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+}
+
+func proofContractDoc(stage, buildStyle string, readiness readinessState) string {
+	lines := []string{
+		"- Functional Proof: prove the smallest useful behavior works for this runtime packet.",
+		"- Surface Proof: required only when user-facing screens or flows change; prove a target user can understand the screen, take the primary action, and see the result or recovery state.",
+		"- Operational Proof: prove the safest available build, test, smoke, setup, or handoff path is repeatable, or document why it is blocked.",
+	}
+	normalizedBuild := normalizeLabel(buildStyle)
+	if hasAny(normalizedBuild, "web", "local app", "game", "desktop") {
+		lines = append(lines,
+			"- Surface proof should name the affected surface, primary user action, checked states, viewport(s), screenshot or browser smoke evidence, and remaining surface gaps.",
+		)
+	}
+	normalizedStage := normalizeLabel(stage)
+	if strings.Contains(normalizedStage, "tiny") && strings.Contains(normalizedStage, "mvp") {
+		lines = append(lines, "- Tiny MVP surface proof can be manual browser smoke plus screenshot evidence for one core flow; do not create visual regression or accessibility harnesses yet.")
+	} else if strings.Contains(normalizedStage, "usable") && strings.Contains(normalizedStage, "mvp") {
+		lines = append(lines, "- Usable MVP surface proof should cover the primary flow states touched by this packet and record mobile or desktop gaps that should become future pressure.")
+	} else if strings.Contains(normalizedStage, "beta") {
+		lines = append(lines, "- Beta surface proof may create visual smoke, accessibility, or responsive-check candidates only after repeated evidence.")
+	} else if strings.Contains(normalizedStage, "service") || strings.Contains(normalizedStage, "production") {
+		lines = append(lines, "- Service Quality surface proof should run active visual or accessibility validators when promoted, or document why they are blocked.")
+	}
+	if readiness.NextPressure.Axis == "core_ux" {
+		lines = append(lines, "- Current readiness pressure is Core UX, so surface proof should directly support that axis.")
+	}
+	if readiness.NextPressure.Axis == "validation_coverage" {
+		lines = append(lines, "- Current readiness pressure is Validation coverage, so any surface proof should include repeatable browser smoke or command evidence when available.")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func stageRuntimeBehaviorDoc(stage, buildStyle string, readiness readinessState) string {
@@ -546,7 +716,7 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 }
 
 func buildEvidenceDoc(goalID string, readiness readinessState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
 }
 
 func readinessEvidenceTemplate(readiness readinessState) string {

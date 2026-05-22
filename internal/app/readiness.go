@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -189,7 +189,17 @@ func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readine
 			record, ok := parseReadinessEvidenceLine(goalID, line, defs)
 			if ok {
 				records = append(records, record)
+				continue
 			}
+			records = append(records, inferReadinessEvidenceFromValidationLine(goalID, line)...)
+		}
+		for _, line := range usefulSectionLines(body, "Surface Proof Evidence") {
+			record, ok := parseReadinessEvidenceLine(goalID, line, defs)
+			if ok {
+				records = append(records, record)
+				continue
+			}
+			records = append(records, inferReadinessEvidenceFromSurfaceLine(goalID, line)...)
 		}
 	}
 	return records, nil
@@ -215,6 +225,54 @@ func parseReadinessEvidenceLine(goalID, line string, defs []readinessDimensionDe
 		}
 	}
 	return readinessEvidenceRecord{}, false
+}
+
+func inferReadinessEvidenceFromValidationLine(goalID, line string) []readinessEvidenceRecord {
+	text := oneLine(line)
+	if !usefulReadinessEvidence(text) {
+		return nil
+	}
+	records := []readinessEvidenceRecord{}
+	for _, axis := range []string{"validation_coverage", "core_ux"} {
+		covered, _ := readinessEvidenceQuality(axis, text)
+		if covered {
+			records = append(records, readinessEvidenceRecordForAxis(goalID, axis, text))
+		}
+	}
+	return records
+}
+
+func inferReadinessEvidenceFromSurfaceLine(goalID, line string) []readinessEvidenceRecord {
+	text := surfaceProofValue(line)
+	if !usefulReadinessEvidence(text) || !looksLikeSurfaceProof(text) {
+		return nil
+	}
+	records := []readinessEvidenceRecord{}
+	for _, axis := range []string{"core_ux", "validation_coverage", "error_handling"} {
+		covered, _ := readinessEvidenceQuality(axis, text)
+		if covered {
+			records = append(records, readinessEvidenceRecordForAxis(goalID, axis, text))
+		}
+	}
+	return records
+}
+
+func surfaceProofValue(line string) string {
+	text := oneLine(line)
+	if label, value, ok := strings.Cut(text, ":"); ok {
+		compact := compactReadinessLabel(label)
+		switch compact {
+		case "targetsurface", "primaryuseraction", "stateschecked", "viewports", "evidence", "surfacerisksorgaps", "surfacerisk", "surfacegaps", "browsersmoke", "viewportproof":
+			return strings.TrimSpace(value)
+		}
+	}
+	return text
+}
+
+func looksLikeSurfaceProof(text string) bool {
+	normalized := strings.ToLower(text)
+	return hasAny(normalized, "surface", "screen", "route", "viewport", "mobile", "desktop", "browser", "screenshot", "smoke", "click", "primary action", "flow", "state") &&
+		hasAny(normalized, "passed", "verified", "checked", "captured", "screenshot", "smoke", "browser", "viewport")
 }
 
 func readinessEvidenceRecordForAxis(goalID, axis, text string) readinessEvidenceRecord {
@@ -313,7 +371,7 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 			"measurable product, MVP, target, or success criteria"
 	case "core_ux":
 		return hasAny(normalized, "smoke", "screenshot", "browser", "verified", "passed") &&
-				hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload"),
+				hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload", "primary action", "surface", "screen", "route", "state"),
 			"browser, screenshot, smoke, or verified primary-flow evidence"
 	case "persistence":
 		return hasAny(normalized, "persist", "reload", "restart", "saved", "survive", "stored", "created", "re-read", "reread", "confirmed", "row") &&
@@ -324,7 +382,7 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works"),
 			"empty, loading, error, failure, fallback, or edge-state evidence"
 	case "validation_coverage":
-		return hasAny(normalized, "smoke", "playwright", "go test", "npm run", "pytest", "build", "command", "`") &&
+		return hasAny(normalized, "smoke", "playwright", "go test", "npm run", "pytest", "build", "command", "validation", "browser", "screenshot", "`") &&
 				hasAny(normalized, "passed", "repeatable", "covered", "verified"),
 			"repeatable command, build, test, smoke, or coverage evidence"
 	case "security_baseline":
