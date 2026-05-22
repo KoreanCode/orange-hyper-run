@@ -214,6 +214,7 @@ func runtimeWorkBoundary(objective, stage string, plan map[string]string, growth
 	lines := []string{
 		"- Do the smallest coherent implementation step that advances: " + compactText(objective, 180),
 		"- Keep the work inside the current stage: " + stage,
+		"- Stage contract: " + compactText(stageGrowthContract(stage), 180),
 	}
 	if guidance := stageRuntimeBoundary(stage); guidance != "" {
 		lines = append(lines, "- "+guidance)
@@ -374,6 +375,7 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 	currentFocus := firstRuntimeValue(strings.TrimSpace(focus), plan["Current Focus"], "Continue the current stage.")
 	product := firstRuntimeValue(plan["Product"], "the current project")
 	targetUsers := firstRuntimeValue(plan["Target Users"], "Not specified yet.")
+	stageContract := compactText(stageGrowthContract(stage), 180)
 	objective = compactText(objective, 240)
 	product = compactText(product, 180)
 	targetUsers = compactText(targetUsers, 180)
@@ -396,8 +398,11 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 
 - Product: %s
 - Stage: %s
+- Stage contract: %s
 - Target users: %s
-- This packet exists to continue from observed project state, not to freeze a long-lived SPEC.
+- Runtime protocol: %s
+- Growth loop: %s
+- This packet exists to turn observed project state into the next required structure, not to freeze a long-lived SPEC.
 
 ## Runtime Inputs
 
@@ -405,6 +410,10 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 - Current focus: %s
 
 ## Stage Gate
+
+%s
+
+## Growth Principles
 
 %s
 
@@ -424,13 +433,22 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 - Changed file summary
 - Decisions that should persist into future runs
 - Reusable patterns that should guide similar future work
+- Repeated need, failure, or proof that should influence future structure
 - Blocker, constraint, or failure signal when applicable
 - Screenshot path when applicable
 
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, targetUsers, buildStyle, currentFocus, buildStageGateDoc(readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), formatGrowthPrinciples(), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+}
+
+func formatGrowthPrinciples() string {
+	lines := []string{}
+	for _, principle := range growthPrinciples() {
+		lines = append(lines, "- "+principle)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildStageGateDoc(readiness readinessState) string {
@@ -469,11 +487,11 @@ func buildTasksDoc(goalID, buildStyle string, readiness readinessState) string {
 	if readiness.NextPressure.AxisName != "" {
 		readinessTask = "- [ ] Fill the `" + readiness.NextPressure.AxisName + ":` readiness evidence slot with concrete proof\n"
 	}
-	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with the next recommended runtime episode and Learn Notes\n", goalID, browserTask, readinessTask)
+	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with the next recommended runtime episode and Learn Notes\n", goalID, browserTask, readinessTask)
 }
 
 func buildEvidenceDoc(goalID string, readiness readinessState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Active Capability Evidence\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
 }
 
 func readinessEvidenceTemplate(readiness readinessState) string {

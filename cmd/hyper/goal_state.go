@@ -31,6 +31,7 @@ func deriveGoalState(evidenceText, nextText string) goalState {
 func memoriesForDerivedState(state goalState, goalID, evidenceText, nextText string) []memory {
 	memories := []memory{}
 	memories = appendSectionMemories(memories, goalID, evidenceText, "Readiness Evidence", "pattern", 0.7)
+	memories = appendSectionMemories(memories, goalID, evidenceText, "Pressure Signals", "pattern", 0.7)
 	memories = appendSectionMemories(memories, goalID, evidenceText, "Decisions", "decision", 0.75)
 	memories = appendSectionMemories(memories, goalID, evidenceText, "Reusable Patterns", "pattern", 0.75)
 	memories = appendLearnNoteMemories(memories, goalID, nextText)

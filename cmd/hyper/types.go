@@ -79,10 +79,20 @@ type similarContext struct {
 type growthState struct {
 	Version         int               `json:"version"`
 	UpdatedAt       string            `json:"updated_at"`
+	PressureLedger  pressureLedger    `json:"pressure_ledger"`
 	Pressures       []growthPressure  `json:"pressures"`
 	RuntimeBehavior growthBehavior    `json:"runtime_behavior"`
 	Candidates      []growthCandidate `json:"candidates"`
 	Thresholds      growthThresholds  `json:"thresholds"`
+}
+
+type pressureLedger struct {
+	Method              string   `json:"method"`
+	Protocol            string   `json:"protocol"`
+	Principles          []string `json:"principles"`
+	OpenPressures       int      `json:"open_pressures"`
+	CandidateStructures int      `json:"candidate_structures"`
+	ActiveStructures    int      `json:"active_structures"`
 }
 
 type growthPressure struct {

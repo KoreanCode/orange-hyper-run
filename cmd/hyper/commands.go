@@ -90,9 +90,13 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	lines := []string{
 		"Project: " + state.Project,
 		"Stage: " + state.Stage,
+		"Stage contract: " + stageGrowthContract(state.Stage),
 		"Status: " + state.Status,
+		"Method: " + growthRuntimeDefinition,
+		"Protocol: " + runtimeProtocolDefinition,
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
+		"Pressure ledger: " + growthLoopStateSummary(growth),
 		"Plan file: " + planFile,
 		"Hyper dir: " + hyperDir + "/",
 	}
@@ -254,11 +258,13 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 	lines := []string{
 		"Project: " + state.Project,
 		"Stage: " + episode.Stage,
+		"Stage contract: " + stageGrowthContract(episode.Stage),
 		"Run: " + runID,
 		"Runtime packet: " + goalID,
 		"Auto learn: " + formatAutoLearn(autoLearn),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
+		"Pressure ledger: " + growthLoopStateSummary(growth),
 		fmt.Sprintf("Similar context: %d", len(similar)),
 		"Runtime packet file: " + state.CurrentGoalPath,
 	}
@@ -393,6 +399,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		fmt.Sprintf("Inserted memories: %d", result.Inserted),
 		fmt.Sprintf("Growth pressures: %d", len(growth.Pressures)),
 		fmt.Sprintf("Capability candidates: %d", len(growth.Candidates)),
+		"Pressure ledger: " + growthLoopStateSummary(growth),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
 		line,
@@ -492,7 +499,7 @@ func learnCurrentGoal(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	return stdout(strings.Join([]string{
 		"Learn scope: micro",
-		"Learn role: durable decisions, reusable patterns, blockers/failures, and constraints",
+		"Learn role: extract repeated needs, failures, and proofs so future packets change boundaries, validation, readiness, and capability candidates",
 		"Run: " + result.RunID,
 		"Runtime packet: " + result.GoalID,
 		"Runtime packet state: " + result.State,
@@ -501,6 +508,7 @@ func learnCurrentGoal(fsys fsRoot) (commandOutput, *hyperError) {
 		fmt.Sprintf("Inserted memories: %d", result.Inserted),
 		fmt.Sprintf("Growth pressures: %d", len(growth.Pressures)),
 		fmt.Sprintf("Capability candidates: %d", len(growth.Candidates)),
+		"Pressure ledger: " + growthLoopStateSummary(growth),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
 		line,

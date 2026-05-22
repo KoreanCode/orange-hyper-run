@@ -12,10 +12,21 @@ Source of truth:
 - `.hyper/` for goals, evidence, logs, memory, generated candidates, and runtime state.
 - The `hyper` CLI for creating or resuming runtime packets.
 
+Method:
+- Evidence-first project growth protocol: execution logs create pressure, pressure creates candidates, and repeated proof promotes project-specific structure.
+- Agent-agnostic runtime packet protocol for Codex, CLI agents, and other coding assistants.
+- Growth order: Execution -> Evidence -> Pressure Ledger -> Candidate -> Structure when proven.
+
+Principles:
+- No structure before pressure.
+- No stage advancement without evidence.
+- No harness before repeated need.
+- No memory without reusable signal.
+
 Learn role:
 - Learn is not a summary of the last run.
-- Learn extracts durable decisions, reusable implementation patterns, blockers/failures, and constraints from `evidence.md` and `next.md`.
-- Future runtime packets retrieve those signals through `.hyper/memories/` and similar-context search.
+- Learn extracts what the project repeatedly needed, failed at, or proved from `evidence.md` and `next.md`.
+- Future runtime packets use those signals to change work boundaries, validation signals, stop conditions, readiness pressure, and capability candidates.
 
 Command mapping:
 - `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.
@@ -30,7 +41,7 @@ Execution rules:
 2. Read the generated runtime packet in `goal.md` and the checklist in `tasks.md` before editing project files.
 3. Keep implementation scoped to the current runtime episode.
 4. Run the safest available validation, or record why validation is blocked.
-5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, decisions, reusable patterns, and blockers.
+5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.
 6. Write the active runtime packet's `next.md` with the next recommended runtime episode and Learn Notes.
 7. Run `hyper complete` to close the current packet and refresh Learn, Growth, and Readiness.
 8. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.

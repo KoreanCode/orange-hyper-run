@@ -7,7 +7,13 @@ When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper doctor`, `hyp
 
 Use `.agents/skills/hyper/SKILL.md` as the thin Codex Desktop router. Keep product judgment, execution state, learning, and generated project knowledge in `plan.md`, `.hyper/`, and the `hyper` CLI rather than in static skill text.
 
-Learn role: Learn is not a summary. It extracts durable decisions, reusable implementation patterns, blockers/failures, and constraints from `evidence.md` and `next.md` so future runtime packets can continue with better context.
+Method: Hyper Run is an evidence-first project growth protocol. Execution logs create pressure, pressure creates candidates, and repeated proof promotes project-specific structure.
+
+Protocol: Hyper Run runtime packets are agent-agnostic. Codex Desktop is one consumer, but the packet can be read by CLI agents and other coding assistants.
+
+Principles: No structure before pressure. No stage advancement without evidence. No harness before repeated need. No memory without reusable signal.
+
+Learn role: Learn is not a summary. It extracts what the project repeatedly needed, failed at, or proved from `evidence.md` and `next.md` so future runtime packets can change work boundaries, validation signals, stop conditions, readiness pressure, and capability candidates.
 
 Required workflow:
 
@@ -16,7 +22,7 @@ Required workflow:
 3. Read `.hyper/goals/<GOAL-ID>/goal.md` and `.hyper/goals/<GOAL-ID>/tasks.md`.
 4. Implement the smallest coherent step that satisfies the current episode.
 5. Run the safest available validation or record why validation is blocked.
-6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers.
+6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
 7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.
 8. Run `hyper complete` so Learn, Growth, and Readiness refresh from the completed packet.
 9. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.

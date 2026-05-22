@@ -54,6 +54,7 @@ func updateGrowthState(root string, db *sql.DB) (growthState, *hyperError) {
 	state := growthState{
 		Version:         growthStateVersion,
 		UpdatedAt:       nowISO(),
+		PressureLedger:  pressureLedgerFor(pressures, candidates),
 		Pressures:       pressures,
 		RuntimeBehavior: runtimeBehavior,
 		Candidates:      candidates,

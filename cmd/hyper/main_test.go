@@ -28,6 +28,8 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "codex-desktop.md")), "$hyper run")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "commands", "hyper-run.md")), "Required flow")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"version": 1`)
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"pressure_ledger"`)
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"No structure before pressure."`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "readiness", "state.json")), `"version": 1`)
 }
 
@@ -106,6 +108,9 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, goal, "## Continue From")
 	assertContains(t, goal, "## Current Episode")
 	assertContains(t, goal, "Build a tiny CRM MVP")
+	assertContains(t, goal, "Stage contract: Existence proof")
+	assertContains(t, goal, "Growth loop: Execution -> Evidence -> Pressure Ledger -> Candidate -> Structure when proven.")
+	assertContains(t, goal, "No structure before pressure.")
 	assertContains(t, goal, "## Stage Gate")
 	assertContains(t, goal, "Next readiness pressure")
 	assertContains(t, goal, "Capture readiness evidence")
@@ -147,6 +152,10 @@ func TestStatusAndResumeUseActiveState(t *testing.T) {
 	assertContains(t, status.Stdout, "Active run: RUN-0001")
 	assertContains(t, status.Stdout, "Current runtime packet: GOAL-0001")
 	assertContains(t, status.Stdout, "Runtime packet state: active")
+	assertContains(t, status.Stdout, "Stage contract:")
+	assertContains(t, status.Stdout, "Method: Evidence-first project growth protocol")
+	assertContains(t, status.Stdout, "Pressure ledger:")
+	assertContains(t, status.Stdout, "Principles:")
 	assertContains(t, status.Stdout, "Readiness gate:")
 	assertContains(t, status.Stdout, "Readiness pressure:")
 	assertContains(t, status.Stdout, "Covered axes:")
@@ -626,7 +635,7 @@ func TestInternalLearnStoresFailure(t *testing.T) {
 		t.Fatalf("learn failed: %v", err)
 	}
 	assertContains(t, out.Stdout, "Runtime packet state: blocked")
-	assertContains(t, out.Stdout, "Learn role: durable decisions")
+	assertContains(t, out.Stdout, "Learn role: extract repeated needs")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "failures.md")), "Missing Stripe key")
 }
 
