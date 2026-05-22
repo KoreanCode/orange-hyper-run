@@ -550,9 +550,9 @@ func readinessPressureForDimension(plan map[string]string, stage string, dim rea
 			AxisName:         "Stage advancement",
 			Status:           "candidate",
 			Reason:           gate.Advancement.Recommendation,
-			RecommendedGoal:  "Review readiness evidence and update plan.md Current Stage to " + gate.NextStage + " if the evidence is accepted.",
-			WorkBoundary:     "Do not auto-edit plan.md. Review evidence first, then update Current Stage only when the user accepts the stage advancement.",
-			ValidationSignal: "Record the stage advancement decision or reason for staying in the current stage.",
+			RecommendedGoal:  "Review readiness evidence, then run `hyper advance` if the stage change to " + gate.NextStage + " is accepted.",
+			WorkBoundary:     "Do not run `hyper advance` until the user accepts the stage advancement.",
+			ValidationSignal: "Record the stage advancement decision, or the reason for staying in the current stage.",
 		}
 	}
 	goal := readinessRecommendedGoal(plan, stage, dim.ID)

@@ -60,6 +60,8 @@ func runCLI(args []string, fsys fsRoot, updater updater) (commandOutput, *hyperE
 		return resumeHyper(fsys)
 	case "complete":
 		return completeHyper(fsys)
+	case "advance":
+		return advanceHyper(fsys)
 	case "version":
 		return versionHyper()
 	case "update":
@@ -94,6 +96,7 @@ func usage() string {
 		"  hyper init",
 		"  hyper run [focus]",
 		"  hyper complete",
+		"  hyper advance",
 		"  hyper status",
 		"  hyper doctor",
 		"  hyper repair",
@@ -106,6 +109,7 @@ func usage() string {
 		"  Run `hyper init` once in a project to install Hyper Run settings.",
 		"  Edit plan.md, then use `hyper run [focus]` to create the next runtime packet.",
 		"  After updating evidence.md and next.md, use `hyper complete` to turn evidence into pressure, candidates, and readiness.",
+		"  When `hyper status` says the stage gate is ready, use `hyper advance` to apply the accepted stage change.",
 		"",
 		"Method:",
 		"  " + growthRuntimeDefinition,
