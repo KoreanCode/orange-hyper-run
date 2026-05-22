@@ -143,11 +143,6 @@ func usefulSectionLines(text, heading string) []string {
 	return lines
 }
 
-func blockerSectionLines(text string) []string {
-	blockers, _ := blockerSectionSignals(text)
-	return blockers
-}
-
 func blockerSectionSignals(text string) ([]string, []string) {
 	lines := []string{}
 	waiting := []string{}
@@ -162,10 +157,6 @@ func blockerSectionSignals(text string) ([]string, []string) {
 		}
 	}
 	return lines, waiting
-}
-
-func nonBlockingBlockerLine(line string) bool {
-	return blockerLineDisposition(line) == "non_blocking"
 }
 
 func blockerLineDisposition(line string) string {
