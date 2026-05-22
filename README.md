@@ -113,11 +113,15 @@ $hyper run
 
 ## Install
 
+### macOS / Linux
+
 Install the latest native binary:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KoreanCode/orange-hyper-run/main/install.sh | sh
 ```
+
+For GitHub release installs, the installer downloads `checksums.txt` and verifies the binary with SHA256 before moving it into place.
 
 Check it:
 
@@ -125,13 +129,49 @@ Check it:
 hyper version
 ```
 
-Manual macOS ARM install:
+Manual macOS install:
+
+Apple Silicon:
 
 ```bash
 mkdir -p ~/.local/bin
 curl -fsSL https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-darwin-arm64 -o ~/.local/bin/hyper
 chmod +x ~/.local/bin/hyper
+hyper version
 ```
+
+Intel Mac:
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-darwin-amd64 -o ~/.local/bin/hyper
+chmod +x ~/.local/bin/hyper
+hyper version
+```
+
+### Windows
+
+Download the Windows x64 binary with PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.local\bin" | Out-Null
+Invoke-WebRequest -Uri "https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-windows-amd64.exe" -OutFile "$env:USERPROFILE\.local\bin\hyper.exe"
+& "$env:USERPROFILE\.local\bin\hyper.exe" version
+```
+
+Add it to the user `PATH`:
+
+```powershell
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:USERPROFILE\.local\bin", "User")
+```
+
+Open a new terminal, then check:
+
+```powershell
+hyper version
+```
+
+The Windows binary is built and tested in CI, but there is no PowerShell installer script yet.
 
 Other release binaries:
 
@@ -300,6 +340,8 @@ hyper run [focus]           # create the next runtime packet
 hyper complete              # close the current packet and learn from it
 hyper status                # show current stage, gaps, and readiness
 hyper doctor                # diagnose install, PATH, project state, and Codex routing
+hyper repair                # reconcile state.json when packet evidence and state disagree
+hyper migrate               # refresh growth/readiness state after Hyper Run upgrades
 hyper resume                # print the current handoff again
 hyper update                # update the native binary
 hyper version               # show version and binary path
@@ -312,6 +354,7 @@ From this repository:
 
 ```bash
 go test ./...
+go vet ./...
 go build -o dist/hyper ./cmd/hyper
 ```
 
@@ -328,6 +371,10 @@ cd ../my-project
 
 - [Service Definition](docs/SERVICE_DEFINITION.md)
 - [Tiny MVP Flow Example](examples/tiny-mvp-flow/README.md)
+- [Before / After Demo](examples/before-after-demo/README.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Changelog](docs/CHANGELOG.md)
+- [Known Limitations](docs/KNOWN_LIMITATIONS.md)
 
 ## License
 

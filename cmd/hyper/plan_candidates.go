@@ -21,8 +21,8 @@ func maybeWritePlanImportCandidates(root, planBody string) (string, *hyperError)
 	if len(candidates) == 0 {
 		return "", nil
 	}
-	relPath := filepath.Join(hyperDir, "plan-candidates.md")
-	if err := writeText(filepath.Join(root, relPath), formatPlanImportCandidates(candidates)); err != nil {
+	relPath := filepath.ToSlash(filepath.Join(hyperDir, "plan-candidates.md"))
+	if err := writeText(filepath.Join(root, filepath.FromSlash(relPath)), formatPlanImportCandidates(candidates)); err != nil {
 		return "", err
 	}
 	return relPath, nil
@@ -50,7 +50,7 @@ func findPlanImportCandidates(root string) []planImportCandidate {
 			}
 			if strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
 				if rel, relErr := filepath.Rel(root, path); relErr == nil {
-					paths = append(paths, rel)
+					paths = append(paths, filepath.ToSlash(rel))
 				}
 			}
 			return nil
@@ -60,7 +60,7 @@ func findPlanImportCandidates(root string) []planImportCandidate {
 
 	candidates := []planImportCandidate{}
 	for _, rel := range paths {
-		body := readIfExists(filepath.Join(root, rel))
+		body := readIfExists(filepath.Join(root, filepath.FromSlash(rel)))
 		score, reason := planCandidateScore(body)
 		if score < 2 {
 			continue

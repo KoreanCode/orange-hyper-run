@@ -113,11 +113,15 @@ $hyper run
 
 ## 설치
 
+### macOS / Linux
+
 최신 native binary를 설치합니다.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KoreanCode/orange-hyper-run/main/install.sh | sh
 ```
+
+GitHub release에서 설치할 때 installer는 `checksums.txt`를 함께 내려받고, binary를 옮기기 전에 SHA256 checksum을 검증합니다.
 
 설치 확인:
 
@@ -125,13 +129,49 @@ curl -fsSL https://raw.githubusercontent.com/KoreanCode/orange-hyper-run/main/in
 hyper version
 ```
 
-macOS ARM 수동 설치:
+macOS 수동 설치:
+
+Apple Silicon:
 
 ```bash
 mkdir -p ~/.local/bin
 curl -fsSL https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-darwin-arm64 -o ~/.local/bin/hyper
 chmod +x ~/.local/bin/hyper
+hyper version
 ```
+
+Intel Mac:
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-darwin-amd64 -o ~/.local/bin/hyper
+chmod +x ~/.local/bin/hyper
+hyper version
+```
+
+### Windows
+
+PowerShell에서 Windows x64 binary를 내려받습니다.
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.local\bin" | Out-Null
+Invoke-WebRequest -Uri "https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-windows-amd64.exe" -OutFile "$env:USERPROFILE\.local\bin\hyper.exe"
+& "$env:USERPROFILE\.local\bin\hyper.exe" version
+```
+
+사용자 `PATH`에 추가합니다.
+
+```powershell
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:USERPROFILE\.local\bin", "User")
+```
+
+새 터미널을 열고 확인합니다.
+
+```powershell
+hyper version
+```
+
+Windows binary는 CI에서 빌드/테스트하지만, 아직 PowerShell installer script는 없습니다.
 
 다른 release binary:
 
@@ -301,6 +341,8 @@ hyper run [focus]           # 다음 runtime packet 생성
 hyper complete              # 현재 packet을 닫고 학습
 hyper status                # 현재 stage, gap, readiness 확인
 hyper doctor                # 설치, PATH, 프로젝트 상태, Codex 라우팅 진단
+hyper repair                # packet evidence와 state.json이 어긋날 때 상태 복구
+hyper migrate               # Hyper Run 업그레이드 뒤 growth/readiness 상태 갱신
 hyper resume                # 현재 handoff 다시 출력
 hyper update                # native binary 업데이트
 hyper version               # 버전과 binary 경로 확인
@@ -313,6 +355,7 @@ hyper internal learn        # 디버그/수동 학습 명령
 
 ```bash
 go test ./...
+go vet ./...
 go build -o dist/hyper ./cmd/hyper
 ```
 
@@ -329,6 +372,10 @@ cd ../my-project
 
 - [서비스 정의](docs/SERVICE_DEFINITION_ko.md)
 - [Tiny MVP Flow 예제](examples/tiny-mvp-flow/README_ko.md)
+- [Before / After 데모](examples/before-after-demo/README_ko.md)
+- [로드맵](docs/ROADMAP_ko.md)
+- [변경 기록](docs/CHANGELOG_ko.md)
+- [알려진 한계](docs/KNOWN_LIMITATIONS_ko.md)
 
 ## 라이선스
 
