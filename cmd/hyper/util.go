@@ -85,6 +85,12 @@ func normalizeLabel(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
+func normalizeSentence(value string) string {
+	normalized := strings.ToLower(oneLine(value))
+	normalized = strings.Trim(normalized, " .,:;!?\t")
+	return normalized
+}
+
 func hasAny(value string, needles ...string) bool {
 	for _, needle := range needles {
 		if strings.Contains(value, needle) {
@@ -105,6 +111,39 @@ func firstNonBlank(values ...string) string {
 
 func oneLine(value string) string {
 	return strings.Join(strings.Fields(value), " ")
+}
+
+func compactText(value string, limit int) string {
+	value = oneLine(value)
+	if limit <= 0 || len([]rune(value)) <= limit {
+		return value
+	}
+	runes := []rune(value)
+	return strings.TrimSpace(string(runes[:limit])) + "..."
+}
+
+func compactMultiline(value string, maxLines, lineLimit int) string {
+	lines := []string{}
+	for _, line := range strings.Split(value, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lines = append(lines, compactText(trimmed, lineLimit))
+		if maxLines > 0 && len(lines) >= maxLines {
+			break
+		}
+	}
+	total := 0
+	for _, line := range strings.Split(value, "\n") {
+		if strings.TrimSpace(line) != "" {
+			total++
+		}
+	}
+	if maxLines > 0 && total > maxLines {
+		lines = append(lines, "- ...")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func joinNonEmpty(values []string, sep string) string {

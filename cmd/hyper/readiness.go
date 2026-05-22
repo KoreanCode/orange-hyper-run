@@ -67,7 +67,7 @@ func readinessStateForStatus(root string, growth growthState) readinessState {
 }
 
 func deriveReadinessState(plan map[string]string, growth growthState, evidence []readinessEvidenceRecord) readinessState {
-	stage := firstRuntimeValue(plan["Current Stage"], "Tiny MVP")
+	stage := normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
 	dimensions := readinessDimensions(plan, growth, evidence)
 	gate := readinessGateForStage(stage, dimensions)
 	return readinessState{
@@ -100,7 +100,7 @@ func readinessDimensionDefs() []readinessDimensionDef {
 	return []readinessDimensionDef{
 		{ID: "product_completeness", Name: "Product completeness", Keywords: []string{"product", "mvp", "success criteria", "target users"}, Gap: "The product slice is still too vague to measure."},
 		{ID: "core_ux", Name: "Core UX", Keywords: []string{"flow", "user flow", "screen", "ui", "ux", "browser", "click", "task", "chat", "message"}, Gap: "The primary user flow is not yet proven usable."},
-		{ID: "persistence", Name: "Data persistence", Keywords: []string{"persist", "persistence", "storage", "database", "sqlite", "localstorage", "reload", "save"}, Gap: "User data durability has not been proven."},
+		{ID: "persistence", Name: "Data persistence", Keywords: []string{"persist", "persistence", "storage", "database", "sqlite", "mysql", "postgres", "postgresql", "db", "sql", "localstorage", "reload", "save"}, Gap: "User data durability has not been proven."},
 		{ID: "error_handling", Name: "Error handling", Keywords: []string{"error", "empty", "loading", "failure", "fallback", "blocked", "edge case"}, Gap: "Failure, empty, or edge states are not yet handled."},
 		{ID: "validation_coverage", Name: "Validation coverage", Keywords: []string{"test", "smoke", "validation", "validate", "playwright", "go test", "npm run", "pytest"}, Gap: "The primary behavior does not have repeatable validation evidence."},
 		{ID: "security_baseline", Name: "Security baseline", Keywords: []string{"security", "permission", "rate limit", "secret", "session", "token"}, Gap: "Basic security and misuse boundaries are not yet explicit."},
@@ -162,12 +162,16 @@ func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readine
 		}
 		goalID := entry.Name()
 		body := readIfExists(filepath.Join(goalsDir, goalID, "evidence.md"))
-		for _, heading := range []string{"Readiness Evidence", "Validation"} {
-			for _, line := range usefulSectionLines(body, heading) {
-				record, ok := parseReadinessEvidenceLine(goalID, line, defs)
-				if ok {
-					records = append(records, record)
-				}
+		for _, line := range usefulSectionLines(body, "Readiness Evidence") {
+			record, ok := parseReadinessEvidenceLine(goalID, line, defs)
+			if ok {
+				records = append(records, record)
+			}
+		}
+		for _, line := range usefulSectionLines(body, "Validation") {
+			record, ok := parseReadinessEvidenceLine(goalID, line, defs)
+			if ok {
+				records = append(records, record)
 			}
 		}
 	}
@@ -191,12 +195,6 @@ func parseReadinessEvidenceLine(goalID, line string, defs []readinessDimensionDe
 		value = strings.TrimSpace(value)
 		if axis != "" && usefulReadinessEvidence(value) {
 			return readinessEvidenceRecordForAxis(goalID, axis, value), true
-		}
-	}
-	lower := strings.ToLower(text)
-	for _, def := range defs {
-		if hasAny(lower, def.Keywords...) {
-			return readinessEvidenceRecordForAxis(goalID, def.ID, text), true
 		}
 	}
 	return readinessEvidenceRecord{}, false
@@ -301,9 +299,9 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 				hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload"),
 			"browser, screenshot, smoke, or verified primary-flow evidence"
 	case "persistence":
-		return hasAny(normalized, "persist", "reload", "restart", "saved", "survive", "stored") &&
-				hasAny(normalized, "sqlite", "database", "localstorage", "local storage", "storage"),
-			"reload, restart, storage, or database evidence"
+		return hasAny(normalized, "persist", "reload", "restart", "saved", "survive", "stored", "created", "re-read", "reread", "confirmed", "row") &&
+				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage"),
+			"MySQL, SQLite, DB, reload, restart, storage, or database evidence"
 	case "error_handling":
 		return hasAny(normalized, "empty", "error", "loading", "fallback", "failure", "edge") &&
 				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works"),
@@ -525,7 +523,12 @@ func readinessRecommendedGoal(plan map[string]string, stage, axis string) string
 
 func readinessProductName(plan map[string]string) string {
 	product := firstRuntimeValue(plan["Product"], "the product")
-	for _, sep := range []string{",", "."} {
+	if before, after, ok := strings.Cut(product, " is "); ok && strings.TrimSpace(before) != "" && strings.TrimSpace(after) != "" {
+		if len(strings.Fields(before)) <= 4 {
+			return strings.TrimSpace(before)
+		}
+	}
+	for _, sep := range []string{".", ","} {
 		if before, _, ok := strings.Cut(product, sep); ok && strings.TrimSpace(before) != "" {
 			return strings.TrimSpace(before)
 		}
@@ -657,6 +660,22 @@ func writeReadinessValidatorCandidate(root string, spec readinessValidatorSpec, 
 		"## Reason",
 		"",
 		"Stage-specific service-quality validator candidate. Do not enforce this validator until it is promoted to active.",
+		"",
+		"## When Required",
+		"",
+		"Not required yet. This becomes required only after repeated evidence shows the project needs this validator for " + spec.Axis + ".",
+		"",
+		"## How To Run",
+		"",
+		"Run or create the smallest repeatable check that proves: " + spec.Signal,
+		"",
+		"## Evidence Required",
+		"",
+		"- Command output, URL, screenshot, or release proof\n- Runtime packet ID\n- Reason if the check is blocked",
+		"",
+		"## Required Behavior",
+		"",
+		spec.Signal,
 		"",
 		"## Pressure",
 		"",

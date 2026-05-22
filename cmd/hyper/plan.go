@@ -83,9 +83,9 @@ func parsePlan(body string) map[string]string {
 
 func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext, growth growthState, readiness readinessState) episode {
 	plan := parsePlan(planBody)
-	stage := firstRuntimeValue(plan["Current Stage"], "Tiny MVP")
+	stage := normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
 	buildStyle := firstRuntimeValue(plan["Build Style"], "Detect from project")
-	product := firstRuntimeValue(plan["Product"], "the current project")
+	product := readinessProductName(plan)
 	objective := runtimeObjective(focus, plan, stage, product, readiness)
 	validation := applyReadinessValidation(applyGrowthValidation(applyStageValidation(validationForBuildStyle(buildStyle), stage), growth), readiness)
 	stopCondition := applyReadinessStopConditions(applyGrowthStopConditions(firstRuntimeValue(plan["Success Criteria"], stageDoneCondition(stage)), growth), readiness)
@@ -142,12 +142,69 @@ func firstRuntimeValue(values ...string) string {
 }
 
 func isPlaceholder(value string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized := normalizeSentence(value)
 	switch normalized {
-	case "tbd", "todo", "n/a", "na", "none", "pending", "pending.":
+	case "tbd", "todo", "n/a", "na", "none", "pending":
 		return true
 	}
-	return false
+	return isNoIssueText(normalized)
+}
+
+func isNoIssueText(normalized string) bool {
+	if normalized == "" {
+		return true
+	}
+	if normalized == "none in this episode" ||
+		normalized == "no blocker" ||
+		normalized == "no blockers" ||
+		normalized == "no blocker in this episode" ||
+		normalized == "no blockers in this episode" ||
+		normalized == "no runtime blocker" ||
+		normalized == "no runtime blockers" ||
+		normalized == "no failure" ||
+		normalized == "no failures" ||
+		normalized == "no failure in this episode" ||
+		normalized == "no failures in this episode" {
+		return true
+	}
+	return strings.HasPrefix(normalized, "no blocker for this episode") ||
+		strings.HasPrefix(normalized, "no blockers for this episode") ||
+		strings.HasPrefix(normalized, "no runtime blocker was found") ||
+		strings.HasPrefix(normalized, "no failure for this episode") ||
+		strings.HasPrefix(normalized, "no failures for this episode")
+}
+
+func normalizeRuntimeStage(stage string) string {
+	stage = firstRuntimeValue(stage)
+	if stage == "" {
+		return ""
+	}
+	normalized := normalizeLabel(stage)
+	type stagePattern struct {
+		name     string
+		patterns []string
+	}
+	patterns := []stagePattern{
+		{name: "Tiny MVP", patterns: []string{"tiny mvp"}},
+		{name: "Usable MVP", patterns: []string{"usable mvp"}},
+		{name: "Beta", patterns: []string{"beta"}},
+		{name: "Service Quality", patterns: []string{"service quality", "production"}},
+	}
+	bestName := ""
+	bestIndex := len(normalized) + 1
+	for _, candidate := range patterns {
+		for _, pattern := range candidate.patterns {
+			index := strings.Index(normalized, pattern)
+			if index >= 0 && index < bestIndex {
+				bestIndex = index
+				bestName = candidate.name
+			}
+		}
+	}
+	if bestName != "" {
+		return bestName
+	}
+	return stage
 }
 
 func runtimeWorkBoundary(objective, stage string, plan map[string]string, growth growthState, readiness readinessState) string {
@@ -155,20 +212,20 @@ func runtimeWorkBoundary(objective, stage string, plan map[string]string, growth
 	nonGoals := firstRuntimeValue(plan["Non-goals"])
 	constraints := firstRuntimeValue(plan["Constraints"])
 	lines := []string{
-		"- Do the smallest coherent implementation step that advances: " + objective,
+		"- Do the smallest coherent implementation step that advances: " + compactText(objective, 180),
 		"- Keep the work inside the current stage: " + stage,
 	}
 	if guidance := stageRuntimeBoundary(stage); guidance != "" {
 		lines = append(lines, "- "+guidance)
 	}
 	if mvp != "" {
-		lines = append(lines, "- Use the product MVP brief as the boundary: "+oneLine(mvp))
+		lines = append(lines, "- Use the product MVP brief as the boundary: "+compactText(mvp, 180))
 	}
 	if nonGoals != "" {
-		lines = append(lines, "- Avoid plan non-goals: "+oneLine(nonGoals))
+		lines = append(lines, "- Avoid plan non-goals: "+compactText(nonGoals, 160))
 	}
 	if constraints != "" {
-		lines = append(lines, "- Respect constraints: "+oneLine(constraints))
+		lines = append(lines, "- Respect constraints: "+compactText(constraints, 200))
 	}
 	lines = append(lines, growth.RuntimeBehavior.WorkBoundary...)
 	if readiness.NextPressure.WorkBoundary != "" {
@@ -317,6 +374,14 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 	currentFocus := firstRuntimeValue(strings.TrimSpace(focus), plan["Current Focus"], "Continue the current stage.")
 	product := firstRuntimeValue(plan["Product"], "the current project")
 	targetUsers := firstRuntimeValue(plan["Target Users"], "Not specified yet.")
+	objective = compactText(objective, 240)
+	product = compactText(product, 180)
+	targetUsers = compactText(targetUsers, 180)
+	buildStyle = compactText(buildStyle, 160)
+	currentFocus = compactText(currentFocus, 160)
+	workBoundary = compactMultiline(workBoundary, 10, 180)
+	validation = compactMultiline(validation, 8, 180)
+	stopCondition = compactMultiline(stopCondition, 8, 180)
 	return fmt.Sprintf(`# %s Runtime Packet
 
 ## Continue From
@@ -386,11 +451,11 @@ func buildStageGateDoc(readiness readinessState) string {
 	}
 	if len(readiness.StageGate.BlockingGaps) > 0 {
 		for _, gap := range readiness.StageGate.BlockingGaps {
-			lines = append(lines, "- Gate gap: "+gap)
+			lines = append(lines, "- Gate gap: "+compactText(gap, 160))
 		}
 	}
 	for _, evidence := range readiness.StageGate.RequiredEvidence {
-		lines = append(lines, "- Gate evidence: "+evidence)
+		lines = append(lines, "- Gate evidence: "+compactText(evidence, 160))
 	}
 	return strings.Join(lines, "\n")
 }

@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+const (
+	similarContextDisplayLimit = 3
+	similarContextTextLimit    = 220
+)
+
 func findSimilarContext(db *sql.DB, query string, limit int) ([]similarContext, *hyperError) {
 	queryTokens := tokenize(query)
 	if len(queryTokens) == 0 {
@@ -88,15 +93,22 @@ func formatSimilarContext(items []similarContext) string {
 	if len(items) == 0 {
 		return "None yet."
 	}
+	if len(items) > similarContextDisplayLimit {
+		items = items[:similarContextDisplayLimit]
+	}
 	lines := make([]string, 0, len(items))
 	for _, item := range items {
 		kind := ""
 		if item.Kind != "" {
 			kind = " (" + item.Kind + ")"
 		}
-		lines = append(lines, fmt.Sprintf("- %s:%s%s score %.2f - %s", item.Source, item.ID, kind, item.Score, oneLine(item.Text)))
+		lines = append(lines, fmt.Sprintf("- %s:%s%s score %.2f - %s", item.Source, item.ID, kind, item.Score, compactSimilarText(item.Text)))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func compactSimilarText(text string) string {
+	return compactText(text, similarContextTextLimit)
 }
 
 func scoreText(text, rawQuery string, queryTokens map[string]struct{}) float64 {

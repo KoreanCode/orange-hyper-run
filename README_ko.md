@@ -56,6 +56,7 @@ hyper run "가장 작은 사용 가능한 MVP를 만들어줘"
 
 hyper complete
 hyper status
+hyper doctor
 hyper run "다음 개선 작업"
 ```
 
@@ -256,6 +257,7 @@ hyper init                  # 프로젝트에 Hyper Run 파일 설치
 hyper run [focus]           # 다음 runtime packet 생성
 hyper complete              # 현재 packet을 닫고 학습
 hyper status                # 현재 stage, gap, readiness 확인
+hyper doctor                # 설치, PATH, 프로젝트 상태, Codex 라우팅 진단
 hyper resume                # 현재 handoff 다시 출력
 hyper update                # native binary 업데이트
 hyper version               # 버전과 binary 경로 확인

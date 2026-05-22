@@ -48,6 +48,8 @@ func runCLI(args []string, fsys fsRoot, updater updater) (commandOutput, *hyperE
 		return runHyper(fsys, strings.Join(rest, " "))
 	case "status":
 		return statusHyper(fsys)
+	case "doctor":
+		return doctorHyper(fsys)
 	case "resume":
 		return resumeHyper(fsys)
 	case "complete":
@@ -87,6 +89,7 @@ func usage() string {
 		"  hyper run [focus]",
 		"  hyper complete",
 		"  hyper status",
+		"  hyper doctor",
 		"  hyper resume",
 		"  hyper version",
 		"  hyper update [source]",

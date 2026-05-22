@@ -151,6 +151,7 @@ func TestStatusAndResumeUseActiveState(t *testing.T) {
 	assertContains(t, status.Stdout, "Readiness pressure:")
 	assertContains(t, status.Stdout, "Covered axes:")
 	assertContains(t, status.Stdout, "Blocking gaps:")
+	assertContains(t, status.Stdout, "Next:")
 	assertContains(t, status.Stdout, "Growth pressures:")
 	assertContains(t, status.Stdout, "Capability candidates:")
 
@@ -160,6 +161,24 @@ func TestStatusAndResumeUseActiveState(t *testing.T) {
 	}
 	assertContains(t, resume.Stdout, "Resuming RUN-0001 at GOAL-0001")
 	assertContains(t, resume.Stdout, "Execution adapter: prompt")
+}
+
+func TestDoctorReportsProjectState(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Hyper Run Doctor")
+	assertContains(t, out.Stdout, "Workspace: "+root)
+	assertContains(t, out.Stdout, "plan.md")
+	assertContains(t, out.Stdout, "SQLite")
+	assertContains(t, out.Stdout, "Codex Desktop routing")
+	assertContains(t, out.Stdout, "Current packet")
+	assertContains(t, out.Stdout, "Summary:")
 }
 
 func TestRunBlocksPendingActiveGoal(t *testing.T) {
@@ -337,6 +356,10 @@ func TestGrowthGeneratesValidatorCandidateAfterRepeatedPressure(t *testing.T) {
 	validatorPath := filepath.Join(root, ".hyper", "validators", "generated", "validator-run-go-test-before-every-runtime-packet-handoff.md")
 	assertContains(t, readFile(t, validatorPath), "Status: repeated")
 	assertContains(t, readFile(t, validatorPath), "Repeated validation pressure")
+	assertContains(t, readFile(t, validatorPath), "## When Required")
+	assertContains(t, readFile(t, validatorPath), "## How To Run")
+	assertContains(t, readFile(t, validatorPath), "## Evidence Required")
+	assertContains(t, readFile(t, validatorPath), "`go test")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-run-go-test-before-every-runtime-packet-handoff.md")), "Status: repeated")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"state": "repeated"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"pressure_type": "repeated_validation"`)
@@ -568,6 +591,8 @@ func TestBetaStageGeneratesValidatorCandidates(t *testing.T) {
 	candidate := readFile(t, filepath.Join(root, ".hyper", "validators", "generated", "validator-beta-primary-flow-smoke.md"))
 	assertContains(t, candidate, "Status: candidate")
 	assertContains(t, candidate, "Stage-specific service-quality validator candidate")
+	assertContains(t, candidate, "## When Required")
+	assertContains(t, candidate, "## Required Behavior")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-beta-security-baseline.md")), "Status: candidate")
 	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
 	assertContains(t, goal, "Beta validation should use realistic data")
@@ -641,6 +666,21 @@ func TestLearnIgnoresHyperRunMetaProgress(t *testing.T) {
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "patterns.md")), "hyper run")
 }
 
+func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
+	completed := deriveGoalState("## Validation\n\n`go test ./...` passed.\n\n## Blocker\n\nNone.\n", "## Recommended Next Goal\n\nShip next slice.\n")
+	if completed.State != "completed" {
+		t.Fatalf("expected no-issue blocker to complete, got %+v", completed)
+	}
+	completed = deriveGoalState("## Validation\n\nSmoke passed.\n\n## Blocker\n\nNo blocker for this episode. Validation used local MySQL.\n", "## Recommended Next Goal\n\nShip next slice.\n")
+	if completed.State != "completed" {
+		t.Fatalf("expected no-blocker sentence to complete, got %+v", completed)
+	}
+	kind, value := parseLearnNote("- Failure: None in this episode.")
+	if kind != "" || value != "" {
+		t.Fatalf("expected no-op failure learn note to be ignored, got %q %q", kind, value)
+	}
+}
+
 func TestGoalStateDerivation(t *testing.T) {
 	blocked := deriveGoalState("## Blocker\n\nMissing API key", "")
 	if blocked.State != "blocked" {
@@ -650,6 +690,105 @@ func TestGoalStateDerivation(t *testing.T) {
 	if completed.State != "completed" {
 		t.Fatalf("expected completed, got %s", completed.State)
 	}
+}
+
+func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
+	state := deriveReadinessState(map[string]string{
+		"Current Stage": "Tiny MVP moving toward Usable MVP. Do not advance yet.",
+		"Product":       "Pickachat is a location-pinned chat web app.",
+		"MVP":           "Create a pin and send a message.",
+	}, growthState{}, nil)
+	if state.Stage != "Tiny MVP" {
+		t.Fatalf("expected Tiny MVP, got %s", state.Stage)
+	}
+	if state.StageGate.CurrentStage != "Tiny MVP" || state.StageGate.NextStage != "Usable MVP" {
+		t.Fatalf("expected Tiny MVP gate, got %+v", state.StageGate)
+	}
+	goal := readinessRecommendedGoal(map[string]string{"Product": "Pickachat is a location-pinned chat web app."}, "Tiny MVP", "persistence")
+	assertContains(t, goal, "primary Pickachat flow")
+}
+
+func TestReadinessEvidenceRequiresAxisLabelAndCoversMySQLPersistence(t *testing.T) {
+	defs := readinessDimensionDefs()
+	if _, ok := parseReadinessEvidenceLine("GOAL-0001", "Local MySQL proof for browser-created pin returned pin test.", defs); ok {
+		t.Fatal("generic validation line should not infer a readiness axis")
+	}
+	record, ok := parseReadinessEvidenceLine("GOAL-0001", "Data persistence: API smoke persisted a pin/message and MySQL confirmed the browser-created row.", defs)
+	if !ok {
+		t.Fatal("expected labeled MySQL persistence evidence to parse")
+	}
+	if record.Axis != "persistence" || record.Status != "covered" {
+		t.Fatalf("expected covered persistence evidence, got %+v", record)
+	}
+}
+
+func TestGrowthIgnoresNoIssueAndNoChangeSignals(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+	insertTestMemory(t, db, "pattern", "GOAL-0001 readiness evidence: Deployment readiness: Not changed in this episode; MapLibre bundle-size warning remains expected.")
+	insertTestMemory(t, db, "pattern", "GOAL-0002 readiness evidence: Security baseline: No auth, secrets, privileged flows, or third-party write surfaces were added.")
+	insertTestMemory(t, db, "failure", "GOAL-0003 learn failure: None in this episode.")
+
+	state, hyperErr := updateGrowthState(root, db)
+	if hyperErr != nil {
+		t.Fatalf("growth failed: %v", hyperErr)
+	}
+	if len(state.Pressures) != 0 {
+		t.Fatalf("expected no pressures for no-op signals, got %+v", state.Pressures)
+	}
+	if len(state.Candidates) != 0 {
+		t.Fatalf("expected no candidates for no-op signals, got %+v", state.Candidates)
+	}
+}
+
+func TestSimilarContextIsCompacted(t *testing.T) {
+	longText := strings.Repeat("very long runtime context ", 30) + "tail-marker"
+	out := formatSimilarContext([]similarContext{
+		{Source: "goal", ID: "GOAL-0001", Kind: "goal", Score: 0.9, Text: longText},
+		{Source: "goal", ID: "GOAL-0002", Kind: "goal", Score: 0.8, Text: longText},
+		{Source: "goal", ID: "GOAL-0003", Kind: "goal", Score: 0.7, Text: longText},
+		{Source: "goal", ID: "GOAL-0004", Kind: "goal", Score: 0.6, Text: longText},
+	})
+	if strings.Count(out, "\n") != 2 {
+		t.Fatalf("expected three compacted context lines, got:\n%s", out)
+	}
+	assertNotContains(t, out, "tail-marker")
+}
+
+func TestRuntimePacketCompactsLongContext(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+	long := strings.Repeat("notes prior context ", 80)
+	if err := insertRun(db, "RUN-0099", long, "Tiny MVP", "completed", nowISO(), "GOAL-0099", long); err != nil {
+		t.Fatalf("insert run failed: %v", err)
+	}
+
+	if _, err := runCLI(args("run", "notes"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
+	if strings.Count(goal, "notes prior context") > 20 {
+		t.Fatalf("expected compact prior context, got:\n%s", goal)
+	}
+	assertContains(t, goal, "...")
 }
 
 func TestUpdateURL(t *testing.T) {

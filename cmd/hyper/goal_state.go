@@ -123,6 +123,21 @@ func noisyMemoryText(text string) bool {
 	return hasAny(normalized,
 		"hyper run created", "`hyper run` created", "created goal-", "created `goal-", "runtime packet created",
 		"created runtime packet", "screenshot saved", "screenshot path", "pending.", "no learnable signal",
+	) || isNoIssueText(normalized) || isPassiveNoChangeText(normalized)
+}
+
+func isPassiveNoChangeText(normalized string) bool {
+	return hasAny(normalized,
+		"not changed in this episode",
+		"was not changed",
+		"were not changed",
+		"configuration was not changed",
+		"configuration were not changed",
+		"no auth, secrets",
+		"no auth, secret",
+		"no secrets, privileged flows",
+		"no privileged flows",
+		"no third-party write surfaces were added",
 	)
 }
 

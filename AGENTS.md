@@ -3,7 +3,7 @@
 <!-- hyper-run:start -->
 ## Hyper Run
 
-When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.
+When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper doctor`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.
 
 Use `.agents/skills/hyper/SKILL.md` as the thin Codex Desktop router. Keep product judgment, execution state, learning, and generated project knowledge in `plan.md`, `.hyper/`, and the `hyper` CLI rather than in static skill text.
 
@@ -22,4 +22,6 @@ Required workflow:
 9. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.
 
 Use `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.
+
+Use `hyper doctor` when install, PATH, project state, SQLite, or Codex routing looks wrong.
 <!-- hyper-run:end -->

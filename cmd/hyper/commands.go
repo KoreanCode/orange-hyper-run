@@ -46,7 +46,7 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	episode := compileGoalEpisode("GOAL-0000", "", planResult.Body, nil, growth, readiness)
 	now := nowISO()
 	planHash := hashText(planResult.Body)
-	stage := firstNonBlank(episode.Plan["Current Stage"], "Tiny MVP")
+	stage := firstNonBlank(episode.Stage, "Tiny MVP")
 	existing := readStateIfExists(root)
 	hasActiveGoal := strings.TrimSpace(existing.CurrentGoalID) != ""
 
@@ -304,31 +304,7 @@ func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	growth := readGrowthStateIfExists(root)
 	readiness := readinessStateForStatus(root, growth)
-	lines := []string{
-		"Project: " + state.Project,
-		"Stage: " + state.Stage,
-		"Status: " + state.Status,
-		"Runtime packet state: " + derived.State,
-		"Runtime packet reason: " + derived.Reason,
-	}
-	lines = append(lines, readinessStatusLines(readiness)...)
-	runLabel := "Last run"
-	packetLabel := "Last runtime packet"
-	if state.Status == "active" {
-		runLabel = "Active run"
-		packetLabel = "Current runtime packet"
-	}
-	lines = append(lines,
-		runLabel+": "+state.ActiveRunID,
-		packetLabel+": "+state.CurrentGoalID,
-		"Runtime packet file: "+state.CurrentGoalPath,
-		fmt.Sprintf("Runs recorded: %d", runs),
-		fmt.Sprintf("Runtime packets recorded: %d", goals),
-		fmt.Sprintf("Growth pressures: %d", len(growth.Pressures)),
-		fmt.Sprintf("Capability candidates: %d", len(growth.Candidates)),
-		"Updated: "+state.UpdatedAt,
-		"",
-	)
+	lines := statusDashboardLines(state, derived, readiness, growth, runs, goals)
 	return stdout(strings.Join(lines, "\n")), nil
 }
 

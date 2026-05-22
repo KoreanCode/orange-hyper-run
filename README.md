@@ -56,6 +56,7 @@ hyper run "Build the smallest usable MVP"
 
 hyper complete
 hyper status
+hyper doctor
 hyper run "Next improvement"
 ```
 
@@ -256,6 +257,7 @@ hyper init                  # install Hyper Run files in this project
 hyper run [focus]           # create the next runtime packet
 hyper complete              # close the current packet and learn from it
 hyper status                # show current stage, gaps, and readiness
+hyper doctor                # diagnose install, PATH, project state, and Codex routing
 hyper resume                # print the current handoff again
 hyper update                # update the native binary
 hyper version               # show version and binary path

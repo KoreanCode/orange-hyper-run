@@ -236,8 +236,11 @@ func memorySignal(text string) string {
 }
 
 func isNoisyGrowthSignal(signal string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(signal))
+	normalized := normalizeSentence(signal)
 	if isPlaceholder(normalized) {
+		return true
+	}
+	if isNoIssueText(normalized) || isPassiveNoChangeText(normalized) {
 		return true
 	}
 	tokens := pressureTokens(signal)
@@ -722,6 +725,22 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 		"",
 		candidate.Reason,
 		"",
+		"## When Required",
+		"",
+		candidateWhenRequired(candidate, pressure),
+		"",
+		"## How To Run",
+		"",
+		candidateHowToRun(candidate, pressure),
+		"",
+		"## Evidence Required",
+		"",
+		candidateEvidenceRequired(candidate, pressure),
+		"",
+		"## Required Behavior",
+		"",
+		candidateRequiredBehavior(candidate, pressure),
+		"",
 		"## Pressure",
 		"",
 		"- Kind: " + pressure.Kind,
@@ -731,7 +750,7 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 		"",
 		"## Activation Rule",
 		"",
-		"Do not treat this file as an active harness or validator yet. Promote it only after future runtime packets keep confirming the same pressure and the project needs a stable structure.",
+		candidateActivationRule(candidate),
 		"",
 	}, "\n")
 	if err := removeConflictingLifecycleCopies(root, candidate); err != nil {
@@ -750,6 +769,99 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 		}
 	}
 	return nil
+}
+
+func candidateWhenRequired(candidate growthCandidate, pressure growthPressure) string {
+	if candidate.Status != "active" {
+		return "Not required yet. Treat this as a candidate until repeated evidence proves the project needs it."
+	}
+	switch candidate.Kind {
+	case "validator":
+		return "Required before closing a runtime packet that touches this pressure: " + compactText(pressure.Signal, 140)
+	case "skill":
+		return "Use when a future runtime packet repeats this implementation pressure: " + compactText(pressure.Signal, 140)
+	case "harness":
+		return "Use when multiple repeated validators, skills, or constraints need one stable project-specific structure."
+	default:
+		return "Use when future work repeats this pressure."
+	}
+}
+
+func candidateHowToRun(candidate growthCandidate, pressure growthPressure) string {
+	if command := firstBacktickCommand(pressure.Signal); command != "" {
+		return "`" + command + "`"
+	}
+	normalized := strings.ToLower(pressure.Signal)
+	switch {
+	case strings.Contains(normalized, "go test"):
+		return "`go test ./...`"
+	case strings.Contains(normalized, "npm run build"):
+		return "`npm run build`"
+	case strings.Contains(normalized, "npm run smoke:api"):
+		return "`npm run smoke:api`"
+	case strings.Contains(normalized, "pytest"):
+		return "`pytest`"
+	}
+	switch candidate.Kind {
+	case "validator":
+		return "Run the smallest repeatable check that proves this signal, then paste the command output into evidence.md."
+	case "skill":
+		return "Apply this guidance during implementation and record the changed files plus validation evidence."
+	case "harness":
+		return "Review active/repeated capabilities and create a project-specific harness only when one command or workflow would reduce repeated setup."
+	default:
+		return "Record the action taken and the proof in evidence.md."
+	}
+}
+
+func candidateEvidenceRequired(candidate growthCandidate, pressure growthPressure) string {
+	switch candidate.Kind {
+	case "validator":
+		return "- Command output or smoke result\n- Runtime packet ID\n- Created/read record ID, URL, screenshot, or equivalent proof when available"
+	case "skill":
+		return "- Runtime packet ID\n- Changed files\n- Validation result showing the guidance helped without adding avoidable process"
+	case "harness":
+		return "- At least one repeated validation pressure\n- Multiple repeated implementation or boundary pressures\n- Evidence that a shared harness would reduce repeated setup"
+	default:
+		return "- Runtime packet ID\n- Evidence that the pressure repeated"
+	}
+}
+
+func candidateRequiredBehavior(candidate growthCandidate, pressure growthPressure) string {
+	switch candidate.Kind {
+	case "validator":
+		return "Before `hyper complete`, prove this behavior or record why it is blocked: " + compactText(pressure.Signal, 160)
+	case "skill":
+		return "Keep this implementation guidance in mind when the same pressure appears: " + compactText(pressure.Signal, 160)
+	case "harness":
+		return "Only consolidate repeated validators, skills, and constraints after the project has enough evidence that the structure will be reused."
+	default:
+		return compactText(pressure.Signal, 160)
+	}
+}
+
+func candidateActivationRule(candidate growthCandidate) string {
+	if candidate.Status == "active" {
+		return "This capability is active because it crossed the activation threshold. Keep it active only while future evidence continues to support it."
+	}
+	return "Do not treat this file as active behavior yet. Promote it only after future runtime packets keep confirming the same pressure and the project needs a stable structure."
+}
+
+func firstBacktickCommand(value string) string {
+	before, after, ok := strings.Cut(value, "`")
+	_ = before
+	if !ok {
+		return ""
+	}
+	command, _, ok := strings.Cut(after, "`")
+	if !ok {
+		return ""
+	}
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	return command
 }
 
 func removeConflictingLifecycleCopies(root string, candidate growthCandidate) *hyperError {
