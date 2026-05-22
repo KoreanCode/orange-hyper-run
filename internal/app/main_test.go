@@ -698,6 +698,18 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongUX.Status != "covered" {
 		t.Fatalf("expected strong UX evidence to be covered, got %+v", strongUX)
 	}
+	inferred := inferReadinessEvidenceFromValidationLine("GOAL-0001", "`npm run check` passed.")
+	if len(inferred) != 1 || inferred[0].Axis != "validation_coverage" || inferred[0].Status != "covered" {
+		t.Fatalf("expected validation command to infer covered validation evidence, got %+v", inferred)
+	}
+	inferred = inferReadinessEvidenceFromValidationLine("GOAL-0001", "Browser validation at mobile viewport passed the core flow.")
+	axes := map[string]string{}
+	for _, record := range inferred {
+		axes[record.Axis] = record.Status
+	}
+	if axes["validation_coverage"] != "covered" || axes["core_ux"] != "covered" {
+		t.Fatalf("expected browser validation flow to infer validation and core UX coverage, got %+v", inferred)
+	}
 	weakDeploy, ok := parseReadinessEvidenceLine("GOAL-0001", "Deployment readiness: URL documented.", defs)
 	if !ok {
 		t.Fatal("expected weak deployment evidence to parse")
@@ -857,6 +869,10 @@ func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
 	completed = deriveGoalState("## Validation\n\nSmoke passed.\n\n## Blocker\n\nNo blocker for this episode. Validation used local MySQL.\n", "## Recommended Next Goal\n\nShip next slice.\n")
 	if completed.State != "completed" {
 		t.Fatalf("expected no-blocker sentence to complete, got %+v", completed)
+	}
+	completed = deriveGoalState("## Validation\n\nSmoke passed.\n\n## Blocker\n\nNo blocker for this packet.\n", "## Recommended Next Goal\n\nShip next slice.\n")
+	if completed.State != "completed" {
+		t.Fatalf("expected no-blocker packet sentence to complete, got %+v", completed)
 	}
 	kind, value := parseLearnNote("- Failure: None in this episode.")
 	if kind != "" || value != "" {

@@ -189,7 +189,9 @@ func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readine
 			record, ok := parseReadinessEvidenceLine(goalID, line, defs)
 			if ok {
 				records = append(records, record)
+				continue
 			}
+			records = append(records, inferReadinessEvidenceFromValidationLine(goalID, line)...)
 		}
 	}
 	return records, nil
@@ -215,6 +217,21 @@ func parseReadinessEvidenceLine(goalID, line string, defs []readinessDimensionDe
 		}
 	}
 	return readinessEvidenceRecord{}, false
+}
+
+func inferReadinessEvidenceFromValidationLine(goalID, line string) []readinessEvidenceRecord {
+	text := oneLine(line)
+	if !usefulReadinessEvidence(text) {
+		return nil
+	}
+	records := []readinessEvidenceRecord{}
+	for _, axis := range []string{"validation_coverage", "core_ux"} {
+		covered, _ := readinessEvidenceQuality(axis, text)
+		if covered {
+			records = append(records, readinessEvidenceRecordForAxis(goalID, axis, text))
+		}
+	}
+	return records
 }
 
 func readinessEvidenceRecordForAxis(goalID, axis, text string) readinessEvidenceRecord {
@@ -324,7 +341,7 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works"),
 			"empty, loading, error, failure, fallback, or edge-state evidence"
 	case "validation_coverage":
-		return hasAny(normalized, "smoke", "playwright", "go test", "npm run", "pytest", "build", "command", "`") &&
+		return hasAny(normalized, "smoke", "playwright", "go test", "npm run", "pytest", "build", "command", "validation", "`") &&
 				hasAny(normalized, "passed", "repeatable", "covered", "verified"),
 			"repeatable command, build, test, smoke, or coverage evidence"
 	case "security_baseline":

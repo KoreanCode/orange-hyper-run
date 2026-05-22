@@ -173,6 +173,8 @@ func isNoIssueText(normalized string) bool {
 	}
 	return strings.HasPrefix(normalized, "no blocker for this episode") ||
 		strings.HasPrefix(normalized, "no blockers for this episode") ||
+		strings.HasPrefix(normalized, "no blocker for this packet") ||
+		strings.HasPrefix(normalized, "no blockers for this packet") ||
 		strings.HasPrefix(normalized, "no runtime blocker was found") ||
 		strings.HasPrefix(normalized, "no remaining blocker for this packet") ||
 		strings.HasPrefix(normalized, "no remaining blockers for this packet") ||
