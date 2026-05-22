@@ -1,6 +1,6 @@
 ---
 name: hyper
-description: Thin Codex Desktop router for Hyper Run. Use when the user says $hyper, $hyper run, $hyper init, $hyper doctor, $hyper resume, hyper run, or asks Hyper Run to continue the current project.
+description: Thin Codex Desktop router for Hyper Run. Use when the user says $hyper, $hyper run, $hyper init, $hyper advance, $hyper doctor, $hyper resume, hyper run, or asks Hyper Run to continue the current project.
 ---
 
 # Hyper Router
@@ -32,6 +32,7 @@ Command mapping:
 - `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.
 - `$hyper run [focus]`: run `hyper run [focus]`, read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.
 - `$hyper complete`: run `hyper complete` after evidence and next notes are written so project readiness is refreshed.
+- `$hyper advance`: run `hyper advance` only after `hyper status` shows the stage gate is ready and the user accepts the stage change.
 - `$hyper doctor`: run `hyper doctor` and use the diagnostics to fix install, PATH, project state, or routing issues.
 - `$hyper resume`: run `hyper resume`, read the active runtime packet path, and continue the same evidence and next-step rules.
 - `hyper run [focus]`: treat this the same as `$hyper run [focus]` when the user is speaking inside Codex Desktop.
@@ -45,3 +46,4 @@ Execution rules:
 6. Write the active runtime packet's `next.md` with the next recommended runtime episode and Learn Notes.
 7. Run `hyper complete` to close the current packet and refresh Learn, Growth, and Readiness.
 8. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.
+9. Use `hyper advance` only for an accepted stage change after readiness says the gate is ready.

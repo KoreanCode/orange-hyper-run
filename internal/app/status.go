@@ -156,11 +156,11 @@ func statusDoNotDoYet(state projectState, derived goalState, readiness readiness
 	if readiness.StageGate.Status == "not_ready" {
 		return "Do not advance " + readiness.StageGate.CurrentStage + " until blocking readiness gaps are closed."
 	}
+	if readiness.StageGate.Advancement.Candidate {
+		return "Do not run `hyper advance` unless the user accepts the stage advancement."
+	}
 	if visibleGrowthCandidateCount(growth.Candidates) > 0 && activeStructureCount(growth.Candidates) == 0 {
 		return "Do not treat candidates as active harnesses or validators before promotion."
-	}
-	if readiness.StageGate.Advancement.Candidate {
-		return "Do not edit plan.md Current Stage unless the user accepts the stage advancement."
 	}
 	return "Do not add broad structure unless repeated evidence creates pressure for it."
 }
@@ -286,7 +286,9 @@ func readinessDashboardLines(readiness readinessState) []string {
 	if readiness.StageGate.Advancement.Recommendation != "" {
 		lines = append(lines, "  Stage advancement: "+compactText(readiness.StageGate.Advancement.Recommendation, 160))
 	}
-	if readiness.NextPressure.RecommendedGoal != "" {
+	if readiness.NextPressure.Axis == "stage_advancement" || readiness.StageGate.Advancement.Candidate {
+		lines = append(lines, "  Recommended action: hyper advance")
+	} else if readiness.NextPressure.RecommendedGoal != "" {
 		lines = append(lines, "  Recommended run: hyper run \""+compactText(readiness.NextPressure.RecommendedGoal, 120)+"\"")
 	}
 	return lines
@@ -301,6 +303,9 @@ func statusNextCommand(state projectState, derived goalState, readiness readines
 	}
 	if derived.State == "active" {
 		return "update " + strings.TrimSuffix(state.CurrentGoalPath, "goal.md") + "evidence.md and next.md, then run `hyper complete`"
+	}
+	if readiness.NextPressure.Axis == "stage_advancement" || readiness.StageGate.Advancement.Candidate {
+		return "hyper advance"
 	}
 	if readiness.NextPressure.RecommendedGoal != "" {
 		return "hyper run \"" + compactText(readiness.NextPressure.RecommendedGoal, 120) + "\""

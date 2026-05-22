@@ -107,6 +107,7 @@ hyper run "Build the smallest usable MVP"
 
 hyper complete
 hyper status
+hyper advance   # only when the stage gate is ready and you accept the stage change
 hyper doctor
 hyper run "Next improvement"
 ```
@@ -339,7 +340,13 @@ Validation coverage: `go test ./...` passed and is repeatable.
 Data persistence: Records survive reload using SQLite.
 ```
 
-When enough evidence exists, `hyper status` shows the next stage is ready. Hyper Run recommends the stage change, but it does not edit `plan.md` automatically.
+When enough evidence exists, `hyper status` shows the next stage is ready. Hyper Run still does not change the stage silently. If you accept the recommendation, run:
+
+```bash
+hyper advance
+```
+
+That updates `plan.md` from the current stage to the next stage, refreshes readiness, and then the next `hyper run` starts using the new stage behavior.
 
 ## Commands
 
@@ -347,6 +354,7 @@ When enough evidence exists, `hyper status` shows the next stage is ready. Hyper
 hyper init                  # install Hyper Run files in this project
 hyper run [focus]           # create the next runtime packet
 hyper complete              # close the current packet and learn from it
+hyper advance               # apply an accepted stage change when the gate is ready
 hyper status                # show current stage, gaps, and readiness
 hyper doctor                # diagnose install, PATH, project state, and Codex routing
 hyper repair                # reconcile state.json when packet evidence and state disagree

@@ -358,6 +358,7 @@ func TestStatusRefreshesReadinessFromLatestEvidence(t *testing.T) {
 	mustRun(t, root, "run")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
 
 	status, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
 	if err != nil {
@@ -365,6 +366,8 @@ func TestStatusRefreshesReadinessFromLatestEvidence(t *testing.T) {
 	}
 	assertContains(t, status.Stdout, "Readiness gate: Tiny MVP -> Usable MVP (ready)")
 	assertContains(t, status.Stdout, "Stage advancement:")
+	assertContains(t, status.Stdout, "Next action: hyper advance")
+	assertContains(t, status.Stdout, "Recommended action: hyper advance")
 }
 
 func TestInitPreservesActiveGoal(t *testing.T) {
@@ -890,7 +893,39 @@ func TestStageAdvancementCandidateWhenGateReady(t *testing.T) {
 	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0002", "goal.md"))
 	assertContains(t, goal, "Stage advancement candidate")
 	assertContains(t, goal, "Recommend updating plan.md Current Stage to Usable MVP")
-	assertContains(t, goal, "Do not auto-edit plan.md")
+	assertContains(t, goal, "Do not run `hyper advance` until the user accepts the stage advancement")
+}
+
+func TestAdvanceUpdatesPlanWhenGateReady(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create, complete, and delete flow.\nValidation coverage: `npm run build` passed and primary flow smoke test passed.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+
+	out, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("advance failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Stage advanced: Tiny MVP -> Usable MVP")
+	assertContains(t, out.Stdout, "Updated: plan.md Current Stage -> Usable MVP")
+	assertContains(t, out.Stdout, "Readiness gate: Usable MVP -> Beta")
+	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Current Stage\n\nUsable MVP")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"stage": "Usable MVP"`)
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl")), `"stage_advanced"`)
+}
+
+func TestAdvanceRejectsWhenGateNotReady(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+
+	_, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected advance to require a ready stage gate")
+	}
+	assertContains(t, err.Message, "Stage gate is not ready")
+	assertContains(t, err.Message, "Core UX")
 }
 
 func TestBetaStageGeneratesValidatorCandidates(t *testing.T) {
@@ -993,10 +1028,38 @@ func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
 	if completed.State != "completed" {
 		t.Fatalf("expected no-blocker packet sentence to complete, got %+v", completed)
 	}
+	completed = deriveGoalState("## Validation\n\nSmoke passed.\n\n## Blocker\n\nNone blocking.\n- Operational note: direct screenshot write returned `EPERM`; saving to `/private/tmp` and copying into the goal folder succeeded.\n", "## Recommended Next Goal\n\nShip next slice.\n")
+	if completed.State != "completed" {
+		t.Fatalf("expected no-op blocker notes to complete, got %+v", completed)
+	}
 	kind, value := parseLearnNote("- Failure: None in this episode.")
 	if kind != "" || value != "" {
 		t.Fatalf("expected no-op failure learn note to be ignored, got %q %q", kind, value)
 	}
+}
+
+func TestStatusDerivesCompletedForNoOpBlocker(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and complete flow.\nValidation coverage: `npm run build` passed and primary flow smoke test passed.\n\n## Blocker\n\nNone blocking.\n- Operational note: direct screenshot write from the browser runtime to the workspace returned `EPERM`; saving to `/private/tmp` and copying into the goal folder succeeded.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	state, err := readState(filepath.Join(root, ".hyper", "state.json"))
+	if err != nil {
+		t.Fatalf("read state failed: %v", err)
+	}
+	state.Status = "blocked"
+	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), state); err != nil {
+		t.Fatalf("write stale state failed: %v", err)
+	}
+
+	status, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Status: completed (state.json: blocked)")
+	assertContains(t, status.Stdout, "Runtime packet state: completed")
+	assertContains(t, status.Stdout, "Next action: hyper repair")
 }
 
 func TestGoalStateDerivation(t *testing.T) {

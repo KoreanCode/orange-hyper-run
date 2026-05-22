@@ -19,8 +19,8 @@ func deriveGoalState(evidenceText, nextText string) goalState {
 		reason := firstNonBlank(firstLabelValue(evidenceText, "Reason"), firstLabelValue(nextText, "Reason"), "Explicit status marker: "+status)
 		return goalState{State: status, Reason: reason}
 	}
-	if hasNonPendingSection(evidenceText, "Blocker") {
-		return goalState{State: "blocked", Reason: firstNonBlank(firstSectionLine(evidenceText, "Blocker"), "Blocker section is populated.")}
+	if blockers := blockerSectionLines(evidenceText); len(blockers) > 0 {
+		return goalState{State: "blocked", Reason: firstNonBlank(blockers[0], "Blocker section is populated.")}
 	}
 	if hasNonPendingSection(nextText, "Recommended Next Goal") && hasNonPendingSection(evidenceText, "Validation") {
 		return goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
@@ -137,6 +137,48 @@ func usefulSectionLines(text, heading string) []string {
 		lines = append(lines, trimmed)
 	}
 	return lines
+}
+
+func blockerSectionLines(text string) []string {
+	lines := []string{}
+	for _, line := range usefulSectionLines(text, "Blocker") {
+		if nonBlockingBlockerLine(line) {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+func nonBlockingBlockerLine(line string) bool {
+	normalized := normalizeSentence(line)
+	if normalized == "" || isNoIssueText(normalized) || isPassiveNoChangeText(normalized) {
+		return true
+	}
+	if strings.HasPrefix(normalized, "non-blocking note") {
+		return true
+	}
+	if strings.HasPrefix(normalized, "operational note") || strings.HasPrefix(normalized, "note") {
+		recovered := hasAny(normalized,
+			"succeeded",
+			"worked around",
+			"workaround succeeded",
+			"fallback worked",
+			"resolved",
+			"recovered",
+			"copied into",
+		)
+		stillBlocked := hasAny(normalized,
+			"still blocking",
+			"still blocked",
+			"cannot proceed",
+			"can't proceed",
+			"unable to proceed",
+			"no workaround",
+		)
+		return recovered && !stillBlocked
+	}
+	return false
 }
 
 func appendMemoryIfUseful(memories []memory, kind, text string, confidence float64) []memory {

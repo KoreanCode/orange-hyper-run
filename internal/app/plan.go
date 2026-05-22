@@ -122,6 +122,14 @@ func canonicalPlanKey(heading string) string {
 		"mvp범위":             "MVP",
 		"mvp핵심범위":           "MVP",
 		"첫검증상품":             "MVP",
+		"currentstage":      "Current Stage",
+		"stage":             "Current Stage",
+		"phase":             "Current Stage",
+		"단계":                "Current Stage",
+		"현재단계":              "Current Stage",
+		"현재스테이지":            "Current Stage",
+		"스테이지":              "Current Stage",
+		"페이즈":               "Current Stage",
 		"buildstyle":        "Build Style",
 		"stack":             "Build Style",
 		"technicalstack":    "Build Style",
@@ -201,6 +209,56 @@ func firstUsefulPlanLine(value string) string {
 		return trimmed
 	}
 	return ""
+}
+
+func updatePlanCurrentStage(body, nextStage string) (string, bool) {
+	nextStage = strings.TrimSpace(nextStage)
+	if nextStage == "" {
+		return body, false
+	}
+	lines := strings.Split(body, "\n")
+	headingIndex := -1
+	endIndex := len(lines)
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "## ") {
+			continue
+		}
+		heading := strings.TrimSpace(strings.TrimPrefix(trimmed, "## "))
+		if canonicalPlanKey(heading) == "Current Stage" {
+			headingIndex = i
+			break
+		}
+	}
+	if headingIndex == -1 {
+		trimmed := strings.TrimRight(body, "\n")
+		if trimmed != "" {
+			trimmed += "\n\n"
+		}
+		return trimmed + "## Current Stage\n\n" + nextStage + "\n", true
+	}
+	for i := headingIndex + 1; i < len(lines); i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "## ") {
+			endIndex = i
+			break
+		}
+	}
+	current := strings.TrimSpace(strings.Join(lines[headingIndex+1:endIndex], "\n"))
+	if strings.EqualFold(current, nextStage) || normalizeRuntimeStage(current) == nextStage {
+		return body, false
+	}
+	replacement := []string{lines[headingIndex], "", nextStage, ""}
+	updated := append([]string{}, lines[:headingIndex]...)
+	updated = append(updated, replacement...)
+	for endIndex < len(lines) && strings.TrimSpace(lines[endIndex]) == "" {
+		endIndex++
+	}
+	updated = append(updated, lines[endIndex:]...)
+	out := strings.Join(updated, "\n")
+	if !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
+	return out, true
 }
 
 func firstMarkdownHeading(body, prefix string) string {
@@ -287,8 +345,16 @@ func isNoIssueText(normalized string) bool {
 		return true
 	}
 	if normalized == "none in this episode" ||
+		normalized == "none blocking" ||
+		normalized == "nothing blocking" ||
 		normalized == "no blocker" ||
 		normalized == "no blockers" ||
+		normalized == "no blocker found" ||
+		normalized == "no blockers found" ||
+		normalized == "no blocking issue" ||
+		normalized == "no blocking issues" ||
+		normalized == "no current blocker" ||
+		normalized == "no current blockers" ||
 		normalized == "no blocker in this episode" ||
 		normalized == "no blockers in this episode" ||
 		normalized == "no runtime blocker" ||
@@ -307,6 +373,14 @@ func isNoIssueText(normalized string) bool {
 		strings.HasPrefix(normalized, "no blockers for this episode") ||
 		strings.HasPrefix(normalized, "no blocker for this packet") ||
 		strings.HasPrefix(normalized, "no blockers for this packet") ||
+		strings.HasPrefix(normalized, "none blocking for") ||
+		strings.HasPrefix(normalized, "nothing blocking for") ||
+		strings.HasPrefix(normalized, "no blocker found for") ||
+		strings.HasPrefix(normalized, "no blockers found for") ||
+		strings.HasPrefix(normalized, "no blocking issue for") ||
+		strings.HasPrefix(normalized, "no blocking issues for") ||
+		strings.HasPrefix(normalized, "no current blocker for") ||
+		strings.HasPrefix(normalized, "no current blockers for") ||
 		strings.HasPrefix(normalized, "no runtime blocker was found") ||
 		strings.HasPrefix(normalized, "no remaining blocker for this packet") ||
 		strings.HasPrefix(normalized, "no remaining blockers for this packet") ||
