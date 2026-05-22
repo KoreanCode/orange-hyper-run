@@ -559,7 +559,7 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 }
 
 func growthCandidateForPressure(kind, prefix, generatedDir, reason string, pressure growthPressure) growthCandidate {
-	name := prefix + "-" + slugify(pressure.Signal)
+	name := growthCandidateName(prefix, pressure)
 	status := capabilityStatusForEvidence(pressure.GoalCount)
 	return growthCandidate{
 		Kind:                kind,
@@ -576,6 +576,41 @@ func growthCandidateForPressure(kind, prefix, generatedDir, reason string, press
 		PromotionThreshold:  growthPromotableSignalGoals,
 		ActivationThreshold: growthActiveSignalGoals,
 	}
+}
+
+func growthCandidateName(prefix string, pressure growthPressure) string {
+	if command := inferredCommandForSignal(pressure.Signal); command != "" {
+		return prefix + "-" + slugify(command)
+	}
+	return prefix + "-" + slugify(cleanCandidateSignal(pressure.Signal))
+}
+
+func cleanCandidateSignal(signal string) string {
+	cleaned := oneLine(signal)
+	prefixes := []string{
+		"validation pattern:",
+		"readiness evidence:",
+		"pressure signals:",
+		"learn pattern:",
+		"pattern:",
+		"proof -",
+		"proof:",
+	}
+	for {
+		lower := strings.ToLower(strings.TrimSpace(cleaned))
+		changed := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(lower, prefix) {
+				cleaned = strings.TrimSpace(cleaned[len(prefix):])
+				changed = true
+				break
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+	return cleaned
 }
 
 func harnessCandidateForPressure(pressure growthPressure) growthCandidate {
@@ -789,19 +824,8 @@ func candidateWhenRequired(candidate growthCandidate, pressure growthPressure) s
 }
 
 func candidateHowToRun(candidate growthCandidate, pressure growthPressure) string {
-	if command := firstBacktickCommand(pressure.Signal); command != "" {
+	if command := inferredCommandForSignal(pressure.Signal); command != "" {
 		return "`" + command + "`"
-	}
-	normalized := strings.ToLower(pressure.Signal)
-	switch {
-	case strings.Contains(normalized, "go test"):
-		return "`go test ./...`"
-	case strings.Contains(normalized, "npm run build"):
-		return "`npm run build`"
-	case strings.Contains(normalized, "npm run smoke:api"):
-		return "`npm run smoke:api`"
-	case strings.Contains(normalized, "pytest"):
-		return "`pytest`"
 	}
 	switch candidate.Kind {
 	case "validator":
@@ -813,6 +837,26 @@ func candidateHowToRun(candidate growthCandidate, pressure growthPressure) strin
 	default:
 		return "Record the action taken and the proof in evidence.md."
 	}
+}
+
+func inferredCommandForSignal(signal string) string {
+	if command := firstBacktickCommand(signal); command != "" {
+		return command
+	}
+	normalized := strings.ToLower(signal)
+	switch {
+	case strings.Contains(normalized, "go test"):
+		return "go test ./..."
+	case strings.Contains(normalized, "npm run smoke:persistence"):
+		return "npm run smoke:persistence"
+	case strings.Contains(normalized, "npm run smoke:api"):
+		return "npm run smoke:api"
+	case strings.Contains(normalized, "npm run build"):
+		return "npm run build"
+	case strings.Contains(normalized, "pytest"):
+		return "pytest"
+	}
+	return ""
 }
 
 func candidateEvidenceRequired(candidate growthCandidate, pressure growthPressure) string {

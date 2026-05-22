@@ -190,6 +190,30 @@ func TestDoctorReportsProjectState(t *testing.T) {
 	assertContains(t, out.Stdout, "Summary:")
 }
 
+func TestStatusShowsTopPressuresAndCandidateNames(t *testing.T) {
+	state := projectState{Project: "Tiny CRM", Stage: "Tiny MVP", Status: "blocked", ActiveRunID: "RUN-0002", CurrentGoalID: "GOAL-0002", CurrentGoalPath: ".hyper/goals/GOAL-0002/goal.md", UpdatedAt: "now"}
+	derived := goalState{State: "completed", Reason: "done"}
+	growth := growthState{
+		Pressures: []growthPressure{
+			{State: "repeated", PressureType: "repeated_validation", Signal: "`npm run build` passed repeatedly."},
+			{State: "observed", PressureType: "stable_decision", Signal: "Keep local-first storage."},
+			{State: "repeated", PressureType: "implementation_pattern", Signal: "Error handling: proof - corrupted saved-state fallback remains unchanged in `loadState()`."},
+		},
+		Candidates: []growthCandidate{
+			{Name: "validator-validation-pattern-npm-run-build-passed-vite-emitted-the-existing", Kind: "validator", Status: "promotable", Signal: "`npm run build` passed repeatedly.", EvidenceCount: 3},
+			{Name: "skill-error-handling-proof-corrupted-saved-state-fallback-remains", Kind: "skill", Status: "repeated", Signal: "Error handling: proof - corrupted saved-state fallback remains unchanged in `loadState()`.", EvidenceCount: 2},
+		},
+	}
+	out := strings.Join(statusDashboardLines(state, derived, readinessState{}, growth, 2, 2), "\n")
+	assertContains(t, out, "Status: completed (state.json: blocked)")
+	assertContains(t, out, "Top pressures:")
+	assertContains(t, out, "repeated/repeated_validation")
+	assertContains(t, out, "Candidate structures:")
+	assertContains(t, out, "validator-npm-run-build")
+	assertNotContains(t, out, "validator-validation-pattern-npm-run-build-passed-vite-emitted-the-existing")
+	assertNotContains(t, out, "skill-error-handling-proof-corrupted-saved-state-fallback-remains")
+}
+
 func TestRunBlocksPendingActiveGoal(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -241,6 +265,13 @@ func TestCompleteRejectsActivePacket(t *testing.T) {
 	assertContains(t, err.Message, "Current runtime packet is still active")
 	assertContains(t, err.Message, ".hyper/goals/GOAL-0001/evidence.md")
 	assertContains(t, err.Message, ".hyper/goals/GOAL-0001/next.md")
+}
+
+func TestGoalStateTreatsNoRemainingBlockerAsCompleted(t *testing.T) {
+	state := deriveGoalState("## Validation\n\nSmoke passed.\n\n## Blocker\n\nNo remaining blocker for this packet. Final art still needs a designer asset.\n", "## Recommended Next Goal\n\nContinue.\n")
+	if state.State != "completed" {
+		t.Fatalf("expected no-remaining blocker text to complete, got %+v", state)
+	}
 }
 
 func TestStatusDerivesReadinessForLegacyState(t *testing.T) {
@@ -362,19 +393,55 @@ func TestGrowthGeneratesValidatorCandidateAfterRepeatedPressure(t *testing.T) {
 		t.Fatalf("third run failed: %v", err)
 	}
 
-	validatorPath := filepath.Join(root, ".hyper", "validators", "generated", "validator-run-go-test-before-every-runtime-packet-handoff.md")
+	validatorPath := filepath.Join(root, ".hyper", "validators", "generated", "validator-go-test.md")
 	assertContains(t, readFile(t, validatorPath), "Status: repeated")
 	assertContains(t, readFile(t, validatorPath), "Repeated validation pressure")
 	assertContains(t, readFile(t, validatorPath), "## When Required")
 	assertContains(t, readFile(t, validatorPath), "## How To Run")
 	assertContains(t, readFile(t, validatorPath), "## Evidence Required")
 	assertContains(t, readFile(t, validatorPath), "`go test")
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-run-go-test-before-every-runtime-packet-handoff.md")), "Status: repeated")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "Status: repeated")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"state": "repeated"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"pressure_type": "repeated_validation"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0003", "goal.md")), "Reuse validation pattern: Run go test before every runtime packet handoff.")
 	if exists(filepath.Join(root, ".hyper", "harnesses", "generated", "harness-growth-candidate.md")) {
 		t.Fatal("single repeated validation pressure should not create a harness candidate")
+	}
+}
+
+func TestGrowthUsesShortCommandCandidateName(t *testing.T) {
+	name := growthCandidateName("validator", growthPressure{Signal: "validation pattern: `npm run build` passed. Vite emitted an existing warning."})
+	if name != "validator-npm-run-build" {
+		t.Fatalf("expected short command candidate name, got %s", name)
+	}
+}
+
+func TestGrowthIgnoresPassiveReadinessProofAsSkillCandidate(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+
+	insertTestMemory(t, db, "pattern", "GOAL-0001 readiness evidence: Error handling: proof - corrupted saved-state fallback remains unchanged in `loadState()`.")
+	insertTestMemory(t, db, "pattern", "GOAL-0002 readiness evidence: Error handling: proof - corrupted saved-state fallback remains unchanged in `loadState()`.")
+
+	state, hyperErr := updateGrowthState(root, db)
+	if hyperErr != nil {
+		t.Fatalf("growth failed: %v", hyperErr)
+	}
+	if len(state.Pressures) != 0 {
+		t.Fatalf("expected passive unchanged proof to be ignored, got %+v", state.Pressures)
+	}
+	if len(state.Candidates) != 0 {
+		t.Fatalf("expected no skill candidate for passive unchanged proof, got %+v", state.Candidates)
 	}
 }
 
@@ -404,7 +471,7 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if state.Pressures[0].GoalCount != 2 {
 		t.Fatalf("expected two goal sources, got %+v", state.Pressures[0])
 	}
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-run-go-test-before-every-runtime-packet-handoff.md")), "Status: repeated")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "Status: repeated")
 
 	insertTestMemory(t, db, "pattern", "GOAL-0003 learn pattern: Run go test before every runtime handoff.")
 	state, hyperErr = updateGrowthState(root, db)
@@ -414,7 +481,7 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if state.Candidates[0].Status != "promotable" {
 		t.Fatalf("expected promotable candidate, got %+v", state.Candidates[0])
 	}
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-run-go-test-before-every-runtime-packet-handoff.md")), "Status: promotable")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "Status: promotable")
 
 	insertTestMemory(t, db, "pattern", "GOAL-0004 learn pattern: Run go test before each runtime packet handoff.")
 	state, hyperErr = updateGrowthState(root, db)
@@ -424,7 +491,7 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if state.Candidates[0].Status != "active" {
 		t.Fatalf("expected active candidate, got %+v", state.Candidates[0])
 	}
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-run-go-test-before-every-runtime-packet-handoff.md")), "Status: active")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md")), "Status: active")
 
 	if _, err := db.Exec(`update memories set stale_at = ? where kind = ?`, nowISO(), "pattern"); err != nil {
 		t.Fatalf("stale update failed: %v", err)
@@ -436,11 +503,11 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if len(state.Candidates) != 1 || state.Candidates[0].Status != "retired" {
 		t.Fatalf("expected retired candidate, got %+v", state.Candidates)
 	}
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "retired", "validator", "validator-run-go-test-before-every-runtime-packet-handoff.md")), "Status: retired")
-	if exists(filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-run-go-test-before-every-runtime-packet-handoff.md")) {
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "retired", "validator", "validator-go-test.md")), "Status: retired")
+	if exists(filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md")) {
 		t.Fatal("retired validator should no longer remain active")
 	}
-	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), "Required active validator validator-run-go-test-before-every-runtime-packet-handoff")
+	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), "Required active validator validator-go-test")
 }
 
 func TestActiveValidatorBecomesRequiredValidationSignal(t *testing.T) {
@@ -552,6 +619,21 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	}
 	if strongDeploy.Status != "covered" {
 		t.Fatalf("expected strong deployment evidence to be covered, got %+v", strongDeploy)
+	}
+}
+
+func TestReadinessEvidenceDoesNotDowngradeCompletePlan(t *testing.T) {
+	plan := map[string]string{
+		"Product":          "Tiny pet widget",
+		"MVP":              "A draggable pet with one care loop.",
+		"Success Criteria": "A user can run it and complete one care action.",
+		"Current Stage":    "Tiny MVP",
+	}
+	weakRecord := readinessEvidenceRecordForAxis("GOAL-0001", "product_completeness", "proof - visible canvas pet and care panel exist.")
+	state := deriveReadinessState(plan, growthState{}, []readinessEvidenceRecord{weakRecord})
+	dim := readinessDimensionMap(state.Dimensions)["product_completeness"]
+	if dim.Status != "covered" {
+		t.Fatalf("complete plan should stay covered despite weak runtime evidence, got %+v", dim)
 	}
 }
 

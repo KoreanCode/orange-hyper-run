@@ -45,16 +45,45 @@ func pressureLedgerFor(pressures []growthPressure, candidates []growthCandidate)
 		Method:              growthRuntimeDefinition,
 		Protocol:            runtimeProtocolDefinition,
 		Principles:          growthPrinciples(),
-		OpenPressures:       len(pressures),
-		CandidateStructures: len(candidates),
+		OpenPressures:       visibleGrowthPressureCount(pressures),
+		CandidateStructures: visibleGrowthCandidateCount(candidates),
 		ActiveStructures:    activeStructureCount(candidates),
 	}
+}
+
+func visibleGrowthPressureCount(pressures []growthPressure) int {
+	count := 0
+	for _, pressure := range pressures {
+		if visibleGrowthPressure(pressure) {
+			count++
+		}
+	}
+	return count
+}
+
+func visibleGrowthPressure(pressure growthPressure) bool {
+	return !isNoisyGrowthSignal(pressure.Signal)
+}
+
+func visibleGrowthCandidateCount(candidates []growthCandidate) int {
+	count := 0
+	for _, candidate := range candidates {
+		if visibleGrowthCandidate(candidate) {
+			count++
+		}
+	}
+	return count
+}
+
+func visibleGrowthCandidate(candidate growthCandidate) bool {
+	signal := strings.TrimSpace(candidate.Signal)
+	return candidate.Status != "retired" && (signal == "" || !isNoisyGrowthSignal(signal))
 }
 
 func activeStructureCount(candidates []growthCandidate) int {
 	activeCount := 0
 	for _, candidate := range candidates {
-		if candidate.Status == "active" {
+		if candidate.Status == "active" && visibleGrowthCandidate(candidate) {
 			activeCount++
 		}
 	}
@@ -62,8 +91,8 @@ func activeStructureCount(candidates []growthCandidate) int {
 }
 
 func growthLoopStateSummary(growth growthState) string {
-	pressureCount := len(growth.Pressures)
-	candidateCount := len(growth.Candidates)
+	pressureCount := visibleGrowthPressureCount(growth.Pressures)
+	candidateCount := visibleGrowthCandidateCount(growth.Candidates)
 	if pressureCount == 0 {
 		return "Pressure Ledger is empty; the next run starts from plan.md and repository state."
 	}

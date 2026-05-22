@@ -111,21 +111,22 @@ func readinessDimensionDefs() []readinessDimensionDef {
 }
 
 func readinessDimensionStatus(def readinessDimensionDef, plan map[string]string, growth growthState, evidenceRecords []readinessEvidenceRecord, corpus string) (string, int, string) {
-	if record, ok := readinessEvidenceForAxis(evidenceRecords, def.ID); ok {
+	record, hasRecord := readinessEvidenceForAxis(evidenceRecords, def.ID)
+	if hasRecord {
 		if record.Status == "covered" {
 			return "covered", 2, fmt.Sprintf("%s readiness evidence: %s", record.GoalID, record.Text)
 		}
-		return "emerging", 1, fmt.Sprintf("%s readiness evidence needs stronger proof for %s: %s", record.GoalID, record.Quality, record.Text)
 	}
 	if def.ID == "product_completeness" {
-		product := firstRuntimeValue(plan["Product"])
-		mvp := firstRuntimeValue(plan["MVP"])
-		success := firstRuntimeValue(plan["Success Criteria"])
-		if product != "" && mvp != "" && success != "" {
-			return "covered", 2, "plan.md defines product, MVP, and success criteria."
+		status, score, evidence := productCompletenessFromPlan(plan)
+		if status == "covered" {
+			return status, score, evidence
 		}
-		if product != "" || mvp != "" {
-			return "emerging", 1, "plan.md has partial product or MVP context."
+		if hasRecord {
+			return "emerging", 1, fmt.Sprintf("%s readiness evidence needs stronger proof for %s: %s", record.GoalID, record.Quality, record.Text)
+		}
+		if status == "emerging" {
+			return status, score, evidence
 		}
 		return "missing", 0, "plan.md does not yet define a measurable product slice."
 	}
@@ -134,6 +135,9 @@ func readinessDimensionStatus(def readinessDimensionDef, plan map[string]string,
 	if covered {
 		return "covered", 2, evidence
 	}
+	if hasRecord {
+		return "emerging", 1, fmt.Sprintf("%s readiness evidence needs stronger proof for %s: %s", record.GoalID, record.Quality, record.Text)
+	}
 	if emerging {
 		return "emerging", 1, evidence
 	}
@@ -141,6 +145,19 @@ func readinessDimensionStatus(def readinessDimensionDef, plan map[string]string,
 		return "emerging", 1, "plan.md or learned context mentions this readiness axis."
 	}
 	return "missing", 0, def.Gap
+}
+
+func productCompletenessFromPlan(plan map[string]string) (string, int, string) {
+	product := firstRuntimeValue(plan["Product"])
+	mvp := firstRuntimeValue(plan["MVP"])
+	success := firstRuntimeValue(plan["Success Criteria"])
+	if product != "" && mvp != "" && success != "" {
+		return "covered", 2, "plan.md defines product, MVP, and success criteria."
+	}
+	if product != "" || mvp != "" {
+		return "emerging", 1, "plan.md has partial product or MVP context."
+	}
+	return "missing", 0, "plan.md does not yet define a measurable product slice."
 }
 
 func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readinessEvidenceRecord, *hyperError) {

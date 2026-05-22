@@ -18,7 +18,7 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"Protocol: " + runtimeProtocolDefinition,
 		"Pressure ledger: " + growthLoopStateSummary(growth),
 		"Principles: " + growthPrinciplesLine(),
-		"Status: " + state.Status,
+		"Status: " + displayProjectStatus(state, derived),
 		"Runtime packet state: " + derived.State,
 		"Runtime packet reason: " + derived.Reason,
 	}
@@ -34,6 +34,8 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"Runtime packet file: "+state.CurrentGoalPath,
 		"",
 	)
+	lines = append(lines, pressureDashboardLines(growth)...)
+	lines = append(lines, "")
 	lines = append(lines, readinessDashboardLines(readiness)...)
 	lines = append(lines,
 		"",
@@ -42,12 +44,95 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"",
 		fmt.Sprintf("Runs recorded: %d", runs),
 		fmt.Sprintf("Runtime packets recorded: %d", goals),
-		fmt.Sprintf("Growth pressures: %d", len(growth.Pressures)),
-		fmt.Sprintf("Capability candidates: %d", len(growth.Candidates)),
+		fmt.Sprintf("Growth pressures: %d", visibleGrowthPressureCount(growth.Pressures)),
+		fmt.Sprintf("Capability candidates: %d", visibleGrowthCandidateCount(growth.Candidates)),
 		"Updated: "+state.UpdatedAt,
 		"",
 	)
 	return lines
+}
+
+func displayProjectStatus(state projectState, derived goalState) string {
+	projectStatus := strings.TrimSpace(state.Status)
+	derivedStatus := strings.TrimSpace(derived.State)
+	if projectStatus == "" || derivedStatus == "" || projectStatus == derivedStatus {
+		return firstNonBlank(projectStatus, derivedStatus, "unknown")
+	}
+	if projectStatus == "active" && derivedStatus == "active" {
+		return projectStatus
+	}
+	return derivedStatus + " (state.json: " + projectStatus + ")"
+}
+
+func pressureDashboardLines(growth growthState) []string {
+	lines := []string{"Pressure Ledger:"}
+	pressures := visibleGrowthPressures(growth.Pressures)
+	if len(pressures) == 0 {
+		lines = append(lines, "  Top pressures: none")
+	} else {
+		lines = append(lines, "  Top pressures:")
+		for i, pressure := range pressures {
+			if i >= 3 {
+				break
+			}
+			lines = append(lines, fmt.Sprintf("    - %s/%s: %s", pressure.State, pressure.PressureType, compactText(pressure.Signal, 120)))
+		}
+	}
+	candidates := visibleGrowthCandidates(growth.Candidates)
+	if len(candidates) == 0 {
+		lines = append(lines, "  Candidate structures: none")
+		return lines
+	}
+	lines = append(lines, "  Candidate structures:")
+	for i, candidate := range candidates {
+		if i >= 3 {
+			break
+		}
+		lines = append(lines, fmt.Sprintf("    - %s (%s, %s, evidence %d)", displayGrowthCandidateName(candidate), candidate.Kind, candidate.Status, candidate.EvidenceCount))
+	}
+	if len(candidates) > 3 {
+		lines = append(lines, fmt.Sprintf("    - ... %d more", len(candidates)-3))
+	}
+	return lines
+}
+
+func visibleGrowthPressures(pressures []growthPressure) []growthPressure {
+	filtered := []growthPressure{}
+	for _, pressure := range pressures {
+		if visibleGrowthPressure(pressure) {
+			filtered = append(filtered, pressure)
+		}
+	}
+	return filtered
+}
+
+func visibleGrowthCandidates(candidates []growthCandidate) []growthCandidate {
+	filtered := []growthCandidate{}
+	for _, candidate := range candidates {
+		if visibleGrowthCandidate(candidate) {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered
+}
+
+func displayGrowthCandidateName(candidate growthCandidate) string {
+	name := strings.TrimSpace(candidate.Name)
+	prefix := candidateDisplayPrefix(candidate)
+	if command := inferredCommandForSignal(candidate.Signal); command != "" && prefix != "" {
+		return prefix + "-" + slugify(command)
+	}
+	return firstNonBlank(name, candidate.Kind, "candidate")
+}
+
+func candidateDisplayPrefix(candidate growthCandidate) string {
+	name := strings.ToLower(strings.TrimSpace(candidate.Name))
+	for _, prefix := range []string{"validator", "preflight", "skill", "harness"} {
+		if strings.HasPrefix(name, prefix+"-") || name == prefix {
+			return prefix
+		}
+	}
+	return strings.ToLower(strings.TrimSpace(candidate.Kind))
 }
 
 func readinessDashboardLines(readiness readinessState) []string {

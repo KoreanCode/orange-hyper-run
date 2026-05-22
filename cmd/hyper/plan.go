@@ -161,6 +161,10 @@ func isNoIssueText(normalized string) bool {
 		normalized == "no blockers in this episode" ||
 		normalized == "no runtime blocker" ||
 		normalized == "no runtime blockers" ||
+		normalized == "no remaining blocker" ||
+		normalized == "no remaining blockers" ||
+		normalized == "no blocker remains" ||
+		normalized == "no blockers remain" ||
 		normalized == "no failure" ||
 		normalized == "no failures" ||
 		normalized == "no failure in this episode" ||
@@ -170,6 +174,10 @@ func isNoIssueText(normalized string) bool {
 	return strings.HasPrefix(normalized, "no blocker for this episode") ||
 		strings.HasPrefix(normalized, "no blockers for this episode") ||
 		strings.HasPrefix(normalized, "no runtime blocker was found") ||
+		strings.HasPrefix(normalized, "no remaining blocker for this packet") ||
+		strings.HasPrefix(normalized, "no remaining blockers for this packet") ||
+		strings.HasPrefix(normalized, "no blocker remains for this packet") ||
+		strings.HasPrefix(normalized, "no blockers remain for this packet") ||
 		strings.HasPrefix(normalized, "no failure for this episode") ||
 		strings.HasPrefix(normalized, "no failures for this episode")
 }
