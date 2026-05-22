@@ -47,9 +47,13 @@ func runCLI(args []string, fsys fsRoot, updater updater) (commandOutput, *hyperE
 		}
 		return initHyper(fsys)
 	case "run":
-		return runHyper(fsys, strings.Join(rest, " "))
+		opts, err := parseRunOptions(rest)
+		if err != nil {
+			return commandOutput{}, err
+		}
+		return runHyper(fsys, opts)
 	case "status":
-		return statusHyper(fsys)
+		return statusHyper(fsys, rest)
 	case "doctor":
 		return doctorHyper(fsys)
 	case "repair":
@@ -94,10 +98,11 @@ func usage() string {
 		"",
 		"Usage:",
 		"  hyper init",
-		"  hyper run [focus]",
+		"  hyper run [--auto] [--until stage] [focus]",
 		"  hyper complete",
 		"  hyper advance",
 		"  hyper status",
+		"  hyper status --short",
 		"  hyper doctor",
 		"  hyper repair",
 		"  hyper resume",
@@ -108,7 +113,9 @@ func usage() string {
 		"Primary flow:",
 		"  Run `hyper init` once in a project to install Hyper Run settings.",
 		"  Edit plan.md, then use `hyper run [focus]` to create the next runtime packet.",
+		"  Use `hyper run --auto --until service-quality [focus]` when Codex should keep planning the next packet until the target stage.",
 		"  After updating evidence.md and next.md, use `hyper complete` to turn evidence into pressure, candidates, and readiness.",
+		"  `hyper complete` runs the finish gate first; fix review.md findings in the same packet before continuing.",
 		"  When `hyper status` says the stage gate is ready, use `hyper advance` to apply the accepted stage change.",
 		"",
 		"Method:",

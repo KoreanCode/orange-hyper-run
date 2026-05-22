@@ -345,10 +345,13 @@ func isNoIssueText(normalized string) bool {
 		return true
 	}
 	if normalized == "none in this episode" ||
+		normalized == "none in this run" ||
+		normalized == "none this run" ||
 		normalized == "none blocking" ||
 		normalized == "nothing blocking" ||
 		normalized == "no blocker" ||
 		normalized == "no blockers" ||
+		normalized == "no technical blocker" ||
 		normalized == "no blocker found" ||
 		normalized == "no blockers found" ||
 		normalized == "no blocking issue" ||
@@ -357,6 +360,8 @@ func isNoIssueText(normalized string) bool {
 		normalized == "no current blockers" ||
 		normalized == "no blocker in this episode" ||
 		normalized == "no blockers in this episode" ||
+		normalized == "no blocker in this run" ||
+		normalized == "no blockers in this run" ||
 		normalized == "no runtime blocker" ||
 		normalized == "no runtime blockers" ||
 		normalized == "no remaining blocker" ||
@@ -366,14 +371,24 @@ func isNoIssueText(normalized string) bool {
 		normalized == "no failure" ||
 		normalized == "no failures" ||
 		normalized == "no failure in this episode" ||
-		normalized == "no failures in this episode" {
+		normalized == "no failures in this episode" ||
+		normalized == "no failure in this run" ||
+		normalized == "no failures in this run" ||
+		normalized == "no failure this run" ||
+		normalized == "no failures this run" ||
+		normalized == "clear: implementation and validation completed for this packet" ||
+		normalized == "clear implementation and validation completed for this packet" ||
+		normalized == "implementation and validation completed for this packet" {
 		return true
 	}
 	return strings.HasPrefix(normalized, "no blocker for this episode") ||
 		strings.HasPrefix(normalized, "no blockers for this episode") ||
 		strings.HasPrefix(normalized, "no blocker for this packet") ||
 		strings.HasPrefix(normalized, "no blockers for this packet") ||
+		strings.HasPrefix(normalized, "no technical blocker") ||
 		strings.HasPrefix(normalized, "none blocking for") ||
+		strings.HasPrefix(normalized, "none in this run") ||
+		strings.HasPrefix(normalized, "none this run") ||
 		strings.HasPrefix(normalized, "nothing blocking for") ||
 		strings.HasPrefix(normalized, "no blocker found for") ||
 		strings.HasPrefix(normalized, "no blockers found for") ||
@@ -387,7 +402,12 @@ func isNoIssueText(normalized string) bool {
 		strings.HasPrefix(normalized, "no blocker remains for this packet") ||
 		strings.HasPrefix(normalized, "no blockers remain for this packet") ||
 		strings.HasPrefix(normalized, "no failure for this episode") ||
-		strings.HasPrefix(normalized, "no failures for this episode")
+		strings.HasPrefix(normalized, "no failures for this episode") ||
+		strings.HasPrefix(normalized, "no failure in this run") ||
+		strings.HasPrefix(normalized, "no failures in this run") ||
+		strings.HasPrefix(normalized, "clear: implementation and validation completed") ||
+		strings.HasPrefix(normalized, "clear implementation and validation completed") ||
+		strings.HasPrefix(normalized, "implementation and validation completed for this packet")
 }
 
 func normalizeRuntimeStage(stage string) string {

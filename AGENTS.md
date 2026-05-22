@@ -3,7 +3,7 @@
 <!-- hyper-run:start -->
 ## Hyper Run
 
-When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper advance`, `$hyper doctor`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.
+When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper status`, `$hyper status --short`, `$hyper migrate`, `$hyper advance`, `$hyper doctor`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.
 
 Use `.agents/skills/hyper/SKILL.md` as the thin Codex Desktop router. Keep product judgment, execution state, learning, and generated project knowledge in `plan.md`, `.hyper/`, and the `hyper` CLI rather than in static skill text.
 
@@ -24,10 +24,17 @@ Required workflow:
 5. Run the safest available validation or record why validation is blocked.
 6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
 7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.
-8. Run `hyper complete` so Learn, Growth, and Readiness refresh from the completed packet.
-9. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.
+8. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.
+9. In auto mode, read `.hyper/next-packet.md` after completion and continue only through the planned next command.
+10. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.
 
 Use `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.
+
+Use `hyper status --short` when the user wants the current stage, gate, proof, and next action without the full pressure ledger.
+
+Use `hyper migrate` when project state, growth rules, or generated candidates need to be refreshed after a CLI update.
+
+Use `hyper run --auto --until <stage> [focus]` only when the user wants packet-by-packet continuation toward a target stage. Auto mode still requires finish-gate evidence and does not silently advance stages.
 
 Use `hyper advance` only when `hyper status` says the stage gate is ready and the user accepts the stage change.
 

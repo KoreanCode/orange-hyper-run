@@ -16,7 +16,15 @@ type projectState struct {
 	PlanPath         string `json:"plan_path"`
 	PlanHash         string `json:"plan_hash"`
 	Focus            string `json:"focus"`
+	AutoContinue     bool   `json:"auto_continue,omitempty"`
+	RunUntil         string `json:"run_until,omitempty"`
 	UpdatedAt        string `json:"updated_at"`
+}
+
+type runOptions struct {
+	Focus        string
+	AutoContinue bool
+	RunUntil     string
 }
 
 type episode struct {

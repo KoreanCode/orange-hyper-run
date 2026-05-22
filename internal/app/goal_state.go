@@ -19,11 +19,15 @@ func deriveGoalState(evidenceText, nextText string) goalState {
 		reason := firstNonBlank(firstLabelValue(evidenceText, "Reason"), firstLabelValue(nextText, "Reason"), "Explicit status marker: "+status)
 		return goalState{State: status, Reason: reason}
 	}
-	if blockers := blockerSectionLines(evidenceText); len(blockers) > 0 {
+	blockers, waiting := blockerSectionSignals(evidenceText)
+	if len(blockers) > 0 {
 		return goalState{State: "blocked", Reason: firstNonBlank(blockers[0], "Blocker section is populated.")}
 	}
 	if hasNonPendingSection(nextText, "Recommended Next Goal") && hasNonPendingSection(evidenceText, "Validation") {
 		return goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
+	}
+	if len(waiting) > 0 {
+		return goalState{State: "waiting_user", Reason: firstNonBlank(waiting[0], "Waiting for user input.")}
 	}
 	return goalState{State: "active", Reason: "Runtime packet evidence is still pending."}
 }
@@ -140,23 +144,40 @@ func usefulSectionLines(text, heading string) []string {
 }
 
 func blockerSectionLines(text string) []string {
+	blockers, _ := blockerSectionSignals(text)
+	return blockers
+}
+
+func blockerSectionSignals(text string) ([]string, []string) {
 	lines := []string{}
+	waiting := []string{}
 	for _, line := range usefulSectionLines(text, "Blocker") {
-		if nonBlockingBlockerLine(line) {
+		switch blockerLineDisposition(line) {
+		case "non_blocking":
 			continue
+		case "waiting_user":
+			waiting = append(waiting, line)
+		default:
+			lines = append(lines, line)
 		}
-		lines = append(lines, line)
 	}
-	return lines
+	return lines, waiting
 }
 
 func nonBlockingBlockerLine(line string) bool {
+	return blockerLineDisposition(line) == "non_blocking"
+}
+
+func blockerLineDisposition(line string) string {
 	normalized := normalizeSentence(line)
+	if waitingUserBlockerLine(normalized) {
+		return "waiting_user"
+	}
 	if normalized == "" || isNoIssueText(normalized) || isPassiveNoChangeText(normalized) {
-		return true
+		return "non_blocking"
 	}
 	if strings.HasPrefix(normalized, "non-blocking note") {
-		return true
+		return "non_blocking"
 	}
 	if strings.HasPrefix(normalized, "operational note") || strings.HasPrefix(normalized, "note") {
 		recovered := hasAny(normalized,
@@ -176,9 +197,35 @@ func nonBlockingBlockerLine(line string) bool {
 			"unable to proceed",
 			"no workaround",
 		)
-		return recovered && !stillBlocked
+		if recovered && !stillBlocked {
+			return "non_blocking"
+		}
 	}
-	return false
+	return "blocking"
+}
+
+func waitingUserBlockerLine(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	if hasAny(normalized,
+		"waiting for user",
+		"awaiting user",
+		"pending user",
+		"user decision",
+		"user approval",
+		"user confirmation",
+		"user accepts",
+		"user explicitly accepts",
+		"until the user accepts",
+		"until user accepts",
+		"until the user confirms",
+		"until user confirms",
+	) {
+		return true
+	}
+	return hasAny(normalized, "stage advancement", "stage change", "plan.md current stage") &&
+		hasAny(normalized, "accept", "approval", "confirm", "decide")
 }
 
 func appendMemoryIfUseful(memories []memory, kind, text string, confidence float64) []memory {

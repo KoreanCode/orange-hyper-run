@@ -6,6 +6,20 @@ import (
 	"strings"
 )
 
+func parseStatusOptions(args []string) (bool, *hyperError) {
+	short := false
+	for _, arg := range args {
+		switch strings.TrimSpace(arg) {
+		case "", "--full":
+		case "--short", "-s":
+			short = true
+		default:
+			return false, newError("Unknown status option: "+arg+"\n\nUsage:\n  hyper status\n  hyper status --short", 2)
+		}
+	}
+	return short, nil
+}
+
 func refreshStateFromPlanForStatus(root string, state projectState) projectState {
 	planBody := readIfExists(filepath.Join(root, planFile))
 	if strings.TrimSpace(planBody) == "" {
@@ -34,6 +48,7 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"",
 		"Project: " + project,
 		"Stage: " + stage,
+		"Run mode: " + stateRunMode(state),
 		"Stage contract: " + stageGrowthContract(stage),
 		"Method: " + growthRuntimeDefinition,
 		"Protocol: " + runtimeProtocolDefinition,
@@ -75,6 +90,76 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"",
 	)
 	return lines
+}
+
+func statusShortLines(state projectState, derived goalState, readiness readinessState, growth growthState) []string {
+	project := compactText(firstNonBlank(state.Project, "Unknown project"), 80)
+	stage := normalizeRuntimeStage(firstNonBlank(state.Stage, readiness.Stage, "Unknown stage"))
+	next := statusNextCommand(state, derived, readiness)
+	lines := []string{
+		"Hyper Run Status",
+		"Project: " + project,
+		"Stage: " + stage,
+		"Mode: " + stateRunMode(state),
+		"Gate: " + readinessGateSummary(readiness),
+		"Proof: " + proofStatusSummary(derived, readiness),
+		"Packet: " + shortPacketSummary(state, derived),
+		"Next: " + next,
+		"Why: " + statusActionReason(state, derived, readiness, growth),
+	}
+	if gap := statusShortGap(readiness); gap != "" {
+		lines = append(lines, "Gap: "+gap)
+	}
+	if guard := statusShortGuard(state, derived, readiness, growth); guard != "" {
+		lines = append(lines, "Guard: "+guard)
+	}
+	lines = append(lines, "")
+	return lines
+}
+
+func stateRunMode(state projectState) string {
+	if !state.AutoContinue {
+		return "single packet"
+	}
+	if state.RunUntil != "" {
+		return "auto until " + state.RunUntil
+	}
+	return "auto"
+}
+
+func shortPacketSummary(state projectState, derived goalState) string {
+	goalID := firstNonBlank(state.CurrentGoalID, "none")
+	if strings.TrimSpace(derived.State) == "" {
+		return goalID
+	}
+	return goalID + " (" + derived.State + ")"
+}
+
+func statusShortGap(readiness readinessState) string {
+	if readiness.Version == 0 {
+		return ""
+	}
+	if len(readiness.StageGate.BlockingGaps) > 0 {
+		return compactText(readiness.StageGate.BlockingGaps[0], 120)
+	}
+	if readiness.StageGate.Advancement.Candidate {
+		return "none; stage advancement is ready"
+	}
+	if gap := nextProofGap(readiness); gap != "" && gap != "none" {
+		return gap
+	}
+	return ""
+}
+
+func statusShortGuard(state projectState, derived goalState, readiness readinessState, growth growthState) string {
+	if readiness.StageGate.Advancement.Candidate {
+		return "accept the stage change before running `hyper advance`"
+	}
+	warning := statusDoNotDoYet(state, derived, readiness, growth)
+	if strings.HasPrefix(warning, "Do not add broad structure") {
+		return ""
+	}
+	return warning
 }
 
 func proofStatusSummary(derived goalState, readiness readinessState) string {
@@ -240,7 +325,15 @@ func displayGrowthCandidateName(candidate growthCandidate) string {
 
 func candidateDisplayPrefix(candidate growthCandidate) string {
 	name := strings.ToLower(strings.TrimSpace(candidate.Name))
-	for _, prefix := range []string{"validator", "preflight", "skill", "harness"} {
+	for _, prefix := range []string{
+		"validator-responsive-check",
+		"validator-accessibility-check",
+		"validator-visual-smoke",
+		"validator",
+		"preflight",
+		"skill",
+		"harness",
+	} {
 		if strings.HasPrefix(name, prefix+"-") || name == prefix {
 			return prefix
 		}
@@ -298,6 +391,9 @@ func statusNextCommand(state projectState, derived goalState, readiness readines
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
 		return "hyper repair"
 	}
+	if state.AutoContinue && runUntilReached(state, readiness) {
+		return "hyper status --short"
+	}
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return "hyper run [focus]"
 	}
@@ -308,7 +404,13 @@ func statusNextCommand(state projectState, derived goalState, readiness readines
 		return "hyper advance"
 	}
 	if readiness.NextPressure.RecommendedGoal != "" {
+		if state.AutoContinue {
+			return autoRunCommand(state, readiness.NextPressure.RecommendedGoal)
+		}
 		return "hyper run \"" + compactText(readiness.NextPressure.RecommendedGoal, 120) + "\""
+	}
+	if state.AutoContinue {
+		return autoRunCommand(state, "")
 	}
 	return "hyper run [next focus]"
 }
