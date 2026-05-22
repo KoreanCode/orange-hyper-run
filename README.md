@@ -370,6 +370,7 @@ cd ../my-project
 ## More Detail
 
 - [Service Definition](docs/SERVICE_DEFINITION.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [Tiny MVP Flow Example](examples/tiny-mvp-flow/README.md)
 - [Before / After Demo](examples/before-after-demo/README.md)
 - [Roadmap](docs/ROADMAP.md)

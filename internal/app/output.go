@@ -1,4 +1,4 @@
-package main
+package app
 
 type commandOutput struct {
 	Stdout string

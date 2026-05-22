@@ -371,6 +371,7 @@ cd ../my-project
 ## 더 자세한 문서
 
 - [서비스 정의](docs/SERVICE_DEFINITION_ko.md)
+- [아키텍처](docs/ARCHITECTURE_ko.md)
 - [Tiny MVP Flow 예제](examples/tiny-mvp-flow/README_ko.md)
 - [Before / After 데모](examples/before-after-demo/README_ko.md)
 - [로드맵](docs/ROADMAP_ko.md)
