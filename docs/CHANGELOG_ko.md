@@ -1,10 +1,12 @@
 # 변경 기록
 
-## Unreleased
+## v0.5.0 - 2026-05-22
 
 - PR/push마다 test, vet, staticcheck, govulncheck가 도는 CI를 추가합니다.
 - GitHub release 설치 경로에 대해 `install.sh` checksum 검증을 추가합니다.
+- README에 macOS와 Windows 설치 방법을 추가합니다.
 - roadmap, known limitations, before/after 데모 문서를 추가합니다.
+- Windows CI에서도 plan import candidate 경로가 안정적으로 출력되도록 정규화합니다.
 
 ## v0.4.1
 

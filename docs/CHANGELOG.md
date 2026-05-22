@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 - 2026-05-22
 
 - Add PR/push CI for tests, vet, staticcheck, and govulncheck.
 - Add checksum verification to `install.sh` for GitHub release installs.
+- Add macOS and Windows install guidance to the README.
 - Add roadmap, known limitations, and a before/after demo guide.
+- Normalize plan import candidate paths for stable Windows CI output.
 
 ## v0.4.1
 
