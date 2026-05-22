@@ -71,16 +71,6 @@ func firstLabelValue(text, label string) string {
 	return ""
 }
 
-func firstUsefulLine(text string) string {
-	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
-		if trimmed != "" && !isPlaceholder(trimmed) {
-			return trimmed
-		}
-	}
-	return ""
-}
-
 func normalizeLabel(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }

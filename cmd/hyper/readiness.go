@@ -388,9 +388,7 @@ func readinessCorpus(plan map[string]string, growth growthState) string {
 	for _, pressure := range growth.Pressures {
 		parts = append(parts, pressure.Signal, pressure.PressureType, pressure.Effect)
 	}
-	for _, signal := range growth.RuntimeBehavior.ValidationSignals {
-		parts = append(parts, signal)
-	}
+	parts = append(parts, growth.RuntimeBehavior.ValidationSignals...)
 	return strings.ToLower(strings.Join(parts, "\n"))
 }
 
@@ -573,48 +571,6 @@ func readinessPressureSummary(readiness readinessState) string {
 		return "not selected"
 	}
 	return fmt.Sprintf("%s: %s", readiness.NextPressure.AxisName, readiness.NextPressure.Reason)
-}
-
-func readinessStatusLines(readiness readinessState) []string {
-	if readiness.Version == 0 {
-		return []string{"Readiness: not recorded"}
-	}
-	covered := []string{}
-	emerging := []string{}
-	missing := []string{}
-	for _, dim := range readiness.Dimensions {
-		label := fmt.Sprintf("%s (%s)", dim.Name, dim.Status)
-		switch dim.Status {
-		case "covered":
-			covered = append(covered, label)
-		case "emerging":
-			emerging = append(emerging, label)
-		default:
-			missing = append(missing, label)
-		}
-	}
-	lines := []string{
-		"Readiness gate: " + readinessGateSummary(readiness),
-		"Readiness pressure: " + readinessPressureSummary(readiness),
-		"Readiness:",
-		"  Gate: " + readinessGateSummary(readiness),
-		"  Next pressure: " + readinessPressureSummary(readiness),
-		"  Covered axes: " + readinessListSummary(covered),
-		"  Emerging axes: " + readinessListSummary(emerging),
-		"  Missing axes: " + readinessListSummary(missing),
-	}
-	if readiness.StageGate.Advancement.Candidate {
-		lines = append(lines, "  Stage advancement: "+readiness.StageGate.Advancement.Recommendation)
-	} else if readiness.StageGate.Advancement.Recommendation != "" {
-		lines = append(lines, "  Stage advancement: "+readiness.StageGate.Advancement.Recommendation)
-	}
-	if len(readiness.StageGate.BlockingGaps) > 0 {
-		lines = append(lines, "  Blocking gaps:")
-		for _, gap := range readiness.StageGate.BlockingGaps {
-			lines = append(lines, "    - "+gap)
-		}
-	}
-	return lines
 }
 
 func readinessListSummary(values []string) string {

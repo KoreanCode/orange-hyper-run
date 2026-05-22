@@ -186,12 +186,13 @@ func growthScore(goalCount, memoryCount int) float64 {
 }
 
 func memoryGoalID(text string) string {
-	for _, field := range strings.Fields(text) {
-		field = strings.Trim(field, " :")
-		if strings.HasPrefix(field, "GOAL-") {
-			return field
-		}
-		break
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return "project"
+	}
+	field := strings.Trim(fields[0], " :")
+	if strings.HasPrefix(field, "GOAL-") {
+		return field
 	}
 	return "project"
 }
