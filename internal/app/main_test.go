@@ -620,6 +620,86 @@ func TestRunBlocksCompletedEvidenceBeforeFinishGate(t *testing.T) {
 	}
 }
 
+func TestRepairDoesNotBypassFailedFinishGate(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: flow exists.\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nStart another packet.\n")
+
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err == nil {
+		t.Fatal("expected finish gate failure")
+	}
+	review := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
+	assertContains(t, review, "Status: failed")
+	if status := finishGateReviewStatus(root, "GOAL-0001"); status != "failed" {
+		t.Fatalf("expected failed finish gate review status, got %q", status)
+	}
+	if _, ok := failedFinishGateGoalState(root, "GOAL-0001"); !ok {
+		t.Fatal("expected failed finish gate state to be visible")
+	}
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Finish gate failed")
+	assertNotContains(t, status.Stdout, "Next: hyper repair")
+
+	repair, err := runCLI(args("repair"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("repair failed: %v", err)
+	}
+	assertContains(t, repair.Stdout, "State: no repair needed")
+	assertContains(t, repair.Stdout, "Finish gate failed")
+	state, hyperErr := readState(filepath.Join(root, ".hyper", "state.json"))
+	if hyperErr != nil {
+		t.Fatal(hyperErr)
+	}
+	if state.Status != "active" {
+		t.Fatalf("repair must not mark failed finish gate completed, got %s", state.Status)
+	}
+
+	_, err = runCLI(args("run", "Start another packet"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected failed finish gate to block another run")
+	}
+	assertContains(t, err.Message, "failed the finish gate")
+
+	state.Status = "completed"
+	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), state); err != nil {
+		t.Fatal(err)
+	}
+	status, err = runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed after legacy state write: %v", err)
+	}
+	assertContains(t, status.Stdout, "Finish gate failed")
+	assertNotContains(t, status.Stdout, "Next: hyper repair")
+	repair, err = runCLI(args("repair"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("legacy repair failed: %v", err)
+	}
+	assertContains(t, repair.Stdout, "State: repaired")
+	assertContains(t, repair.Stdout, "To: active")
+	assertContains(t, repair.Stdout, "Next action: hyper complete")
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Action: complete-current")
+	assertContains(t, nextPacket, "Command: hyper complete")
+	state, hyperErr = readState(filepath.Join(root, ".hyper", "state.json"))
+	if hyperErr != nil {
+		t.Fatal(hyperErr)
+	}
+	if state.Status != "active" {
+		t.Fatalf("legacy failed finish gate repair must restore active state, got %s", state.Status)
+	}
+	_, err = runCLI(args("run", "Start another packet"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected failed finish gate to block another run even when state was marked completed")
+	}
+	assertContains(t, err.Message, "failed the finish gate")
+}
+
 func TestCompleteLearnsAndRefreshesReadiness(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")

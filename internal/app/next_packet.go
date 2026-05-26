@@ -14,6 +14,13 @@ type plannedNextPacket struct {
 }
 
 func buildNextPacketPlan(state projectState, derived goalState, readiness readinessState, growth growthState) plannedNextPacket {
+	if derived.State == "active" {
+		return plannedNextPacket{
+			Action:  "complete-current",
+			Command: "hyper complete",
+			Reason:  statusActionReason(state, derived, readiness, growth),
+		}
+	}
 	if state.AutoContinue && runUntilReached(state, readiness) {
 		return plannedNextPacket{
 			Action:   "stop",
@@ -89,6 +96,8 @@ func nextPacketGuard(plan plannedNextPacket) string {
 	switch plan.Action {
 	case "advance":
 		return "Do not run `hyper advance` unless the user accepts the stage change."
+	case "complete-current":
+		return "Do not create a new runtime packet; fix the current packet evidence, next notes, and review findings before running `hyper complete`."
 	case "run":
 		return "Create the next runtime packet only after the current packet has passed the finish gate and completed."
 	case "stop":

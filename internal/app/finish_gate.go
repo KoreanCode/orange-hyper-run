@@ -61,6 +61,26 @@ func runFinishGate(root string, state projectState, derived goalState, readiness
 	return result, nil
 }
 
+func failedFinishGateGoalState(root, goalID string) (goalState, bool) {
+	if strings.TrimSpace(goalID) == "" || finishGateReviewStatus(root, goalID) != "failed" {
+		return goalState{}, false
+	}
+	reviewPath := filepath.Join(hyperDir, "goals", goalID, "review.md")
+	return goalState{
+		State:  "active",
+		Reason: "Finish gate failed. Fix " + reviewPath + " findings, then run `hyper complete` again.",
+	}, true
+}
+
+func finishGateReviewStatus(root, goalID string) string {
+	body := readIfExists(filepath.Join(root, hyperDir, "goals", goalID, "review.md"))
+	return strings.ToLower(strings.TrimSpace(firstLabelValue(body, "Status")))
+}
+
+func isFailedFinishGateReason(reason string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(reason)), "finish gate failed")
+}
+
 func readinessFinishGateFinding(state projectState, evidenceText string, readiness readinessState) string {
 	axis := strings.TrimSpace(readiness.NextPressure.Axis)
 	axisName := strings.TrimSpace(readiness.NextPressure.AxisName)

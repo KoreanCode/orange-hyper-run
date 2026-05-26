@@ -30,6 +30,22 @@ func currentStateConsistency(root string, state projectState) stateConsistency {
 		}
 	}
 	derived := deriveCurrentGoalState(root, goalID)
+	if failed, ok := failedFinishGateGoalState(root, goalID); ok {
+		consistent := projectStatus == "" || projectStatus == "active"
+		reason := failed.Reason
+		if !consistent {
+			reason = fmt.Sprintf("state.json says %s, but the finish gate failed; restore %s to active before continuing.", projectStatus, goalID)
+		}
+		return stateConsistency{
+			HasState:      true,
+			HasGoal:       true,
+			ProjectStatus: projectStatus,
+			Derived:       failed,
+			Consistent:    consistent,
+			Repairable:    !consistent,
+			Reason:        reason,
+		}
+	}
 	consistent := projectStatus == "" || projectStatus == derived.State
 	repairable := !consistent && derived.State != "active"
 	reason := "state.json matches the current runtime packet."

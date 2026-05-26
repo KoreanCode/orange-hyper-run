@@ -304,6 +304,9 @@ func statusActionReasonWithRefresh(state projectState, derived goalState, readin
 		return "Project state needs refresh before trusting the next action: " + refresh.Reason
 	}
 	if derived.State == "active" {
+		if isFailedFinishGateReason(derived.Reason) {
+			return derived.Reason
+		}
 		return "The current runtime packet is still open; evidence and next.md decide what the project learns."
 	}
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
@@ -333,6 +336,9 @@ func statusDoNotDoYetWithRefresh(state projectState, derived goalState, readines
 		return "Do not advance or start another packet until `hyper migrate` refreshes growth and readiness state."
 	}
 	if derived.State == "active" {
+		if isFailedFinishGateReason(derived.Reason) {
+			return "Do not start another `hyper run`; fix review.md findings in the same packet and run `hyper complete` again."
+		}
 		return "Do not start another `hyper run` until this packet is completed or blocked."
 	}
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {

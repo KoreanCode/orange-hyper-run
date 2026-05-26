@@ -330,6 +330,10 @@ func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	}
 	state = refreshStateFromPlanForStatus(root, state)
 	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
+	if failed, ok := failedFinishGateGoalState(root, state.CurrentGoalID); ok {
+		derived = failed
+		state.Status = "active"
+	}
 	runs, goals := statusDBCounts(root)
 	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
@@ -507,6 +511,17 @@ func resumeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 func blockingActiveGoal(root string, state projectState) string {
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return ""
+	}
+	if failed, ok := failedFinishGateGoalState(root, state.CurrentGoalID); ok {
+		return strings.Join([]string{
+			"Current runtime packet has failed the finish gate: " + state.CurrentGoalID,
+			"Reason: " + failed.Reason,
+			"",
+			"Fix the same packet before creating another one:",
+			"  update " + filepath.Join(hyperDir, "goals", state.CurrentGoalID, "evidence.md"),
+			"  update " + filepath.Join(hyperDir, "goals", state.CurrentGoalID, "next.md"),
+			"  hyper complete",
+		}, "\n")
 	}
 	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && state.Status != "active" && state.Status != derived.State {
