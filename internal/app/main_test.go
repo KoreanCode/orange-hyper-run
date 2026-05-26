@@ -1295,6 +1295,18 @@ func TestGrowthUsesShortCommandCandidateName(t *testing.T) {
 	if name != "validator-npm-run-build" {
 		t.Fatalf("expected short command candidate name, got %s", name)
 	}
+	visualSmoke := growthCandidateName("validator-visual-smoke", growthPressure{Signal: "Pattern: For web packets, pair `./smoke.sh` with one browser viewport proof."})
+	if visualSmoke != "validator-visual-smoke" {
+		t.Fatalf("expected visual smoke command name to avoid duplicate smoke suffix, got %s", visualSmoke)
+	}
+	candidate := growthCandidateForPressure("validator", "validator-visual-smoke", "validators", "Repeated surface proof pressure crossed the validator threshold.", growthPressure{
+		Signal:       "Pattern: For web packets, pair `./smoke.sh` with one browser viewport proof.",
+		PressureType: "surface_validation",
+		GoalCount:    2,
+	})
+	behavior := candidateRequiredBehavior(candidate, growthPressure{Signal: "Pattern: For web packets, pair `./smoke.sh` with one browser viewport proof."})
+	assertContains(t, behavior, "For web packets")
+	assertNotContains(t, behavior, "Pattern:")
 	display := displayGrowthCandidateName(growthCandidate{
 		Name:   "validator-visual-smoke-npm-run-check",
 		Kind:   "validator",

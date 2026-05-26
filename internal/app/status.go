@@ -418,7 +418,7 @@ func displayGrowthCandidateName(candidate growthCandidate) string {
 	name := strings.TrimSpace(candidate.Name)
 	prefix := candidateDisplayPrefix(candidate)
 	if command := inferredCommandForSignal(candidate.Signal); command != "" && prefix != "" {
-		return prefix + "-" + slugify(command)
+		return growthCandidateNameForCommand(prefix, command)
 	}
 	return firstNonBlank(name, candidate.Kind, "candidate")
 }

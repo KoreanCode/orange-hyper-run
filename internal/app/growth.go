@@ -1008,9 +1008,20 @@ func growthCandidateForPressure(kind, prefix, generatedDir, reason string, press
 
 func growthCandidateName(prefix string, pressure growthPressure) string {
 	if command := inferredCommandForSignal(pressure.Signal); command != "" {
-		return prefix + "-" + slugify(command)
+		return growthCandidateNameForCommand(prefix, command)
 	}
 	return prefix + "-" + slugify(cleanCandidateSignal(pressure.Signal))
+}
+
+func growthCandidateNameForCommand(prefix, command string) string {
+	commandSlug := slugify(command)
+	if commandSlug == "" {
+		return prefix
+	}
+	if strings.HasSuffix(prefix, "-smoke") && commandSlug == "smoke-sh" {
+		return prefix
+	}
+	return prefix + "-" + commandSlug
 }
 
 func cleanCandidateSignal(signal string) string {
@@ -1327,15 +1338,16 @@ func candidateEvidenceRequired(candidate growthCandidate, pressure growthPressur
 }
 
 func candidateRequiredBehavior(candidate growthCandidate, pressure growthPressure) string {
+	signal := compactText(cleanCandidateSignal(pressure.Signal), 160)
 	switch candidate.Kind {
 	case "validator":
-		return "Before `hyper complete`, prove this behavior or record why it is blocked: " + compactText(pressure.Signal, 160)
+		return "Before `hyper complete`, prove this behavior or record why it is blocked: " + signal
 	case "skill":
-		return "Keep this implementation guidance in mind when the same pressure appears: " + compactText(pressure.Signal, 160)
+		return "Keep this implementation guidance in mind when the same pressure appears: " + signal
 	case "harness":
 		return "Only consolidate repeated validators, skills, and constraints after the project has enough evidence that the structure will be reused."
 	default:
-		return compactText(pressure.Signal, 160)
+		return signal
 	}
 }
 
