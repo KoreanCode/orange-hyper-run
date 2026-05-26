@@ -2569,6 +2569,20 @@ func TestBroadFocusIsRewrittenThroughReadinessPressure(t *testing.T) {
 	assertContains(t, goal, "- Current focus: 실서비스 수준으로 업그레이드")
 }
 
+func TestLongServiceQualityFocusIsRewrittenThroughReadinessPressure(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny note CLI MVP")
+
+	focus := "Keep upgrading this note CLI toward service quality"
+	if _, err := runCLI(args("run", "--auto", "--until", "service-quality", focus), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
+	assertContains(t, goal, "Translate `"+focus+"` into the smallest Tiny MVP step")
+	assertContains(t, goal, "- Current focus: "+focus)
+}
+
 func TestSpecificServiceFocusIsNotOverRewritten(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
@@ -3044,6 +3058,9 @@ func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
 	}
 	goal := readinessRecommendedGoal(map[string]string{"Product": "Pickachat is a location-pinned chat web app."}, "Tiny MVP", "persistence")
 	assertContains(t, goal, "primary Pickachat flow")
+	goal = readinessRecommendedGoal(map[string]string{"Product": "Hyper Auto Audit Sample 2 is a tiny local note CLI."}, "Tiny MVP", "core_ux")
+	assertContains(t, goal, "Hyper Auto Audit Sample 2 core flow")
+	assertNotContains(t, goal, "tiny local note CLI")
 
 	sustained := deriveReadinessState(map[string]string{
 		"Current Stage": "Sustained Service Quality",

@@ -1097,7 +1097,7 @@ func readinessSustainedOngoingGoal(plan map[string]string) string {
 func readinessProductName(plan map[string]string) string {
 	product := firstRuntimeValue(plan["Product"], "the product")
 	if before, after, ok := strings.Cut(product, " is "); ok && strings.TrimSpace(before) != "" && strings.TrimSpace(after) != "" {
-		if len(strings.Fields(before)) <= 4 {
+		if len(strings.Fields(before)) <= 6 {
 			return strings.TrimSpace(before)
 		}
 	}

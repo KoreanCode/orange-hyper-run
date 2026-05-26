@@ -490,16 +490,33 @@ func runtimeObjective(focus string, plan map[string]string, stage, product strin
 
 func broadRuntimeFocus(focus string) bool {
 	normalized := normalizeLabel(focus)
+	explicitQualityTarget := hasAny(normalized,
+		"service quality",
+		"service-level",
+		"service ready",
+		"service-ready",
+		"production service",
+		"production quality",
+		"production ready",
+		"production-ready",
+		"sustained service quality",
+		"toward service quality",
+		"to service quality",
+		"until service quality",
+		"실서비스",
+		"서비스화",
+		"서비스 수준",
+	)
 	fields := strings.Fields(normalized)
-	if len(fields) > 5 && !hasAny(normalized, "실서비스", "서비스화") {
+	if len(fields) > 5 && !explicitQualityTarget {
 		return false
 	}
 	serviceAction := hasAny(normalized, "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better")
-	if strings.Contains(normalized, "service") && !hasAny(normalized, "service quality", "service-level", "service ready", "service-ready", "production service") && !serviceAction {
+	if strings.Contains(normalized, "service") && !explicitQualityTarget && !serviceAction {
 		return false
 	}
-	return hasAny(normalized,
-		"service quality", "service-level", "service ready", "service-ready", "production service", "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better",
+	return explicitQualityTarget || hasAny(normalized,
+		"production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better",
 		"실서비스", "서비스", "품질", "고도화", "업그레이드", "완성", "개선", "베타", "프로덕션",
 	)
 }
