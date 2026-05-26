@@ -2058,6 +2058,9 @@ Use the smallest command or smoke check that proves the useful flow still works.
 	if got := plan["Product"]; got != "Service Desk Lite" {
 		t.Fatalf("Product inline field = %q", got)
 	}
+	if got := plan["MVP"]; got != "A tiny internal support queue where a teammate can create one request, see it in a list, and mark it handled." {
+		t.Fatalf("Product brief inline field should fill MVP boundary, got %q", got)
+	}
 	if got := plan["Current Stage"]; got != "Tiny MVP" {
 		t.Fatalf("Current Stage inline field = %q", got)
 	}
@@ -2066,6 +2069,31 @@ Use the smallest command or smoke check that proves the useful flow still works.
 	}
 	if got := plan["Success Criteria"]; got != "Use the smallest command or smoke check that proves the useful flow still works." {
 		t.Fatalf("Validation inline field = %q", got)
+	}
+}
+
+func TestUpdatePlanCurrentStageUpdatesInlineField(t *testing.T) {
+	body := strings.Join([]string{
+		"# Plan",
+		"",
+		"Project: Inline Stage Probe",
+		"Current Stage: Tiny MVP",
+		"Build Style: Local CLI",
+		"",
+		"Product brief:",
+		"A developer can add one item and list it back locally.",
+		"",
+	}, "\n")
+	updated, changed := updatePlanCurrentStage(body, "Usable MVP")
+	if !changed {
+		t.Fatal("expected inline Current Stage to change")
+	}
+	assertContains(t, updated, "Current Stage: Usable MVP")
+	assertNotContains(t, updated, "Current Stage: Tiny MVP")
+	assertNotContains(t, updated, "## Current Stage")
+	plan := parsePlan(updated)
+	if got := plan["Current Stage"]; got != "Usable MVP" {
+		t.Fatalf("expected updated inline stage to parse, got %q", got)
 	}
 }
 

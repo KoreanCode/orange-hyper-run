@@ -119,7 +119,20 @@ func augmentInlinePlanAliases(plan map[string]string, body string) {
 		if strings.TrimSpace(value) == "" {
 			value = followingInlinePlanValue(lines, i+1)
 		}
+		if inlineProductBriefCanFillMVP(label, plan) {
+			setPlanAliasIfMissing(plan, "MVP", value)
+			continue
+		}
 		setPlanAliasIfMissing(plan, canonical, value)
+	}
+}
+
+func inlineProductBriefCanFillMVP(label string, plan map[string]string) bool {
+	switch compactPlanHeading(label) {
+	case "productbrief", "brief", "productdefinition", "servicedefinition":
+		return firstRuntimeValue(plan["Product"]) != "" && firstRuntimeValue(plan["MVP"]) == ""
+	default:
+		return false
 	}
 }
 
@@ -318,6 +331,9 @@ func updatePlanCurrentStage(body, nextStage string) (string, bool) {
 		}
 	}
 	if headingIndex == -1 {
+		if updated, changed, found := updateInlinePlanCurrentStage(body, nextStage); found {
+			return updated, changed
+		}
 		trimmed := strings.TrimRight(body, "\n")
 		if trimmed != "" {
 			trimmed += "\n\n"
@@ -346,6 +362,40 @@ func updatePlanCurrentStage(body, nextStage string) (string, bool) {
 		out += "\n"
 	}
 	return out, true
+}
+
+func updateInlinePlanCurrentStage(body, nextStage string) (string, bool, bool) {
+	lines := strings.Split(body, "\n")
+	inFence := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		label, value, ok := splitInlinePlanField(line)
+		if !ok || canonicalPlanKey(label) != "Current Stage" {
+			continue
+		}
+		current := strings.TrimSpace(value)
+		if strings.EqualFold(current, nextStage) || normalizeRuntimeStage(current) == nextStage {
+			return body, false, true
+		}
+		index := strings.Index(line, ":")
+		if index < 0 {
+			return body, false, true
+		}
+		lines[i] = strings.TrimRight(line[:index+1], " ") + " " + nextStage
+		out := strings.Join(lines, "\n")
+		if !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		return out, true, true
+	}
+	return body, false, false
 }
 
 func firstMarkdownHeading(body, prefix string) string {
