@@ -85,17 +85,17 @@ func readinessFinishGateFinding(state projectState, evidenceText string, readine
 }
 
 func activeCapabilityFinishGateFinding(root, evidenceText string) string {
-	validators, err := activeValidatorCapabilities(root)
-	if err != nil || len(validators) == 0 {
+	capabilities, err := activeCapabilities(root)
+	if err != nil || len(capabilities) == 0 {
 		return ""
 	}
 	lines := usefulSectionLines(evidenceText, "Active Capability Evidence")
 	missing := []string{}
-	for _, validator := range validators {
-		if activeCapabilityEvidenceCovers(validator, lines) {
+	for _, capability := range capabilities {
+		if activeCapabilityEvidenceCovers(capability, lines) {
 			continue
 		}
-		missing = append(missing, validator.Name)
+		missing = append(missing, capability.Name)
 	}
 	if len(missing) == 0 {
 		return ""
@@ -103,12 +103,12 @@ func activeCapabilityFinishGateFinding(root, evidenceText string) string {
 	return "Record active capability evidence for: " + strings.Join(missing, ", ")
 }
 
-func activeCapabilityEvidenceCovers(validator activeValidatorCapability, lines []string) bool {
+func activeCapabilityEvidenceCovers(capability activeCapability, lines []string) bool {
 	if len(lines) == 0 {
 		return false
 	}
-	name := normalizeSentence(validator.Name)
-	command := normalizeSentence(inferredCommandForSignal(validator.Signal))
+	name := normalizeSentence(capability.Name)
+	command := normalizeSentence(inferredCommandForSignal(capability.Signal))
 	for _, line := range lines {
 		normalized := normalizeSentence(line)
 		if name != "" && strings.Contains(normalized, name) {

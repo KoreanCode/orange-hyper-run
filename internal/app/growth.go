@@ -449,21 +449,22 @@ func growthBehaviorWithActiveCapabilities(root string, pressures []growthPressur
 	return behavior, nil
 }
 
-type activeValidatorCapability struct {
+type activeCapability struct {
+	Kind   string
 	Name   string
 	Signal string
 }
 
-func activeValidatorCapabilities(root string) ([]activeValidatorCapability, *hyperError) {
+func activeValidatorCapabilities(root string) ([]activeCapability, *hyperError) {
 	dir := filepath.Join(root, hyperDir, "capabilities", "active", "validator")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []activeValidatorCapability{}, nil
+			return []activeCapability{}, nil
 		}
 		return nil, ioError(err)
 	}
-	validators := []activeValidatorCapability{}
+	validators := []activeCapability{}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
@@ -487,10 +488,60 @@ func activeValidatorCapabilities(root string) ([]activeValidatorCapability, *hyp
 	return validators, nil
 }
 
-func parseActiveValidatorCapability(filename, body string) (activeValidatorCapability, bool) {
+func activeCapabilities(root string) ([]activeCapability, *hyperError) {
+	dir := filepath.Join(root, hyperDir, "capabilities", "active")
+	kindEntries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []activeCapability{}, nil
+		}
+		return nil, ioError(err)
+	}
+	capabilities := []activeCapability{}
+	for _, kindEntry := range kindEntries {
+		if !kindEntry.IsDir() {
+			continue
+		}
+		kind := kindEntry.Name()
+		entries, readErr := os.ReadDir(filepath.Join(dir, kind))
+		if readErr != nil {
+			return nil, ioError(readErr)
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(dir, kind, entry.Name())
+			body, bodyErr := os.ReadFile(path)
+			if bodyErr != nil {
+				return nil, ioError(bodyErr)
+			}
+			capability, ok := parseActiveCapability(kind, entry.Name(), string(body))
+			if ok {
+				capabilities = append(capabilities, capability)
+			}
+		}
+	}
+	sort.Slice(capabilities, func(i, j int) bool {
+		if capabilities[i].Kind == capabilities[j].Kind {
+			if capabilities[i].Name == capabilities[j].Name {
+				return capabilities[i].Signal < capabilities[j].Signal
+			}
+			return capabilities[i].Name < capabilities[j].Name
+		}
+		return capabilities[i].Kind < capabilities[j].Kind
+	})
+	return capabilities, nil
+}
+
+func parseActiveValidatorCapability(filename, body string) (activeCapability, bool) {
+	return parseActiveCapability("validator", filename, body)
+}
+
+func parseActiveCapability(kind, filename, body string) (activeCapability, bool) {
 	status := capabilityField(body, "Status")
 	if status != "" && normalizeLabel(status) != "active" {
-		return activeValidatorCapability{}, false
+		return activeCapability{}, false
 	}
 	name := firstNonBlank(markdownTitle(body), strings.TrimSuffix(filename, filepath.Ext(filename)))
 	signal := firstNonBlank(
@@ -499,9 +550,9 @@ func parseActiveValidatorCapability(filename, body string) (activeValidatorCapab
 		firstSectionLine(body, "Validation"),
 	)
 	if name == "" || signal == "" {
-		return activeValidatorCapability{}, false
+		return activeCapability{}, false
 	}
-	return activeValidatorCapability{Name: name, Signal: oneLine(signal)}, true
+	return activeCapability{Kind: kind, Name: name, Signal: oneLine(signal)}, true
 }
 
 func markdownTitle(body string) string {

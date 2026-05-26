@@ -783,7 +783,7 @@ func doneChecklistDoc(stage string, readiness readinessState, growth growthState
 		lines = append(lines, "- Readiness Evidence includes concrete proof for "+readiness.NextPressure.AxisName+".")
 	}
 	if activeStructureCount(growth.Candidates) > 0 {
-		lines = append(lines, "- Active Capability Evidence shows each active validator ran or why it was blocked.")
+		lines = append(lines, "- Active Capability Evidence shows each active validator, skill, or harness ran or why it was blocked.")
 	}
 	if strings.Contains(normalizeLabel(stage), "beta") || strings.Contains(normalizeLabel(stage), "service") {
 		lines = append(lines, "- Stop conditions cover failure, regression, and missing credential cases found during this packet.")
