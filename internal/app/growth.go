@@ -847,7 +847,12 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 		return err
 	}
 	if strings.TrimSpace(candidate.GeneratedPath) != "" {
-		if err := writeText(filepath.Join(root, candidate.GeneratedPath), body); err != nil {
+		generatedPath := filepath.Join(root, candidate.GeneratedPath)
+		if candidate.Status == "retired" {
+			if err := os.Remove(generatedPath); err != nil && !os.IsNotExist(err) {
+				return ioError(err)
+			}
+		} else if err := writeText(generatedPath, body); err != nil {
 			return err
 		}
 	}

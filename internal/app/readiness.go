@@ -289,7 +289,36 @@ func usefulReadinessEvidence(text string) bool {
 	if normalized == "" || isPlaceholder(normalized) {
 		return false
 	}
-	return !hasAny(normalized, "not yet", "not enough", "missing", "blocked", "failed", "cannot", "could not", "unable")
+	return !weakReadinessEvidence(normalized)
+}
+
+func weakReadinessEvidence(normalized string) bool {
+	for _, phrase := range []string{"not yet", "not enough", "cannot", "could not", "unable"} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	for _, phrase := range []string{
+		"missing evidence",
+		"missing proof",
+		"missing for",
+		"is missing",
+		"are missing",
+		"not captured",
+		"not proven",
+		"not handled",
+	} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	if strings.Contains(normalized, "blocked") && !hasAny(normalized, "not blocked", "none blocking", "no blocker") {
+		return true
+	}
+	if strings.Contains(normalized, "failed") && !hasAny(normalized, "failed before", "previously failed", "failure state") {
+		return true
+	}
+	return false
 }
 
 func readinessAxisForLabel(label string, defs []readinessDimensionDef) string {
