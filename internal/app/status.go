@@ -549,6 +549,9 @@ func statusNextCommandWithRefresh(state projectState, derived goalState, readine
 		return "hyper repair"
 	}
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
+		if state.AutoContinue && runUntilReached(state, readiness) {
+			return "hyper status --short"
+		}
 		return "hyper run [focus]"
 	}
 	if derived.State == "active" {

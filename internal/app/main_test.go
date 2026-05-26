@@ -721,6 +721,61 @@ func TestStatusAutoTargetReachedExplainsPause(t *testing.T) {
 	assertNotContains(t, short, "Why: Maintainability is emerging")
 }
 
+func TestRunAutoUntilDoesNotCreatePacketAfterTargetReached(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny Bookmark CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nAdd and list one bookmark.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nCommand-surface add/list flow is repeatable.\n")
+	mustRun(t, root, "init")
+	if _, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Build the bookmark CLI"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("auto run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nProduct completeness: Tiny Bookmark CLI has a measurable add/list command flow.\nCore UX: CLI command test passed for add and list behavior, proving the primary bookmark flow works from the command surface.\nValidation coverage: `go test ./...` passed and the primary CLI add/list flow is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview Tiny MVP evidence.\n\n## Learn Notes\n\n- pattern: CLI MVPs can use command-surface proof for Core UX.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	if _, err := runCLI(args("advance"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("advance failed: %v", err)
+	}
+
+	out, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Should not continue"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run at reached target should stop cleanly: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run-until target already reached: Usable MVP")
+	assertContains(t, out.Stdout, "No runtime packet created.")
+	assertContains(t, out.Stdout, "Next action: hyper status --short")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("auto run should not create another packet after the target stage is reached")
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: stop")
+}
+
+func TestRunAutoUntilReachedBeforeFirstPacketKeepsHandoffConsistent(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nAuto Target Guard\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nOne command flow is already usable.\n\n## Current Stage\n\nUsable MVP\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nAuto run-until does not create work after the target stage is reached.\n")
+	mustRun(t, root, "init")
+
+	out, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Should not start"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run at reached target should stop cleanly: %v", err)
+	}
+	assertContains(t, out.Stdout, "No runtime packet created.")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0001")) {
+		t.Fatal("auto run should not create a first packet when the target stage is already reached")
+	}
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Mode: auto until Usable MVP")
+	assertContains(t, status.Stdout, "Next: hyper status --short")
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[OK] Next packet plan: .hyper/next-packet.md matches current state")
+}
+
 func TestStatusAutoTargetReachedDoesNotHideActivePacket(t *testing.T) {
 	state := projectState{
 		Project:         "Local Clip Shelf",
