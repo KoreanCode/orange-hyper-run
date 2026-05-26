@@ -1315,7 +1315,7 @@ func TestGrowthStateChangesNextRuntimePacket(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a local-first notes MVP")
 	mustRun(t, root, "run")
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Readiness Evidence\n\nProduct completeness: Tiny notes has a measurable local note command slice.\nCore UX: CLI smoke verified the primary note command surface.\nValidation coverage: go test ./... passed and is repeatable.\n\n## Changed Files\n\ncmd/notes.go\n\n## Decisions\n\nKeep local-first storage.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Readiness Evidence\n\nProduct completeness: Tiny notes has a measurable local note command slice.\nCore UX: CLI smoke passed for the primary add/list note command and verified expected output.\nValidation coverage: go test ./... passed and is repeatable.\n\n## Changed Files\n\ncmd/notes.go\n\n## Decisions\n\nKeep local-first storage.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd note editing polish.\n\n## Learn Notes\n\n- Pattern: Run go test before every runtime packet handoff.\n- Constraint: Do not add external services without credentials.\n")
 	mustRun(t, root, "complete")
 
@@ -2233,6 +2233,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongUX.Status != "covered" {
 		t.Fatalf("expected strong UX evidence to be covered, got %+v", strongUX)
 	}
+	genericBuildUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: Node smoke passed and build artifact was created.", defs)
+	if !ok {
+		t.Fatal("expected generic build UX evidence to parse")
+	}
+	if genericBuildUX.Status != "emerging" {
+		t.Fatalf("expected generic build evidence not to cover Core UX, got %+v", genericBuildUX)
+	}
 	apiUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: HTTP API test passed for create and list endpoints.", defs)
 	if !ok {
 		t.Fatal("expected API UX evidence to parse")
@@ -2478,6 +2485,54 @@ func TestSurfaceProofEvidenceProgressesReadiness(t *testing.T) {
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, status.Stdout, "Proof: functional pending, surface covered, operational covered")
+}
+
+func TestSurfaceRiskLinesDoNotBecomeReadinessEvidence(t *testing.T) {
+	riskLabels := []string{
+		"- Surface risks or gaps: No pixel screenshot yet; visual harness remains a candidate only if visual regressions repeat.",
+		"- Surface risk: No pixel screenshot yet; visual harness remains a candidate only if visual regressions repeat.",
+		"- Surface gaps: No pixel screenshot yet; visual harness remains a candidate only if visual regressions repeat.",
+	}
+	for _, line := range riskLabels {
+		if records := inferReadinessEvidenceFromSurfaceLine("GOAL-0001", line); len(records) != 0 {
+			t.Fatalf("surface risk/gap line must not infer readiness evidence for %q, got %+v", line, records)
+		}
+	}
+
+	records := inferReadinessEvidenceFromSurfaceLine("GOAL-0001", "- Evidence: Browser smoke verified the primary panel state at mobile and desktop viewports; screenshots captured and passed.")
+	axes := map[string]string{}
+	for _, record := range records {
+		axes[record.Axis] = record.Status
+	}
+	if axes["core_ux"] != "covered" {
+		t.Fatalf("expected positive surface evidence to cover Core UX, got %+v", records)
+	}
+
+	records = inferReadinessEvidenceFromSurfaceLine("GOAL-0001", "- Evidence: Node smoke passed and build artifact was created.")
+	for _, record := range records {
+		if record.Axis == "core_ux" && record.Status == "covered" {
+			t.Fatalf("generic build smoke must not cover Core UX, got %+v", records)
+		}
+	}
+}
+
+func TestGenericStaticBuildSurfaceEvidenceDoesNotCoverCoreUX(t *testing.T) {
+	root := t.TempDir()
+	goalDir := filepath.Join(root, ".hyper", "goals", "GOAL-0003")
+	if err := os.MkdirAll(goalDir, 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	writeFile(t, filepath.Join(goalDir, "evidence.md"), "# GOAL-0003 Evidence\n\n## Validation\n\nCommand: `npm test`\n\nOutput:\n\n```text\ntiny-panel smoke passed\n```\n\nCommand: `npm run build`\n\nOutput:\n\n```text\ndist build created\n```\n\n## Readiness Evidence\n\nValidation coverage: `npm test`, `npm run build`, and security/docs search passed.\n\n## Surface Proof Evidence\n\n- Target surface: static `dist/index.html` artifact.\n- Primary user action: Open panel, mark complete, and preserve status locally.\n- States checked: ready, saved, completed, storage fallback, docs, build artifact.\n- Evidence: Node smoke passed and build artifact was created.\n- Surface risks or gaps: No pixel screenshot yet; visual harness remains a candidate only if visual regressions repeat.\n")
+
+	records, err := loadReadinessEvidence(root, readinessDimensionDefs())
+	if err != nil {
+		t.Fatalf("load readiness failed: %v", err)
+	}
+	for _, record := range records {
+		if record.GoalID == "GOAL-0003" && record.Axis == "core_ux" && record.Status == "covered" {
+			t.Fatalf("generic static build evidence must not cover Core UX, got %+v", records)
+		}
+	}
 }
 
 func TestRepeatedSurfaceProofCreatesVisualSmokeCandidate(t *testing.T) {

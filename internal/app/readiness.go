@@ -273,6 +273,9 @@ func inferReadinessEvidenceFromValidationLine(goalID, line string) []readinessEv
 }
 
 func inferReadinessEvidenceFromSurfaceLine(goalID, line string) []readinessEvidenceRecord {
+	if !surfaceProofReadinessInferenceAllowed(line) {
+		return nil
+	}
 	text := surfaceProofValue(line)
 	if !usefulReadinessEvidence(text) || !looksLikeSurfaceProof(text) {
 		return nil
@@ -285,6 +288,20 @@ func inferReadinessEvidenceFromSurfaceLine(goalID, line string) []readinessEvide
 		}
 	}
 	return records
+}
+
+func surfaceProofReadinessInferenceAllowed(line string) bool {
+	text := oneLine(line)
+	label, _, ok := strings.Cut(text, ":")
+	if !ok {
+		return true
+	}
+	switch compactReadinessLabel(label) {
+	case "surfacerisksorgaps", "surfacerisk", "surfacegaps":
+		return false
+	default:
+		return true
+	}
 }
 
 func surfaceProofValue(line string) string {
@@ -328,8 +345,11 @@ func productCompletenessEvidenceCovered(normalized string) bool {
 }
 
 func coreUXEvidenceCovered(normalized string) bool {
-	screenProof := hasAny(normalized, "smoke", "screenshot", "browser", "verified", "passed") &&
-		hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload", "primary action", "surface", "screen", "route", "state")
+	visualSurfaceProof := hasAny(normalized, "browser", "screenshot", "viewport", "mobile", "desktop", "screen", "surface", "user interface", "page", "form", "button", "panel", "route")
+	userActionProof := hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload", "primary action", "state")
+	screenProof := hasAny(normalized, "smoke", "screenshot", "browser", "verified", "passed", "checked", "captured") &&
+		visualSurfaceProof &&
+		userActionProof
 	if screenProof {
 		return true
 	}
