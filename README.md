@@ -106,11 +106,44 @@ hyper run "Build the smallest usable MVP"
 # update evidence.md and next.md
 
 hyper complete
-hyper status
+hyper status --short
 hyper advance   # only when the stage gate is ready and you accept the stage change
 hyper doctor
 hyper run "Next improvement"
 ```
+
+## Execution Flow
+
+```mermaid
+flowchart TD
+  A["hyper init<br/>create plan.md and .hyper/"] --> B["Edit plan.md<br/>product brief and current stage"]
+  B --> C["hyper run [focus]<br/>create runtime packet"]
+  C --> D["Implement current GOAL<br/>read goal.md and tasks.md"]
+  D --> E["Update evidence.md and next.md"]
+  E --> F["hyper complete<br/>run Finish Gate"]
+  F --> G{"Finish Gate passed?"}
+  G -- "No" --> H["Write review.md findings<br/>stay in the same GOAL"]
+  H --> D
+  G -- "Yes" --> I["Learn<br/>refresh memory, growth, readiness"]
+  I --> J["Next Packet Planner<br/>write .hyper/next-packet.md"]
+  J --> K{"Stage gate ready?"}
+  K -- "Yes, user accepts" --> L["hyper advance<br/>update plan.md stage"]
+  K -- "No or not accepted" --> M["hyper status --short<br/>review next action"]
+  L --> N{"Auto until target reached?"}
+  M --> N
+  N -- "No" --> C
+  N -- "Yes" --> O["Stop and review<br/>choose the next service target"]
+```
+
+`hyper complete` runs a finish gate before learning. If validation, readiness evidence, active capability evidence, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps you in the same packet.
+
+For longer Codex Desktop sessions, start with an auto target:
+
+```bash
+hyper run --auto --until service-quality "Keep upgrading this service"
+```
+
+Auto mode does not skip evidence or silently advance stages. It keeps the next packet command planned in `.hyper/next-packet.md`; stage changes still require explicit acceptance with `hyper advance`.
 
 In Codex Desktop you can use the same idea as a project command:
 
@@ -308,7 +341,7 @@ This closes the current packet and updates project memory:
 - constraints
 - readiness progress
 
-The next `hyper run` uses that information to change the next work boundary, validation signals, stop conditions, readiness pressure, and capability candidates.
+`hyper complete` also prints the next recommended action. If the gate is ready, it will tell you to run `hyper advance`. Otherwise it will point to the next smallest `hyper run` focus. The next `hyper run` uses the learned information to change the work boundary, validation signals, stop conditions, readiness pressure, and capability candidates.
 
 ## Readiness In Simple Terms
 
@@ -353,9 +386,11 @@ That updates `plan.md` from the current stage to the next stage, refreshes readi
 ```bash
 hyper init                  # install Hyper Run files in this project
 hyper run [focus]           # create the next runtime packet
-hyper complete              # close the current packet and learn from it
+hyper run --auto --until service-quality [focus]
+hyper complete              # run the finish gate, close the packet, and learn
 hyper advance               # apply an accepted stage change when the gate is ready
 hyper status                # show current stage, gaps, and readiness
+hyper status --short        # show only stage, gate, proof, and next action
 hyper doctor                # diagnose install, PATH, project state, and Codex routing
 hyper repair                # reconcile state.json when packet evidence and state disagree
 hyper migrate               # refresh growth/readiness state after Hyper Run upgrades

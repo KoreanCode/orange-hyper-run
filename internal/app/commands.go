@@ -121,8 +121,9 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	return stdout(strings.Join(lines, "\n")), nil
 }
 
-func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
+func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 	root := fsys.root()
+	focus := opts.Focus
 	planResult, err := requirePlanForRun(root)
 	if err != nil {
 		return commandOutput{}, err
@@ -210,6 +211,8 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 		PlanPath:         planFile,
 		PlanHash:         planHash,
 		Focus:            focus,
+		AutoContinue:     opts.AutoContinue,
+		RunUntil:         opts.RunUntil,
 		UpdatedAt:        now,
 	}
 
@@ -261,6 +264,7 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 		"Stage contract: " + stageGrowthContract(episode.Stage),
 		"Run: " + runID,
 		"Runtime packet: " + goalID,
+		"Run mode: " + formatRunMode(opts),
 		"Auto learn: " + formatAutoLearn(autoLearn),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
@@ -281,7 +285,11 @@ func runHyper(fsys fsRoot, focus string) (commandOutput, *hyperError) {
 	return stdout(strings.Join(lines, "\n")), nil
 }
 
-func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
+func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
+	short, optionErr := parseStatusOptions(args)
+	if optionErr != nil {
+		return commandOutput{}, optionErr
+	}
 	root := fsys.root()
 	statePath := filepath.Join(root, hyperDir, "state.json")
 	if !exists(statePath) {
@@ -296,6 +304,9 @@ func statusHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	runs, goals := statusDBCounts(root)
 	growth := readGrowthStateIfExists(root)
 	readiness := readinessStateForStatus(root, growth)
+	if short {
+		return stdout(strings.Join(statusShortLines(state, derived, readiness, growth), "\n")), nil
+	}
 	lines := statusDashboardLines(state, derived, readiness, growth, runs, goals)
 	return stdout(strings.Join(lines, "\n")), nil
 }
@@ -338,6 +349,14 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		goalDir := strings.TrimSuffix(state.CurrentGoalPath, "goal.md")
 		return commandOutput{}, newError("Current runtime packet is still active.\n\nUpdate "+goalDir+"evidence.md and "+goalDir+"next.md, or run `hyper resume` to continue it.", 2)
 	}
+	readinessForGate := readReadinessStateIfExists(root)
+	if readinessForGate.Version == 0 {
+		readinessForGate = readinessStateForStatus(root, readGrowthStateIfExists(root))
+	}
+	finishGate, finishErr := runFinishGate(root, state, derived, readinessForGate)
+	if finishErr != nil {
+		return commandOutput{}, finishErr
+	}
 
 	db, err := openDB(root)
 	if err != nil {
@@ -366,6 +385,10 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			return commandOutput{}, err
 		}
 	}
+	finishGate.Review = renderFinishGateReview(finishGate, state, derived, readiness)
+	if err := writeText(filepath.Join(root, hyperDir, "goals", state.CurrentGoalID, "review.md"), finishGate.Review); err != nil {
+		return commandOutput{}, err
+	}
 	now := nowISO()
 	if err := updateRunAndGoalStatus(db, state.ActiveRunID, state.CurrentGoalID, derived.State, now); err != nil {
 		return commandOutput{}, err
@@ -393,14 +416,22 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		return commandOutput{}, err
 	}
 
+	nextPlan, err := writeNextPacketPlan(root, state, derived, readiness, growth)
+	if err != nil {
+		return commandOutput{}, err
+	}
 	line := "Memory files updated."
 	if result.MemoryCount == 0 {
 		line = "No learnable signal yet."
 	}
+	nextCommand := nextPlan.Command
+	nextReason := nextPlan.Reason
 	return stdout(strings.Join([]string{
 		"Completed runtime packet: " + state.CurrentGoalID,
 		"State: " + derived.State,
 		"Reason: " + derived.Reason,
+		"Finish gate: " + finishGate.Status,
+		"Proof: " + proofStatusSummary(derived, readiness),
 		fmt.Sprintf("Candidate memories: %d", result.MemoryCount),
 		fmt.Sprintf("Inserted memories: %d", result.Inserted),
 		"Memory quality: " + formatMemoryQuality(result),
@@ -409,11 +440,14 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Pressure ledger: " + growthLoopStateSummary(growth),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
+		"Next action: " + nextCommand,
+		"Why: " + nextReason,
+		"Next packet plan: " + filepath.Join(hyperDir, "next-packet.md"),
 		line,
 		"",
 		"Next:",
-		"  hyper status",
-		"  hyper run [next focus]",
+		"  " + nextCommand,
+		"  hyper status --short",
 		"",
 	}, "\n")), nil
 }

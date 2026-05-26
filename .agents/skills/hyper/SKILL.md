@@ -1,6 +1,6 @@
 ---
 name: hyper
-description: Thin Codex Desktop router for Hyper Run. Use when the user says $hyper, $hyper run, $hyper init, $hyper advance, $hyper doctor, $hyper resume, hyper run, or asks Hyper Run to continue the current project.
+description: Thin Codex Desktop router for Hyper Run. Use when the user says $hyper, $hyper run, $hyper init, $hyper status, $hyper status --short, $hyper migrate, $hyper advance, $hyper doctor, $hyper resume, hyper run, or asks Hyper Run to continue the current project.
 ---
 
 # Hyper Router
@@ -31,7 +31,11 @@ Learn role:
 Command mapping:
 - `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.
 - `$hyper run [focus]`: run `hyper run [focus]`, read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.
+- `$hyper run --auto --until <stage> [focus]`: run `hyper run --auto --until <stage> [focus]`, then continue packet by packet using `.hyper/next-packet.md` until the target stage is reached or a guard stops progress.
 - `$hyper complete`: run `hyper complete` after evidence and next notes are written so project readiness is refreshed.
+- `$hyper status`: run `hyper status` and use the dashboard to decide whether to complete, repair, advance, migrate, or start the next packet.
+- `$hyper status --short`: run `hyper status --short` when the user wants only the current stage, gate, proof, and next action.
+- `$hyper migrate`: run `hyper migrate` after CLI updates or when growth state/candidates look stale; then check `hyper status --short`.
 - `$hyper advance`: run `hyper advance` only after `hyper status` shows the stage gate is ready and the user accepts the stage change.
 - `$hyper doctor`: run `hyper doctor` and use the diagnostics to fix install, PATH, project state, or routing issues.
 - `$hyper resume`: run `hyper resume`, read the active runtime packet path, and continue the same evidence and next-step rules.
@@ -44,6 +48,7 @@ Execution rules:
 4. Run the safest available validation, or record why validation is blocked.
 5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.
 6. Write the active runtime packet's `next.md` with the next recommended runtime episode and Learn Notes.
-7. Run `hyper complete` to close the current packet and refresh Learn, Growth, and Readiness.
-8. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.
-9. Use `hyper advance` only for an accepted stage change after readiness says the gate is ready.
+7. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.
+8. In auto mode, read `.hyper/next-packet.md` after completion and continue only through the planned next command.
+9. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.
+10. Use `hyper advance` only for an accepted stage change after readiness says the gate is ready.
