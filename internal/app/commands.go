@@ -304,10 +304,11 @@ func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	runs, goals := statusDBCounts(root)
 	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
+	refresh := statusRefreshFor(root)
 	if short {
-		return stdout(strings.Join(statusShortLines(state, derived, readiness, growth), "\n")), nil
+		return stdout(strings.Join(statusShortLinesWithRefresh(state, derived, readiness, growth, refresh), "\n")), nil
 	}
-	lines := statusDashboardLines(state, derived, readiness, growth, runs, goals)
+	lines := statusDashboardLinesWithRefresh(state, derived, readiness, growth, runs, goals, refresh)
 	return stdout(strings.Join(lines, "\n")), nil
 }
 

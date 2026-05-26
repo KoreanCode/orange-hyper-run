@@ -41,6 +41,10 @@ func staleProjectName(project string) bool {
 }
 
 func statusDashboardLines(state projectState, derived goalState, readiness readinessState, growth growthState, runs, goals int) []string {
+	return statusDashboardLinesWithRefresh(state, derived, readiness, growth, runs, goals, statusRefresh{})
+}
+
+func statusDashboardLinesWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, runs, goals int, refresh statusRefresh) []string {
 	project := compactText(firstNonBlank(state.Project, "Unknown project"), 120)
 	stage := normalizeRuntimeStage(firstNonBlank(state.Stage, readiness.Stage, "Unknown stage"))
 	lines := []string{
@@ -60,6 +64,9 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"Runtime packet state: " + derived.State,
 		"Runtime packet reason: " + derived.Reason,
 	}
+	if refresh.Needed {
+		lines = append(lines, "State refresh: needed - "+refresh.Reason)
+	}
 	runLabel := "Last run"
 	packetLabel := "Last runtime packet"
 	if state.Status == "active" {
@@ -72,7 +79,7 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 		"Runtime packet file: "+state.CurrentGoalPath,
 		"",
 	)
-	lines = append(lines, statusActionLines(state, derived, readiness, growth)...)
+	lines = append(lines, statusActionLinesWithRefresh(state, derived, readiness, growth, refresh)...)
 	lines = append(lines, "")
 	lines = append(lines, pressureDashboardLines(growth)...)
 	lines = append(lines, "")
@@ -80,7 +87,7 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 	lines = append(lines,
 		"",
 		"Next:",
-		"  "+statusNextCommand(state, derived, readiness),
+		"  "+statusNextCommandWithRefresh(state, derived, readiness, refresh),
 		"",
 		fmt.Sprintf("Runs recorded: %d", runs),
 		fmt.Sprintf("Runtime packets recorded: %d", goals),
@@ -93,9 +100,13 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 }
 
 func statusShortLines(state projectState, derived goalState, readiness readinessState, growth growthState) []string {
+	return statusShortLinesWithRefresh(state, derived, readiness, growth, statusRefresh{})
+}
+
+func statusShortLinesWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, refresh statusRefresh) []string {
 	project := compactText(firstNonBlank(state.Project, "Unknown project"), 80)
 	stage := normalizeRuntimeStage(firstNonBlank(state.Stage, readiness.Stage, "Unknown stage"))
-	next := statusNextCommand(state, derived, readiness)
+	next := statusNextCommandWithRefresh(state, derived, readiness, refresh)
 	lines := []string{
 		"Hyper Run Status",
 		"Project: " + project,
@@ -105,7 +116,10 @@ func statusShortLines(state projectState, derived goalState, readiness readiness
 		"Proof: " + proofStatusSummary(derived, readiness),
 		"Packet: " + shortPacketSummary(state, derived),
 		"Next: " + next,
-		"Why: " + statusActionReason(state, derived, readiness, growth),
+		"Why: " + statusActionReasonWithRefresh(state, derived, readiness, growth, refresh),
+	}
+	if refresh.Needed {
+		lines = append(lines, "Refresh: "+refresh.Reason)
 	}
 	if benchmark := referenceBenchmarkShortStatus(readiness); benchmark != "" {
 		lines = append(lines, "Benchmark: "+benchmark)
@@ -113,7 +127,7 @@ func statusShortLines(state projectState, derived goalState, readiness readiness
 	if gap := statusShortGap(readiness); gap != "" {
 		lines = append(lines, "Gap: "+gap)
 	}
-	if guard := statusShortGuard(state, derived, readiness, growth); guard != "" {
+	if guard := statusShortGuardWithRefresh(state, derived, readiness, growth, refresh); guard != "" {
 		lines = append(lines, "Guard: "+guard)
 	}
 	lines = append(lines, "")
@@ -164,7 +178,10 @@ func statusShortGap(readiness readinessState) string {
 	return ""
 }
 
-func statusShortGuard(state projectState, derived goalState, readiness readinessState, growth growthState) string {
+func statusShortGuardWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, refresh statusRefresh) string {
+	if statusRefreshActionable(state, derived, refresh) {
+		return "run `hyper migrate` before advancing or starting another packet"
+	}
 	warning := statusDoNotDoYet(state, derived, readiness, growth)
 	if strings.HasPrefix(warning, "Do not add broad structure") {
 		return ""
@@ -176,6 +193,32 @@ func statusShortGuard(state projectState, derived goalState, readiness readiness
 		return "accept the stage change before running `hyper advance`"
 	}
 	return warning
+}
+
+type statusRefresh struct {
+	Needed bool
+	Reason string
+}
+
+func statusRefreshFor(root string) statusRefresh {
+	growth := readGrowthStateIfExists(root)
+	if growth.Version != 0 {
+		if growthHasUnstoredManualActiveCapability(root, growth) {
+			return statusRefresh{Needed: true, Reason: "active capability files are not reflected in stored growth state; run `hyper migrate`"}
+		}
+		if growthMigrationNeeded(growth) {
+			return statusRefresh{Needed: true, Reason: "legacy or noisy growth entries found; run `hyper migrate`"}
+		}
+	}
+	stored := readReadinessStateIfExists(root)
+	if stored.Version == 0 || !exists(filepath.Join(root, planFile)) {
+		return statusRefresh{}
+	}
+	current := readinessStateForStatus(root, growthStateForStatus(root))
+	if current.Version != 0 && !sameReadinessForDoctor(stored, current) {
+		return statusRefresh{Needed: true, Reason: "stored readiness differs from current evidence; run `hyper migrate`"}
+	}
+	return statusRefresh{}
 }
 
 func proofStatusSummary(derived goalState, readiness readinessState) string {
@@ -244,15 +287,22 @@ func nextProofGap(readiness readinessState) string {
 	}
 }
 
-func statusActionLines(state projectState, derived goalState, readiness readinessState, growth growthState) []string {
+func statusActionLinesWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, refresh statusRefresh) []string {
 	lines := []string{"Action:"}
-	lines = append(lines, "  Next action: "+statusNextCommand(state, derived, readiness))
-	lines = append(lines, "  Why now: "+statusActionReason(state, derived, readiness, growth))
-	lines = append(lines, "  Do not do yet: "+statusDoNotDoYet(state, derived, readiness, growth))
+	lines = append(lines, "  Next action: "+statusNextCommandWithRefresh(state, derived, readiness, refresh))
+	lines = append(lines, "  Why now: "+statusActionReasonWithRefresh(state, derived, readiness, growth, refresh))
+	lines = append(lines, "  Do not do yet: "+statusDoNotDoYetWithRefresh(state, derived, readiness, growth, refresh))
 	return lines
 }
 
 func statusActionReason(state projectState, derived goalState, readiness readinessState, growth growthState) string {
+	return statusActionReasonWithRefresh(state, derived, readiness, growth, statusRefresh{})
+}
+
+func statusActionReasonWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, refresh statusRefresh) string {
+	if statusRefreshActionable(state, derived, refresh) {
+		return "Project state needs refresh before trusting the next action: " + refresh.Reason
+	}
 	if derived.State == "active" {
 		return "The current runtime packet is still open; evidence and next.md decide what the project learns."
 	}
@@ -275,6 +325,13 @@ func statusActionReason(state projectState, derived goalState, readiness readine
 }
 
 func statusDoNotDoYet(state projectState, derived goalState, readiness readinessState, growth growthState) string {
+	return statusDoNotDoYetWithRefresh(state, derived, readiness, growth, statusRefresh{})
+}
+
+func statusDoNotDoYetWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, refresh statusRefresh) string {
+	if statusRefreshActionable(state, derived, refresh) {
+		return "Do not advance or start another packet until `hyper migrate` refreshes growth and readiness state."
+	}
 	if derived.State == "active" {
 		return "Do not start another `hyper run` until this packet is completed or blocked."
 	}
@@ -484,7 +541,10 @@ func referenceBenchmarkDashboardStatus(readiness readinessState) string {
 	return "Reference benchmark: " + dim.Status + " - " + compactText(firstNonBlank(dim.Evidence, dim.Gap), 140)
 }
 
-func statusNextCommand(state projectState, derived goalState, readiness readinessState) string {
+func statusNextCommandWithRefresh(state projectState, derived goalState, readiness readinessState, refresh statusRefresh) string {
+	if statusRefreshActionable(state, derived, refresh) {
+		return "hyper migrate"
+	}
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
 		return "hyper repair"
 	}
@@ -510,4 +570,17 @@ func statusNextCommand(state projectState, derived goalState, readiness readines
 		return autoRunCommand(state, "")
 	}
 	return "hyper run [next focus]"
+}
+
+func statusRefreshActionable(state projectState, derived goalState, refresh statusRefresh) bool {
+	if !refresh.Needed {
+		return false
+	}
+	if derived.State == "active" {
+		return false
+	}
+	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
+		return false
+	}
+	return true
 }

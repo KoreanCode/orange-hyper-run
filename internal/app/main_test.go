@@ -789,6 +789,64 @@ func TestStatusShortShowsOnlyDecisionSurface(t *testing.T) {
 	assertNotContains(t, status.Stdout, "Readiness:")
 }
 
+func TestStatusSuggestsMigrateBeforeNextActionWhenGrowthIsStale(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+	stale := growthState{
+		Version: 1,
+		Pressures: []growthPressure{
+			{State: "repeated", PressureType: "recurring_failure", Effect: "stop_condition", Signal: "None in this run.", GoalCount: 2},
+		},
+	}
+	if err := writeJSON(filepath.Join(root, ".hyper", "growth", "state.json"), stale); err != nil {
+		t.Fatalf("write stale growth failed: %v", err)
+	}
+
+	short, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status --short failed: %v", err)
+	}
+	assertContains(t, short.Stdout, "Next: hyper migrate")
+	assertContains(t, short.Stdout, "Refresh: legacy or noisy growth entries found; run `hyper migrate`")
+	assertContains(t, short.Stdout, "Guard: run `hyper migrate` before advancing or starting another packet")
+	assertNotContains(t, short.Stdout, "Next: hyper advance")
+
+	full, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, full.Stdout, "State refresh: needed - legacy or noisy growth entries found; run `hyper migrate`")
+	assertContains(t, full.Stdout, "Next action: hyper migrate")
+	assertContains(t, full.Stdout, "Do not advance or start another packet until `hyper migrate` refreshes growth and readiness state.")
+}
+
+func TestStatusDoesNotPutMigrateBeforeActivePacketCompletion(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	stale := growthState{
+		Version: 1,
+		Pressures: []growthPressure{
+			{State: "repeated", PressureType: "recurring_failure", Effect: "stop_condition", Signal: "None in this run.", GoalCount: 2},
+		},
+	}
+	if err := writeJSON(filepath.Join(root, ".hyper", "growth", "state.json"), stale); err != nil {
+		t.Fatalf("write stale growth failed: %v", err)
+	}
+
+	short, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status --short failed: %v", err)
+	}
+	assertContains(t, short.Stdout, "Next: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, short.Stdout, "Refresh: legacy or noisy growth entries found; run `hyper migrate`")
+	assertNotContains(t, short.Stdout, "Next: hyper migrate")
+}
+
 func TestStatusShortRejectsUnknownOption(t *testing.T) {
 	_, err := runCLI(args("status", "--json"), testRoot(t.TempDir()), fakeUpdater{})
 	if err == nil {
@@ -1123,6 +1181,7 @@ func TestGrowthIgnoresStageAdvancementProtocolNoise(t *testing.T) {
 	pressures := deriveGrowthPressures([]memoryRecord{
 		{Kind: "decision", Text: "GOAL-0001 learn decision: Preserve current stage in `plan.md`; stage advancement remains a recommendation pending user acceptance.", Confidence: 0.75, Quality: "durable"},
 		{Kind: "constraint", Text: "GOAL-0002 learn constraint: Do not edit `plan.md Current Stage` until the user accepts stage advancement.", Confidence: 0.75, Quality: "durable"},
+		{Kind: "decision", Text: "GOAL-0003 decisions: Do not edit `plan.md Current Stage` in this packet; stage advancement is a recommendation pending user acceptance.", Confidence: 0.75, Quality: "durable"},
 	})
 	if len(pressures) != 0 {
 		t.Fatalf("expected stage advancement protocol notes to stay out of growth pressure, got %+v", pressures)

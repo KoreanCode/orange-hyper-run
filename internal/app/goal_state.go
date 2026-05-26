@@ -388,6 +388,8 @@ func noisyMemoryText(text string) bool {
 func isHyperProtocolNoiseText(normalized string) bool {
 	return hasAny(normalized,
 		"stage advancement remains a recommendation pending user acceptance",
+		"stage advancement is a recommendation pending user acceptance",
+		"stage advancement recommendation pending user acceptance",
 		"do not edit `plan.md current stage` until the user accepts stage advancement",
 		"do not edit plan.md current stage until the user accepts stage advancement",
 		"do not run `hyper advance` unless the user accepts the stage advancement",
