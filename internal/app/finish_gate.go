@@ -95,6 +95,9 @@ func activeCapabilityFinishGateFinding(root, evidenceText string) string {
 		if activeCapabilityEvidenceCovers(capability, lines) {
 			continue
 		}
+		if activeValidatorValidationCovers(capability, evidenceText) {
+			continue
+		}
 		missing = append(missing, capability.Name)
 	}
 	if len(missing) == 0 {
@@ -122,6 +125,21 @@ func activeCapabilityEvidenceCovers(capability activeCapability, lines []string)
 		}
 	}
 	return false
+}
+
+func activeValidatorValidationCovers(capability activeCapability, evidenceText string) bool {
+	if capability.Kind != "validator" {
+		return false
+	}
+	command := normalizeSentence(inferredCommandForSignal(capability.Signal))
+	if command == "" {
+		return false
+	}
+	validation := normalizeSentence(firstUsefulValidationMemory(sectionBody(evidenceText, "Validation")))
+	if !credibleActiveCapabilityEvidence(validation) {
+		return false
+	}
+	return strings.Contains(validation, command)
 }
 
 func credibleActiveCapabilityEvidence(normalized string) bool {
