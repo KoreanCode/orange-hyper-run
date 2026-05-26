@@ -265,10 +265,23 @@ func firstMarkdownHeading(body, prefix string) string {
 	for _, line := range strings.Split(body, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, prefix) && !strings.HasPrefix(trimmed, prefix+"#") {
-			return strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+			heading := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+			if genericPlanTitle(heading) {
+				continue
+			}
+			return heading
 		}
 	}
 	return ""
+}
+
+func genericPlanTitle(value string) bool {
+	switch compactPlanHeading(value) {
+	case "plan", "productplan", "projectplan", "serviceplan", "기획서", "제품기획서", "프로젝트기획서", "서비스기획서":
+		return true
+	default:
+		return false
+	}
 }
 
 func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext, growth growthState, readiness readinessState) episode {
@@ -878,7 +891,7 @@ func buildStageGateDoc(readiness readinessState) string {
 		}
 	}
 	for _, evidence := range readiness.StageGate.RequiredEvidence {
-		lines = append(lines, "- Gate evidence: "+compactText(evidence, 160))
+		lines = append(lines, "- Gate requirement: "+compactText(evidence, 160))
 	}
 	return strings.Join(lines, "\n")
 }

@@ -15,6 +15,7 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
+	assertContains(t, out.Stdout, "Project: Unknown project")
 	assertContains(t, out.Stdout, "Status: initialized")
 	assertContains(t, out.Stdout, "$hyper run")
 	assertContains(t, out.Stdout, "Fill in plan.md")
@@ -117,6 +118,8 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, goal, "Growth loop: Execution -> Evidence -> Pressure Ledger -> Candidate -> Structure when proven.")
 	assertContains(t, goal, "No structure before pressure.")
 	assertContains(t, goal, "## Stage Gate")
+	assertContains(t, goal, "Gate requirement:")
+	assertNotContains(t, goal, "Gate evidence:")
 	assertContains(t, goal, "## Stage Runtime Behavior")
 	assertContains(t, goal, "## Active Capabilities")
 	assertContains(t, goal, "## Proof Contract")
@@ -364,19 +367,56 @@ func TestStatusHighlightsReferenceBenchmarkWhenRequired(t *testing.T) {
 }
 
 func TestStatusDoesNotShowFutureReferenceBenchmarkBeforeRequired(t *testing.T) {
+	state := projectState{Project: "Tiny Pet", Stage: "Tiny MVP", Status: "completed", ActiveRunID: "RUN-0013", CurrentGoalID: "GOAL-0013", CurrentGoalPath: ".hyper/goals/GOAL-0013/goal.md", UpdatedAt: "now"}
+	derived := goalState{State: "completed", Reason: "done"}
 	readiness := readinessState{
 		Version: 1,
 		Stage:   "Tiny MVP",
 		Dimensions: []readinessDimension{
 			{ID: "core_ux", Name: "Core UX", Status: "covered", Evidence: "Browser smoke covered the primary flow."},
 			{ID: "validation_coverage", Name: "Validation coverage", Status: "covered", Evidence: "`go test ./...` passed."},
-			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "missing", Gap: "Reference comparison has not proven category baseline and differentiating strength."},
+			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "emerging", Evidence: "GOAL-0013 readiness evidence needs stronger proof for reference benchmark needs category, 3-5 named references."},
 		},
-		StageGate: readinessStageGate{CurrentStage: "Tiny MVP", NextStage: "Usable MVP", Status: "ready", RequiredAxes: []string{"product_completeness", "core_ux", "validation_coverage"}},
+		StageGate:    readinessStageGate{CurrentStage: "Tiny MVP", NextStage: "Usable MVP", Status: "ready", RequiredAxes: []string{"product_completeness", "core_ux", "validation_coverage"}, Advancement: stageAdvancementPolicy{Candidate: true}},
+		NextPressure: readinessPressure{Axis: "stage_advancement", AxisName: "Stage advancement", Status: "candidate", Reason: "Tiny MVP gate is ready."},
 	}
 
-	out := strings.Join(readinessDashboardLines(readiness), "\n")
-	assertNotContains(t, out, "Reference benchmark: missing")
+	dashboard := strings.Join(readinessDashboardLines(readiness), "\n")
+	assertNotContains(t, dashboard, "Reference benchmark")
+	assertNotContains(t, dashboard, "Benchmark:")
+	assertNotContains(t, dashboard, "Emerging axes: Reference benchmark")
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Proof: functional covered, surface covered, operational covered")
+	assertNotContains(t, short, "benchmark emerging")
+	assertNotContains(t, short, "Benchmark:")
+}
+
+func TestStatusShortPrioritizesActivePacketGuard(t *testing.T) {
+	state := projectState{Project: "LLog", Stage: "Beta", Status: "active", ActiveRunID: "RUN-0012", CurrentGoalID: "GOAL-0012", CurrentGoalPath: ".hyper/goals/GOAL-0012/goal.md", UpdatedAt: "now"}
+	derived := goalState{State: "active", Reason: "Runtime packet evidence is still pending."}
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Beta",
+		Dimensions: []readinessDimension{
+			{ID: "core_ux", Name: "Core UX", Status: "covered", Evidence: "Browser smoke covered the primary flow."},
+			{ID: "validation_coverage", Name: "Validation coverage", Status: "covered", Evidence: "`go test ./...` passed."},
+			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "covered", Evidence: "GOAL-0011 readiness evidence: benchmark covered."},
+		},
+		StageGate: readinessStageGate{
+			CurrentStage: "Beta",
+			NextStage:    "Service Quality",
+			Status:       "ready",
+			RequiredAxes: []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark"},
+			Advancement:  stageAdvancementPolicy{Candidate: true, Recommendation: "Beta gate is ready."},
+		},
+		NextPressure: readinessPressure{Axis: "stage_advancement", AxisName: "Stage advancement", Status: "candidate", Reason: "Beta gate is ready."},
+	}
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Next: update .hyper/goals/GOAL-0012/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, short, "Guard: Do not start another `hyper run` until this packet is completed or blocked.")
+	assertNotContains(t, short, "Guard: accept the stage change before running `hyper advance`")
 }
 
 func TestRunBlocksPendingActiveGoal(t *testing.T) {
@@ -485,6 +525,55 @@ func TestRunAutoUntilPlansNextPacketAfterComplete(t *testing.T) {
 	assertContains(t, nextPlan, "Action: run")
 	assertContains(t, nextPlan, "Command: hyper run --auto --until \"Service Quality\"")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: passed")
+}
+
+func TestStatusAutoTargetReachedExplainsPause(t *testing.T) {
+	state := projectState{
+		Project:         "Local Clip Shelf",
+		Stage:           "Service Quality",
+		Status:          "completed",
+		ActiveRunID:     "RUN-0001",
+		CurrentGoalID:   "GOAL-0001",
+		CurrentGoalPath: ".hyper/goals/GOAL-0001/goal.md",
+		AutoContinue:    true,
+		RunUntil:        "Service Quality",
+	}
+	derived := goalState{State: "completed", Reason: "done"}
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Service Quality",
+		StageGate: readinessStageGate{
+			CurrentStage: "Service Quality",
+			NextStage:    "Sustained Service Quality",
+			Status:       "not_ready",
+			BlockingGaps: []string{"Maintainability: The codebase has not accumulated enough maintainability evidence."},
+		},
+		NextPressure: readinessPressure{Axis: "maintainability", AxisName: "Maintainability", Status: "emerging", Reason: "Maintainability is emerging for the Service Quality -> Sustained Service Quality gate."},
+	}
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Next: hyper status --short")
+	assertContains(t, short, "Why: Auto target Service Quality is reached; review status before choosing a new target or manual next run.")
+	assertNotContains(t, short, "Why: Maintainability is emerging")
+}
+
+func TestStatusAutoTargetReachedDoesNotHideActivePacket(t *testing.T) {
+	state := projectState{
+		Project:         "Local Clip Shelf",
+		Stage:           "Service Quality",
+		Status:          "active",
+		ActiveRunID:     "RUN-0002",
+		CurrentGoalID:   "GOAL-0002",
+		CurrentGoalPath: ".hyper/goals/GOAL-0002/goal.md",
+		AutoContinue:    true,
+		RunUntil:        "Service Quality",
+	}
+	derived := goalState{State: "active", Reason: "Runtime packet evidence is still pending."}
+	readiness := readinessState{Version: 1, Stage: "Service Quality"}
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Next: update .hyper/goals/GOAL-0002/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, short, "Why: The current runtime packet is still open")
 }
 
 func TestGoalStateTreatsNoRemainingBlockerAsCompleted(t *testing.T) {
@@ -1646,6 +1735,33 @@ func TestReferenceBenchmarkEvidenceSectionFeedsReadiness(t *testing.T) {
 	}
 }
 
+func TestReferenceBenchmarkNestedReferencesCountAsNamedReferences(t *testing.T) {
+	evidence := strings.Join([]string{
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Location-based social chat with map markers.",
+		"- References: 3-5 named references selected, 5 total: Google Maps; KakaoMap; Snap Map; Pokemon GO; Duolingo.",
+		"- Named references: Google Maps, KakaoMap, Snap Map, Pokemon GO, Duolingo.",
+		"- Baseline expectations: Pins stay readable at small sizes; the map remains the primary surface; motion adds life without interrupting map use.",
+		"- Category baseline: Keep the map readable, keep markers legible at small size, make social presence feel alive.",
+		"- Current comparison: below baseline = none; meets baseline = pin readability and timed bubble behavior; above baseline = timed jelly pin chat for social presence.",
+		"- No critical below-baseline gap: No critical below-baseline gap and no critical category-baseline gap were found.",
+		"- Above-baseline strength: Pickachat has one concrete above-baseline strength: location chat feels alive through jelly mascot pins.",
+		"- Decision: Service Quality reference benchmark is covered for the current desktop proof.",
+		"- References:",
+		"  - Google Maps: map markers must be readable and not obscure the map.",
+		"  - KakaoMap: Korean users expect familiar map controls and clear nearby context.",
+		"  - Snap Map: social map presence should feel alive instead of static.",
+		"  - Pokemon GO: map presence should feel playful and legible while preserving location context.",
+		"  - Duolingo: mascot expression should be friendly with a low number of parts.",
+	}, "\n")
+
+	record := referenceBenchmarkRecordFromExample(t, evidence)
+	if record.Status != "covered" {
+		t.Fatalf("expected nested reference benchmark evidence to be covered, got %+v", record)
+	}
+}
+
 func TestReferenceBenchmarkExampleDocsMatchParser(t *testing.T) {
 	body := readFile(t, filepath.Join("..", "..", "docs", "examples", "reference-benchmark.md"))
 	covered := markdownCodeBlockAfterHeading(t, body, "Covered Example")
@@ -1688,6 +1804,17 @@ func TestReadinessEvidenceRequiresAxisLabelAndCoversMySQLPersistence(t *testing.
 	}
 	if record.Axis != "persistence" || record.Status != "covered" {
 		t.Fatalf("expected covered persistence evidence, got %+v", record)
+	}
+}
+
+func TestReadinessEvidenceCoversPrivacyBoundaryAsSecurityBaseline(t *testing.T) {
+	defs := readinessDimensionDefs()
+	record, ok := parseReadinessEvidenceLine("GOAL-0001", "Privacy boundary: clipboard content stays local in SQLite, no cloud sync or telemetry, and sensitive text can be deleted locally.", defs)
+	if !ok {
+		t.Fatal("expected privacy boundary evidence to parse")
+	}
+	if record.Axis != "security_baseline" || record.Status != "covered" {
+		t.Fatalf("expected covered security baseline evidence from privacy boundary, got %+v", record)
 	}
 }
 

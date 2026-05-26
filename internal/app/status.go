@@ -155,12 +155,15 @@ func statusShortGap(readiness readinessState) string {
 }
 
 func statusShortGuard(state projectState, derived goalState, readiness readinessState, growth growthState) string {
-	if readiness.StageGate.Advancement.Candidate {
-		return "accept the stage change before running `hyper advance`"
-	}
 	warning := statusDoNotDoYet(state, derived, readiness, growth)
 	if strings.HasPrefix(warning, "Do not add broad structure") {
 		return ""
+	}
+	if derived.State == "active" || (strings.TrimSpace(state.Status) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State)) {
+		return warning
+	}
+	if readiness.StageGate.Advancement.Candidate {
+		return "accept the stage change before running `hyper advance`"
 	}
 	return warning
 }
@@ -225,6 +228,9 @@ func statusActionReason(state projectState, derived goalState, readiness readine
 	}
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
 		return "The packet evidence says " + derived.State + " while state.json still says " + state.Status + "; repair before trusting automation."
+	}
+	if state.AutoContinue && runUntilReached(state, readiness) {
+		return "Auto target " + state.RunUntil + " is reached; review status before choosing a new target or manual next run."
 	}
 	if readiness.StageGate.Advancement.Candidate {
 		return readiness.StageGate.Advancement.Recommendation
@@ -404,6 +410,9 @@ func visibleReadinessDimensions(readiness readinessState) []readinessDimension {
 	}
 	visible := []readinessDimension{}
 	for _, dim := range readiness.Dimensions {
+		if dim.ID == "reference_benchmark" && !referenceBenchmarkRelevant(readiness) {
+			continue
+		}
 		if dim.Status != "missing" || required[dim.ID] || dim.ID == readiness.NextPressure.Axis {
 			visible = append(visible, dim)
 		}
@@ -420,10 +429,6 @@ func readinessRequiredAxisMap(readiness readinessState) map[string]bool {
 }
 
 func referenceBenchmarkRelevant(readiness readinessState) bool {
-	dim, ok := readinessDimensionMap(readiness.Dimensions)["reference_benchmark"]
-	if ok && dim.Status != "" && dim.Status != "missing" {
-		return true
-	}
 	return readinessRequiredAxisMap(readiness)["reference_benchmark"] || readiness.NextPressure.Axis == "reference_benchmark"
 }
 
@@ -453,14 +458,14 @@ func statusNextCommand(state projectState, derived goalState, readiness readines
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
 		return "hyper repair"
 	}
-	if state.AutoContinue && runUntilReached(state, readiness) {
-		return "hyper status --short"
-	}
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return "hyper run [focus]"
 	}
 	if derived.State == "active" {
 		return "update " + strings.TrimSuffix(state.CurrentGoalPath, "goal.md") + "evidence.md and next.md, then run `hyper complete`"
+	}
+	if state.AutoContinue && runUntilReached(state, readiness) {
+		return "hyper status --short"
 	}
 	if readiness.NextPressure.Axis == "stage_advancement" || readiness.StageGate.Advancement.Candidate {
 		return "hyper advance"

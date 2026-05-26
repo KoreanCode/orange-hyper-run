@@ -114,7 +114,7 @@ func readinessDimensionDefs() []readinessDimensionDef {
 		{ID: "persistence", Name: "Data persistence", Keywords: []string{"persist", "persistence", "storage", "database", "sqlite", "mysql", "postgres", "postgresql", "db", "sql", "localstorage", "reload", "save"}, Gap: "User data durability has not been proven."},
 		{ID: "error_handling", Name: "Error handling", Keywords: []string{"error", "empty", "loading", "failure", "fallback", "blocked", "edge case"}, Gap: "Failure, empty, or edge states are not yet handled."},
 		{ID: "validation_coverage", Name: "Validation coverage", Keywords: []string{"test", "smoke", "validation", "validate", "playwright", "go test", "npm run", "pytest"}, Gap: "The primary behavior does not have repeatable validation evidence."},
-		{ID: "security_baseline", Name: "Security baseline", Keywords: []string{"security", "permission", "rate limit", "secret", "session", "token"}, Gap: "Basic security and misuse boundaries are not yet explicit."},
+		{ID: "security_baseline", Name: "Security baseline", Keywords: []string{"security", "privacy", "permission", "rate limit", "secret", "session", "token", "telemetry", "misuse", "data handling"}, Gap: "Basic security, privacy, and misuse boundaries are not yet explicit."},
 		{ID: "deployment_readiness", Name: "Deployment readiness", Keywords: []string{"deploy", "release", "production", "server", "docker", "ci", "hosted"}, Gap: "The project is not yet proven runnable outside the local development path."},
 		{ID: "operations_docs", Name: "Operations and docs", Keywords: []string{"readme", "docs", "runbook", "rollback", "logs", "monitor", "environment"}, Gap: "Operational notes, setup, rollback, or handoff docs are not sufficient."},
 		{ID: "maintainability", Name: "Maintainability", Keywords: []string{"refactor", "cleanup", "component", "module", "architecture", "helper", "table-driven"}, Gap: "The codebase has not accumulated enough maintainability evidence."},
@@ -358,6 +358,12 @@ func readinessAxisForLabel(label string, defs []readinessDimensionDef) string {
 		"test":                "validation_coverage",
 		"security":            "security_baseline",
 		"securitybaseline":    "security_baseline",
+		"privacy":             "security_baseline",
+		"privacyboundary":     "security_baseline",
+		"dataprivacy":         "security_baseline",
+		"datahandling":        "security_baseline",
+		"misuse":              "security_baseline",
+		"misuseboundary":      "security_baseline",
 		"deployment":          "deployment_readiness",
 		"deploymentreadiness": "deployment_readiness",
 		"deploy":              "deployment_readiness",
@@ -434,9 +440,8 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 				hasAny(normalized, "passed", "repeatable", "covered", "verified"),
 			"repeatable command, build, test, smoke, or coverage evidence"
 	case "security_baseline":
-		return hasAny(normalized, "security", "permission", "rate limit", "secret", "session", "token", "auth", "abuse") &&
-				hasAny(normalized, "documented", "verified", "implemented", "checked", "covered"),
-			"security, permission, token, session, rate-limit, or abuse-boundary evidence"
+		return securityBaselineEvidenceCovered(normalized),
+			"security, privacy, permission, token, session, telemetry, data-handling, or misuse-boundary evidence"
 	case "deployment_readiness":
 		return deploymentEvidenceCovered(normalized),
 			"deploy, hosted URL, release, build, artifact, zip, file smoke, Docker, or CI evidence"
@@ -478,35 +483,109 @@ func referenceBenchmarkEvidenceQuality(text string) (bool, string) {
 
 func parseReferenceBenchmarkEvidence(text string) referenceBenchmarkEvidence {
 	fields := referenceBenchmarkEvidence{}
+	currentField := ""
 	for _, chunk := range referenceBenchmarkChunks(text) {
 		label, value, ok := strings.Cut(chunk, ":")
 		if !ok {
+			appendReferenceBenchmarkContinuation(&fields, currentField, chunk)
 			continue
 		}
 		value = strings.TrimSpace(value)
 		compactLabel := compactReadinessLabel(label)
+		field := referenceBenchmarkFieldForLabel(compactLabel)
 		if value == "" || (isPlaceholder(value) && compactLabel != "belowbaselinegaps" && compactLabel != "belowbaselinegap" && compactLabel != "gaps") {
+			if field != "" {
+				currentField = field
+			}
 			continue
 		}
-		switch compactLabel {
-		case "category":
-			fields.Category = value
-		case "reference", "references":
-			fields.References = value
-		case "baseline", "baselineexpectations", "expectations":
-			fields.BaselineExpectations = value
-		case "currentcomparison", "comparison":
-			fields.CurrentComparison = value
-		case "belowbaselinegaps", "belowbaselinegap", "gaps":
-			fields.BelowBaselineGaps = value
-		case "abovebaselinestrength", "abovebaselinestrengths", "strength":
-			fields.AboveBaselineStrength = value
-		case "decision":
-			fields.Decision = value
+		if field == "" {
+			appendReferenceBenchmarkUnknownLabel(&fields, currentField, label, value)
+			continue
 		}
+		currentField = field
+		setReferenceBenchmarkField(&fields, field, value)
 	}
 	fields.ReferenceCount = countReferenceItems(fields.References)
 	return fields
+}
+
+func referenceBenchmarkFieldForLabel(compactLabel string) string {
+	switch compactLabel {
+	case "category":
+		return "category"
+	case "reference", "references", "namedreference", "namedreferences":
+		return "references"
+	case "baseline", "baselineexpectations", "expectations", "categorybaseline":
+		return "baseline"
+	case "currentcomparison", "comparison":
+		return "comparison"
+	case "belowbaselinegaps", "belowbaselinegap", "gaps", "nocriticalbelowbaselinegap", "nocorecategorybaselinegap":
+		return "below_gaps"
+	case "abovebaselinestrength", "abovebaselinestrengths", "strength", "differentiatingstrength":
+		return "above_strength"
+	case "decision":
+		return "decision"
+	default:
+		return ""
+	}
+}
+
+func setReferenceBenchmarkField(fields *referenceBenchmarkEvidence, field, value string) {
+	switch field {
+	case "category":
+		fields.Category = value
+	case "references":
+		fields.References = appendBenchmarkValue(fields.References, value)
+	case "baseline":
+		fields.BaselineExpectations = appendBenchmarkValue(fields.BaselineExpectations, value)
+	case "comparison":
+		fields.CurrentComparison = appendBenchmarkValue(fields.CurrentComparison, value)
+	case "below_gaps":
+		fields.BelowBaselineGaps = appendBenchmarkValue(fields.BelowBaselineGaps, value)
+	case "above_strength":
+		fields.AboveBaselineStrength = appendBenchmarkValue(fields.AboveBaselineStrength, value)
+	case "decision":
+		fields.Decision = appendBenchmarkValue(fields.Decision, value)
+	}
+}
+
+func appendReferenceBenchmarkContinuation(fields *referenceBenchmarkEvidence, currentField, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	setReferenceBenchmarkField(fields, currentField, value)
+}
+
+func appendReferenceBenchmarkUnknownLabel(fields *referenceBenchmarkEvidence, currentField, label, value string) {
+	label = strings.TrimSpace(label)
+	value = strings.TrimSpace(value)
+	if currentField == "references" {
+		if referenceCountPrefix(label) {
+			fields.References = appendBenchmarkValue(fields.References, value)
+			return
+		}
+		fields.References = appendBenchmarkValue(fields.References, label)
+		return
+	}
+	setReferenceBenchmarkField(fields, currentField, strings.TrimSpace(label+": "+value))
+}
+
+func appendBenchmarkValue(existing, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return existing
+	}
+	if strings.TrimSpace(existing) == "" {
+		return value
+	}
+	return existing + "; " + value
+}
+
+func referenceCountPrefix(label string) bool {
+	normalized := normalizeSentence(label)
+	return hasAny(normalized, "total", "selected") || strings.ContainsAny(normalized, "0123456789")
 }
 
 func referenceBenchmarkChunks(text string) []string {
@@ -550,24 +629,33 @@ func referenceBenchmarkMissingRequirements(fields referenceBenchmarkEvidence) []
 }
 
 func countReferenceItems(value string) int {
-	count := 0
+	seen := map[string]bool{}
 	for _, item := range splitReferenceItems(value) {
-		normalized := normalizeSentence(item)
+		normalized := normalizeReferenceItem(item)
 		if normalized == "" || isPlaceholder(normalized) {
 			continue
 		}
-		if hasAny(normalized, "3-5", "three to five", "comparable products", "comparable tools", "comparable apps", "tool a", "tool b", "tool c") {
+		if hasAny(normalized, "3-5", "three to five", "named references", "comparable products", "comparable tools", "comparable apps", "tool a", "tool b", "tool c") {
 			continue
 		}
-		count++
+		seen[normalized] = true
 	}
-	return count
+	return len(seen)
 }
 
 func splitReferenceItems(value string) []string {
-	replacer := strings.NewReplacer("\n", ",", "|", ",", " / ", ",", " and ", ",")
+	replacer := strings.NewReplacer("\n", ",", ";", ",", "|", ",", " / ", ",", " and ", ",")
 	normalized := replacer.Replace(value)
 	return strings.Split(normalized, ",")
+}
+
+func normalizeReferenceItem(item string) string {
+	item = strings.TrimSpace(item)
+	if label, value, ok := strings.Cut(item, ":"); ok && referenceCountPrefix(label) {
+		item = value
+	}
+	item = strings.TrimSpace(strings.Trim(item, "."))
+	return normalizeSentence(item)
 }
 
 func specificBenchmarkField(value string) bool {
@@ -590,6 +678,17 @@ func noCriticalBelowBaselineGap(value string) bool {
 		return false
 	}
 	return hasAny(normalized, "none", "no critical", "no core", "no below baseline", "no below-baseline", "not blocked", "none blocking")
+}
+
+func securityBaselineEvidenceCovered(normalized string) bool {
+	hasSecurityBoundary := hasAny(normalized,
+		"security", "privacy", "permission", "rate limit", "secret", "session", "token", "auth", "abuse", "misuse",
+		"telemetry", "data handling", "data boundary", "local only", "local-only", "no cloud", "cloud sync", "sensitive",
+	)
+	hasProof := hasAny(normalized,
+		"documented", "verified", "implemented", "checked", "covered", "explicit", "no cloud", "no telemetry", "deleted", "delete path",
+	)
+	return hasSecurityBoundary && hasProof
 }
 
 func deploymentEvidenceCovered(normalized string) bool {
