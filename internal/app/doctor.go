@@ -65,6 +65,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	checks = append(checks, doctorStateChecks(root)...)
 	checks = append(checks, doctorGrowthMigrationCheck(root))
 	checks = append(checks, doctorReadinessStateCheck(root))
+	checks = append(checks, doctorNextPacketPlanCheck(root))
 	checks = append(checks, doctorSignatureCheck())
 	checks = append(checks, doctorDBCheck(root))
 	checks = append(checks, doctorCodexChecks(root)...)
@@ -165,6 +166,48 @@ func doctorReadinessStateCheck(root string) doctorCheck {
 		}
 	}
 	return doctorCheck{"Readiness state", "OK", "readiness state is current"}
+}
+
+func doctorNextPacketPlanCheck(root string) doctorCheck {
+	path := filepath.Join(root, hyperDir, "next-packet.md")
+	statePath := filepath.Join(root, hyperDir, "state.json")
+	if !exists(statePath) {
+		return doctorCheck{"Next packet plan", "OK", "no runtime state yet"}
+	}
+	state, err := readState(statePath)
+	if err != nil {
+		return doctorCheck{"Next packet plan", "WARN", "cannot inspect state.json: " + err.Message}
+	}
+	consistency := currentStateConsistency(root, state)
+	if !consistency.Consistent {
+		return doctorCheck{"Next packet plan", "WARN", "cannot verify until state.json is repaired"}
+	}
+	if consistency.Derived.State == "active" {
+		return doctorCheck{"Next packet plan", "OK", "not required while the current runtime packet is active"}
+	}
+	if !exists(path) {
+		return doctorCheck{"Next packet plan", "WARN", "missing; run `hyper migrate` or complete the current packet again"}
+	}
+	growth := growthStateForStatus(root)
+	readiness := readinessStateForStatus(root, growth)
+	expected := buildNextPacketPlan(state, consistency.Derived, readiness, growth)
+	actual := nextPacketPlanCommand(readIfExists(path))
+	if actual == "" {
+		return doctorCheck{"Next packet plan", "WARN", "missing Command; run `hyper migrate`"}
+	}
+	if actual != expected.Command {
+		return doctorCheck{"Next packet plan", "WARN", "expected `" + expected.Command + "`, found `" + actual + "`; run `hyper migrate`"}
+	}
+	return doctorCheck{"Next packet plan", "OK", filepath.Join(hyperDir, "next-packet.md") + " matches current state"}
+}
+
+func nextPacketPlanCommand(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		if _, value, ok := strings.Cut(strings.TrimSpace(line), "Command:"); ok {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func sameReadinessForDoctor(a, b readinessState) bool {

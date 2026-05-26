@@ -263,6 +263,23 @@ func TestDoctorWarnsWhenStoredReadinessIsStale(t *testing.T) {
 	assertContains(t, out.Stdout, "Run `hyper migrate`")
 }
 
+func TestDoctorWarnsWhenNextPacketPlanIsStale(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Service Probe\n\n## Product Brief\n\nA tiny notes API.\n\n## Current Stage\n\nTiny MVP\n\n## Success Signals\n\nCreate and list one note.\n")
+	mustRun(t, root, "init")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nProduct completeness: A tiny notes API now has a measurable create-and-list flow: `POST /notes` creates one note and `GET /notes` returns it.\nValidation coverage: `go test ./...` passed and the primary HTTP API flow is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nDocument the API command surface.\n\n## Learn Notes\n\n- pattern: API MVPs should prove create/list with HTTP tests.\n")
+	mustRun(t, root, "complete")
+	writeFile(t, filepath.Join(root, ".hyper", "next-packet.md"), "# Next Packet Plan\n\nAction: advance\nCommand: hyper advance\n")
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected `hyper run \"Implement the smallest usable A tiny notes API core flow: the primary user flow\"`, found `hyper advance`; run `hyper migrate`")
+}
+
 func TestDoctorReadinessComparisonIgnoresIrrelevantFutureAxes(t *testing.T) {
 	stored := readinessState{
 		Stage: "Tiny MVP",
