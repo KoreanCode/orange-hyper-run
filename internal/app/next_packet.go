@@ -128,6 +128,8 @@ func stageRank(stage string) int {
 		return 3
 	case "Service Quality":
 		return 4
+	case "Sustained Service Quality":
+		return 5
 	default:
 		return 0
 	}

@@ -150,6 +150,8 @@ For longer Codex Desktop sessions, start with an auto target:
 hyper run --auto --until service-quality "Keep upgrading this service"
 ```
 
+Use `--until sustained-service-quality` when the goal is to keep planning packets after Service Quality and focus on repeatable validators, operational handoff, and friction reduction.
+
 Auto mode does not skip proof or silently advance stages. It keeps the next packet command planned in `.hyper/next-packet.md`; stage changes still require explicit acceptance with `hyper advance`.
 
 In Codex Desktop you can use the same idea as a project command:
@@ -397,6 +399,7 @@ That updates `plan.md` from the current stage to the next stage, refreshes readi
 hyper init                  # install Hyper Run files in this project
 hyper run [focus]           # create the next runtime packet
 hyper run --auto --until service-quality [focus]
+hyper run --auto --until sustained-service-quality [focus]
 hyper complete              # run the finish gate, close the packet, and learn
 hyper advance               # apply an accepted stage change when the gate is ready
 hyper status                # show current stage, gaps, and readiness

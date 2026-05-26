@@ -39,6 +39,34 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "readiness", "state.json")), `"version": 1`)
 }
 
+func TestOpenDBConfiguresBusyTimeout(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, hyperDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	db, herr := openDB(root)
+	if herr != nil {
+		t.Fatalf("openDB failed: %v", herr)
+	}
+	defer db.Close()
+
+	var timeout int
+	if err := db.QueryRow("pragma busy_timeout").Scan(&timeout); err != nil {
+		t.Fatalf("busy timeout pragma failed: %v", err)
+	}
+	if timeout < 5000 {
+		t.Fatalf("expected busy timeout >= 5000ms, got %d", timeout)
+	}
+
+	var journalMode string
+	if err := db.QueryRow("pragma journal_mode").Scan(&journalMode); err != nil {
+		t.Fatalf("journal mode pragma failed: %v", err)
+	}
+	if strings.ToLower(journalMode) != "wal" {
+		t.Fatalf("expected wal journal mode, got %s", journalMode)
+	}
+}
+
 func TestVersionShowsBuildAndExecutable(t *testing.T) {
 	out, err := runCLI(args("version"), testRoot(t.TempDir()), fakeUpdater{})
 	if err != nil {
@@ -1554,6 +1582,94 @@ func TestAdvanceStopsAutoPlanWhenRunUntilTargetReached(t *testing.T) {
 	assertNotContains(t, nextPlan, "Command: hyper advance")
 }
 
+func TestAdvanceToSustainedServiceQualityDoesNotLoop(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
+		"# Product Plan",
+		"",
+		"## Product",
+		"",
+		"Local Build Relay",
+		"",
+		"## Target Users",
+		"",
+		"Developers",
+		"",
+		"## MVP",
+		"",
+		"Run one handoff command.",
+		"",
+		"## Current Stage",
+		"",
+		"Service Quality",
+		"",
+		"## Build Style",
+		"",
+		"Go CLI",
+		"",
+		"## Success Criteria",
+		"",
+		"Every packet proves the handoff command.",
+	}, "\n"))
+	if _, err := runCLI(args("run", "Prepare sustained quality"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), strings.Join([]string{
+		"# GOAL-0001 Evidence",
+		"",
+		"## Validation",
+		"",
+		"`go test ./...` passed.",
+		"",
+		"## Readiness Evidence",
+		"",
+		"Validation coverage: `go test ./...` passed and is repeatable.",
+		"Security baseline: Security boundary verified, no cloud sync, no telemetry, and no secrets.",
+		"Deployment readiness: Packaged CLI smoke passed outside the development command.",
+		"Operations and docs: README documents setup, rollback, and smoke command.",
+		"Maintainability: Test helper keeps command validation repeatable without hidden local context.",
+		"Sustained quality: Active validator validator-go-test is required and verified before every packet handoff.",
+		"",
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Local developer handoff CLI.",
+		"- References: GitHub CLI, Taskfile, Make.",
+		"- Baseline expectations: documented command, repeatable output, rollback, no hidden credentials.",
+		"- Current comparison: below baseline = none; meets baseline = command/test/docs/rollback; above baseline = packet evidence loop.",
+		"- Below-baseline gaps: No critical below-baseline gap.",
+		"- Above-baseline strength: packet evidence loop.",
+		"- Decision: Service Quality proof can continue.",
+		"",
+		"## Active Capability Evidence",
+		"",
+		"validator-go-test: `go test ./...` passed.",
+		"",
+		"## Blocker",
+		"",
+		"None blocking.",
+	}, "\n"))
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview sustained quality advancement.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	advance, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("advance failed: %v", err)
+	}
+	assertContains(t, advance.Stdout, "Stage advanced: Service Quality -> Sustained Service Quality")
+	assertNotContains(t, advance.Stdout, "Next action: hyper advance")
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Stage: Sustained Service Quality")
+	assertContains(t, status.Stdout, "Gate: Sustained Service Quality -> Sustained Service Quality")
+	assertNotContains(t, status.Stdout, "Next: hyper advance")
+	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Current Stage\n\nSustained Service Quality")
+}
+
 func TestAdvanceRejectsWhenGateNotReady(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
@@ -1758,6 +1874,27 @@ func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
 	}
 	goal := readinessRecommendedGoal(map[string]string{"Product": "Pickachat is a location-pinned chat web app."}, "Tiny MVP", "persistence")
 	assertContains(t, goal, "primary Pickachat flow")
+
+	sustained := deriveReadinessState(map[string]string{
+		"Current Stage": "Sustained Service Quality",
+		"Product":       "Local Build Relay",
+	}, growthState{Candidates: []growthCandidate{{Kind: "validator", Name: "validator-go-test", Status: "active"}}}, []readinessEvidenceRecord{
+		readinessEvidenceRecordForAxis("GOAL-0001", "validation_coverage", "`go test ./...` passed and is repeatable."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "operations_docs", "Operations and docs: README documents setup, rollback, and smoke command."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "maintainability", "Maintainability: Test helper keeps command validation repeatable without hidden local context."),
+	})
+	if sustained.Stage != "Sustained Service Quality" {
+		t.Fatalf("expected Sustained Service Quality, got %s", sustained.Stage)
+	}
+	if sustained.StageGate.CurrentStage != "Sustained Service Quality" || sustained.StageGate.NextStage != "Sustained Service Quality" {
+		t.Fatalf("expected terminal sustained gate, got %+v", sustained.StageGate)
+	}
+	if sustained.StageGate.Advancement.Candidate {
+		t.Fatalf("sustained stage must not create another stage advancement candidate: %+v", sustained.StageGate.Advancement)
+	}
+	if sustained.NextPressure.Axis == "stage_advancement" {
+		t.Fatalf("sustained stage should continue quality work, got %+v", sustained.NextPressure)
+	}
 }
 
 func TestReferenceBenchmarkPressureShapesRuntimePacket(t *testing.T) {
@@ -1879,6 +2016,27 @@ func TestServiceQualityGateRequiresSustainedGrowthEvidence(t *testing.T) {
 	state = deriveReadinessState(plan, growth, evidence)
 	if state.StageGate.Status != "ready" {
 		t.Fatalf("active validator should unlock sustained quality gate, got %+v", state.StageGate)
+	}
+}
+
+func TestServiceQualityPressureFollowsGateOrderOverPlanMentions(t *testing.T) {
+	plan := map[string]string{
+		"Product":       "Tiny Release Ledger",
+		"Current Stage": "Service Quality",
+		"MVP":           "Append one release note and one validation result.",
+		"Constraints":   "No secrets, no telemetry, deterministic smoke command.",
+		"Success Criteria": strings.Join([]string{
+			"Validation, security, deployment, docs, rollback, and maintainability are all required before handoff.",
+			"Reference comparison should prove the category baseline.",
+		}, " "),
+	}
+
+	state := deriveReadinessState(plan, growthState{}, nil)
+	if state.NextPressure.Axis != "validation_coverage" {
+		t.Fatalf("expected service-quality pressure to start at validation coverage, got %+v", state.NextPressure)
+	}
+	if state.NextPressure.Status != "emerging" {
+		t.Fatalf("expected mentioned validation to remain emerging until evidence exists, got %+v", state.NextPressure)
 	}
 }
 

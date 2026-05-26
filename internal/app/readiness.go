@@ -832,6 +832,14 @@ func readinessGateForStage(stage string, dimensions []readinessDimension) readin
 }
 
 func readinessStageAdvancement(current, next, status string, evidence []string) stageAdvancementPolicy {
+	if current == next {
+		return stageAdvancementPolicy{
+			Candidate:        false,
+			Recommendation:   current + " is the current operating stage. Continue with the next focused quality packet instead of advancing stage.",
+			PlanChange:       "",
+			RequiredEvidence: evidence,
+		}
+	}
 	if status != "ready" {
 		return stageAdvancementPolicy{
 			Candidate:        false,
@@ -850,6 +858,16 @@ func readinessStageAdvancement(current, next, status string, evidence []string) 
 
 func readinessGateDefinition(stage string) (string, string, []string, []string) {
 	normalized := normalizeLabel(stage)
+	if strings.Contains(normalized, "sustained") {
+		return "Sustained Service Quality", "Sustained Service Quality",
+			[]string{"validation_coverage", "operations_docs", "maintainability", "sustained_quality"},
+			[]string{
+				"Active validators, harnesses, or equivalent reusable quality structures continue to pass or have explicit blockers.",
+				"Operational handoff, rollback, and recovery notes stay current.",
+				"Maintainability evidence shows repeated friction is reduced before feature breadth.",
+				"Sustained quality remains protected by repeated runtime evidence and active required behavior.",
+			}
+	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Service Quality", "Sustained Service Quality",
 			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "sustained_quality"},
@@ -879,16 +897,36 @@ func readinessGateDefinition(stage string) (string, string, []string, []string) 
 
 func selectReadinessPressure(plan map[string]string, stage string, dimensions []readinessDimension, gate readinessStageGate) readinessPressure {
 	dims := readinessDimensionMap(dimensions)
-	for _, axis := range gate.RequiredAxes {
-		dim := dims[axis]
-		if dim.ID != "" && dim.Status == "missing" {
-			return readinessPressureForDimension(plan, stage, dim, gate)
+	if readinessPressureShouldFollowGateOrder(gate) {
+		for _, axis := range gate.RequiredAxes {
+			dim := dims[axis]
+			if dim.ID != "" && dim.Status != "covered" {
+				return readinessPressureForDimension(plan, stage, dim, gate)
+			}
+		}
+	} else {
+		for _, axis := range gate.RequiredAxes {
+			dim := dims[axis]
+			if dim.ID != "" && dim.Status == "missing" {
+				return readinessPressureForDimension(plan, stage, dim, gate)
+			}
+		}
+		for _, axis := range gate.RequiredAxes {
+			dim := dims[axis]
+			if dim.ID != "" && dim.Status != "covered" {
+				return readinessPressureForDimension(plan, stage, dim, gate)
+			}
 		}
 	}
-	for _, axis := range gate.RequiredAxes {
-		dim := dims[axis]
-		if dim.ID != "" && dim.Status != "covered" {
-			return readinessPressureForDimension(plan, stage, dim, gate)
+	if gate.CurrentStage == gate.NextStage {
+		return readinessPressure{
+			Axis:             "sustained_quality",
+			AxisName:         "Sustained quality",
+			Status:           "ongoing",
+			Reason:           gate.CurrentStage + " is active; continue the next focused quality improvement instead of advancing stage.",
+			RecommendedGoal:  readinessRecommendedGoal(plan, stage, "sustained_quality"),
+			WorkBoundary:     "Stay in sustained operation: reduce one repeated validation, operational, or maintainability friction without broad feature expansion.",
+			ValidationSignal: "Run active validators, active harnesses, or the safest equivalent quality check and record the result.",
 		}
 	}
 	for _, dim := range dimensions {
@@ -897,6 +935,15 @@ func selectReadinessPressure(plan map[string]string, stage string, dimensions []
 		}
 	}
 	return readinessPressureForDimension(plan, stage, dims["maintainability"], gate)
+}
+
+func readinessPressureShouldFollowGateOrder(gate readinessStageGate) bool {
+	switch gate.CurrentStage {
+	case "Beta", "Service Quality", "Sustained Service Quality":
+		return true
+	default:
+		return false
+	}
 }
 
 func readinessPressureForDimension(plan map[string]string, stage string, dim readinessDimension, gate readinessStageGate) readinessPressure {

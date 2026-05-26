@@ -113,7 +113,7 @@ func usage() string {
 		"Primary flow:",
 		"  Run `hyper init` once in a project to install Hyper Run settings.",
 		"  Edit plan.md, then use `hyper run [focus]` to create the next runtime packet.",
-		"  Use `hyper run --auto --until service-quality [focus]` when Codex should keep planning the next packet until the target stage.",
+		"  Use `hyper run --auto --until service-quality [focus]` or `--until sustained-service-quality` when Codex should keep planning packets toward a target stage.",
 		"  After updating evidence.md and next.md, use `hyper complete` to turn evidence into pressure, candidates, and readiness.",
 		"  `hyper complete` runs the finish gate first; fix review.md findings in the same packet before continuing.",
 		"  When `hyper status` says the stage gate is ready, use `hyper advance` to apply the accepted stage change.",

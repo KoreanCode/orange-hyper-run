@@ -33,6 +33,8 @@ func stageGrowthContract(stage string) string {
 		return "Usability proof: make the primary flow usable end-to-end for a real user."
 	case strings.Contains(normalized, "beta"):
 		return "Repeatability proof: prove reliability around realistic data, failures, validation, docs, and release readiness."
+	case strings.Contains(normalized, "sustained"):
+		return "Sustained operation proof: keep service quality protected by repeated evidence, active capabilities, and focused friction reduction."
 	case strings.Contains(normalized, "service") || strings.Contains(normalized, "production"):
 		return "Operability proof: treat security, deployment, operations, rollback, and repeatable validation as required product behavior."
 	default:

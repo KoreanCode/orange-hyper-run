@@ -462,6 +462,7 @@ func normalizeRuntimeStage(stage string) string {
 		{name: "Tiny MVP", patterns: []string{"tiny mvp"}},
 		{name: "Usable MVP", patterns: []string{"usable mvp"}},
 		{name: "Beta", patterns: []string{"beta"}},
+		{name: "Sustained Service Quality", patterns: []string{"sustained service quality", "sustained quality"}},
 		{name: "Service Quality", patterns: []string{"service quality", "production"}},
 	}
 	bestName := ""
@@ -595,6 +596,14 @@ func stageDoneCondition(stage string) string {
 	if strings.Contains(normalized, "beta") {
 		return "- Primary flows are validated against realistic data.\n- Known blockers are documented with owner or next action.\n- Release or demo readiness evidence is captured."
 	}
+	if strings.Contains(normalized, "sustained") {
+		return strings.Join([]string{
+			"- Active validators, harnesses, or equivalent reusable quality structures continue to pass or have explicit blockers.",
+			"- Repeated failures or friction are converted into the next focused quality packet.",
+			"- Operational, validation, and maintainability evidence stays current without broad feature expansion.",
+			"- next.md identifies the next sustained-service improvement, not another stage advancement.",
+		}, "\n")
+	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return strings.Join([]string{
 			"- Required validation, security, deployment, operations, and maintainability evidence is captured.",
@@ -618,6 +627,9 @@ func stageRuntimeBoundary(stage string) string {
 	if strings.Contains(normalized, "beta") {
 		return "Prioritize realistic data, reliability, security, deployment, and documentation gaps over new feature breadth."
 	}
+	if strings.Contains(normalized, "sustained") {
+		return "Keep the service healthy through repeated quality evidence, active validators or harnesses, and friction reduction before adding breadth."
+	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Close operational and reference acceptance criteria first: repeatable validation, security/privacy boundaries, release and rollback proof, operator docs, maintainability evidence, and category-baseline comparison before feature breadth."
 	}
@@ -634,6 +646,9 @@ func stageValidationSignal(stage string) string {
 	}
 	if strings.Contains(normalized, "beta") {
 		return "Beta validation should use realistic data and capture security, deployment, or docs evidence when those axes are touched."
+	}
+	if strings.Contains(normalized, "sustained") {
+		return "Sustained Service Quality validation should run active validators or harnesses, record any blocker, and convert repeated failure into the next focused quality packet."
 	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Service Quality validation should prove the service can be set up, checked, released or run, rolled back, handed off, and compared against category references from documented commands, artifacts, or benchmark notes; run active validators or record why each required check is blocked."
