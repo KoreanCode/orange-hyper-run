@@ -2240,6 +2240,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if genericBuildUX.Status != "emerging" {
 		t.Fatalf("expected generic build evidence not to cover Core UX, got %+v", genericBuildUX)
 	}
+	performanceBuildUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: Performance smoke passed and build artifact was created.", defs)
+	if !ok {
+		t.Fatal("expected performance build UX evidence to parse")
+	}
+	if performanceBuildUX.Status != "emerging" {
+		t.Fatalf("expected performance build evidence not to cover Core UX, got %+v", performanceBuildUX)
+	}
 	apiUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: HTTP API test passed for create and list endpoints.", defs)
 	if !ok {
 		t.Fatal("expected API UX evidence to parse")

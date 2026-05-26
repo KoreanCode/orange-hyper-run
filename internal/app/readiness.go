@@ -345,7 +345,7 @@ func productCompletenessEvidenceCovered(normalized string) bool {
 }
 
 func coreUXEvidenceCovered(normalized string) bool {
-	visualSurfaceProof := hasAny(normalized, "browser", "screenshot", "viewport", "mobile", "desktop", "screen", "surface", "user interface", "page", "form", "button", "panel", "route")
+	visualSurfaceProof := hasAny(normalized, "browser", "screenshot", "viewport", "mobile", "desktop", "screen", "surface", "user interface", "page", "button", "panel", "route")
 	userActionProof := hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload", "primary action", "state")
 	screenProof := hasAny(normalized, "smoke", "screenshot", "browser", "verified", "passed", "checked", "captured") &&
 		visualSurfaceProof &&
