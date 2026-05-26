@@ -18,8 +18,9 @@ func learnGoalFromState(root string, state projectState, db *sql.DB, eventType s
 	derived := deriveGoalState(evidenceText, nextText)
 	memories := memoriesForDerivedState(derived, goalID, evidenceText, nextText)
 	quality := memoryQualityCounts(memories)
+	rejected := rejectedMemoryQualityCounts(goalID, evidenceText, nextText)
 	if len(memories) == 0 && !recordWhenEmpty {
-		return learnResult{Skipped: true, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID, Quality: quality}, nil
+		return learnResult{Skipped: true, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID, Quality: quality, Rejected: rejected}, nil
 	}
 	inserted := 0
 	for _, mem := range memories {
@@ -34,14 +35,14 @@ func learnGoalFromState(root string, state projectState, db *sql.DB, eventType s
 			}
 		}
 	}
-	event := map[string]any{"type": eventType, "run_id": runID, "goal_id": goalID, "state": derived.State, "inserted_memories": inserted, "memory_quality": quality, "created_at": nowISO()}
+	event := map[string]any{"type": eventType, "run_id": runID, "goal_id": goalID, "state": derived.State, "inserted_memories": inserted, "memory_quality": quality, "rejected_memory_quality": rejected, "created_at": nowISO()}
 	if err := insertEvent(db, event); err != nil {
 		return learnResult{}, err
 	}
 	if err := appendJSONL(filepath.Join(root, hyperDir, "logs", runID+".jsonl"), event); err != nil {
 		return learnResult{}, err
 	}
-	return learnResult{Skipped: false, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID, Inserted: inserted, MemoryCount: len(memories), Quality: quality}, nil
+	return learnResult{Skipped: false, Reason: derived.Reason, State: derived.State, RunID: runID, GoalID: goalID, Inserted: inserted, MemoryCount: len(memories), Quality: quality, Rejected: rejected}, nil
 }
 
 func memoryQualityCounts(memories []memory) map[string]int {

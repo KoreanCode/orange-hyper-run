@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -43,4 +44,47 @@ func TestVerifyChecksumFileRequiresAssetEntry(t *testing.T) {
 		t.Fatal("expected missing checksum")
 	}
 	assertContains(t, err.Error(), "checksum not found")
+}
+
+func TestSignatureVerificationPlanRequiresCosignWhenRequested(t *testing.T) {
+	t.Setenv("HYPER_RUN_VERIFY_SIGNATURE", "required")
+	t.Setenv("PATH", t.TempDir())
+	_, _, err := signatureVerificationPlan()
+	if err == nil {
+		t.Fatal("expected missing cosign to fail when signature verification is required")
+	}
+	assertContains(t, err.Error(), "requires cosign")
+}
+
+func TestSignatureVerificationPlanSkipsWithoutCosignByDefault(t *testing.T) {
+	t.Setenv("HYPER_RUN_VERIFY_SIGNATURE", "")
+	t.Setenv("PATH", t.TempDir())
+	verify, skip, err := signatureVerificationPlan()
+	if err != nil {
+		t.Fatalf("signature plan failed: %v", err)
+	}
+	if verify {
+		t.Fatal("expected signature verification to be skipped when cosign is unavailable")
+	}
+	assertContains(t, skip, "cosign not found")
+}
+
+func TestSignatureVerificationPlanUsesCosignWhenAvailable(t *testing.T) {
+	dir := t.TempDir()
+	name := "cosign"
+	if os.PathSeparator == '\\' {
+		name = "cosign.exe"
+	}
+	writeFile(t, filepath.Join(dir, name), "")
+	if err := os.Chmod(filepath.Join(dir, name), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	verify, skip, err := signatureVerificationPlan()
+	if err != nil {
+		t.Fatalf("signature plan failed: %v", err)
+	}
+	if !verify || skip != "" {
+		t.Fatalf("expected verification with cosign, got verify=%v skip=%q", verify, skip)
+	}
 }

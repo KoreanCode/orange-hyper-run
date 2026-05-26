@@ -54,6 +54,49 @@ func memoriesForDerivedState(state goalState, goalID, evidenceText, nextText str
 	return dedupeMemories(memories)
 }
 
+func rejectedMemoryQualityCounts(goalID, evidenceText, nextText string) map[string]int {
+	rejected := map[string]int{}
+	for _, line := range usefulSectionLines(evidenceText, "Readiness Evidence") {
+		countRejectedMemoryQuality(rejected, "pattern", fmt.Sprintf("%s readiness evidence: %s", goalID, line), 0.7)
+	}
+	for _, line := range usefulSectionLines(evidenceText, "Pressure Signals") {
+		countRejectedMemoryQuality(rejected, "pattern", fmt.Sprintf("%s pressure signals: %s", goalID, line), 0.7)
+	}
+	for _, line := range usefulSectionLines(evidenceText, "Decisions") {
+		countRejectedMemoryQuality(rejected, "decision", fmt.Sprintf("%s decisions: %s", goalID, line), 0.75)
+	}
+	for _, line := range usefulSectionLines(evidenceText, "Reusable Patterns") {
+		countRejectedMemoryQuality(rejected, "pattern", fmt.Sprintf("%s reusable patterns: %s", goalID, line), 0.75)
+	}
+	for _, line := range usefulSectionLines(nextText, "Learn Notes") {
+		if learnNoteInstructionLine(line) {
+			continue
+		}
+		kind, value := parseLearnNote(line)
+		if kind == "" {
+			countRejectedMemoryQuality(rejected, "invalid", line, 0)
+			continue
+		}
+		countRejectedMemoryQuality(rejected, kind, fmt.Sprintf("%s learn %s: %s", goalID, kind, value), 0.7)
+	}
+	if validation := firstNonPendingLine(sectionBody(evidenceText, "Validation")); validation != "" {
+		countRejectedMemoryQuality(rejected, "pattern", fmt.Sprintf("%s validation pattern: %s", goalID, validation), 0.65)
+	}
+	return rejected
+}
+
+func countRejectedMemoryQuality(counts map[string]int, kind, text string, confidence float64) {
+	text = oneLine(text)
+	if text == "" || isPlaceholder(text) || noisyMemoryText(text) {
+		counts["noisy"]++
+		return
+	}
+	quality := memoryQuality(kind, text, confidence)
+	if memoryQualityIsIgnored(quality) {
+		counts[quality]++
+	}
+}
+
 func appendSurfaceProofMemories(memories []memory, goalID, text string) []memory {
 	for _, line := range usefulSectionLines(text, "Surface Proof Evidence") {
 		signal := surfaceProofValue(line)
@@ -114,6 +157,9 @@ func appendLearnNoteMemories(memories []memory, goalID, nextText string) []memor
 
 func parseLearnNote(line string) (string, string) {
 	trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
+	if learnNoteInstructionLine(trimmed) {
+		return "", ""
+	}
 	key, value, ok := strings.Cut(trimmed, ":")
 	if !ok {
 		return "", ""
@@ -129,6 +175,11 @@ func parseLearnNote(line string) (string, string) {
 		return "", ""
 	}
 	return kind, value
+}
+
+func learnNoteInstructionLine(line string) bool {
+	normalized := normalizeSentence(line)
+	return hasAny(normalized, "write only durable signals", "leave a line as pending")
 }
 
 func usefulSectionLines(text, heading string) []string {
@@ -239,6 +290,9 @@ func memoryQuality(kind, text string, confidence float64) string {
 	if hasAny(normalized, "changed files", "notes:", "screenshot path", "screenshot saved") {
 		return "one_off"
 	}
+	if weakLearnSignal(kind, text, confidence) {
+		return "weak"
+	}
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "decision", "constraint", "failure":
 		return "durable"
@@ -263,11 +317,57 @@ func memoryQualityIsIgnored(quality string) bool {
 func firstUsefulValidationMemory(text string) string {
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
-		if trimmed != "" && !isPlaceholder(trimmed) && !noisyMemoryText(trimmed) {
+		if usefulValidationSignal(trimmed) {
 			return trimmed
 		}
 	}
 	return ""
+}
+
+func firstNonPendingLine(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
+		if trimmed != "" && !isPlaceholder(trimmed) {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func weakLearnSignal(kind, text string, confidence float64) bool {
+	normalized := normalizeSentence(text)
+	if normalized == "" {
+		return true
+	}
+	if strings.ToLower(strings.TrimSpace(kind)) == "pattern" && strings.Contains(normalized, "validation pattern:") {
+		return !usefulValidationSignal(memorySignal(text))
+	}
+	tokens := pressureTokens(memorySignal(text))
+	if len(tokens) < 3 && confidence < 0.8 {
+		return true
+	}
+	return false
+}
+
+func usefulValidationSignal(text string) bool {
+	trimmed := strings.TrimSpace(strings.TrimLeft(text, "-*0123456789. "))
+	if trimmed == "" || isPlaceholder(trimmed) || noisyMemoryText(trimmed) {
+		return false
+	}
+	normalized := strings.ToLower(trimmed)
+	if firstBacktickCommand(trimmed) != "" {
+		return hasAny(normalized, "pass", "passed", "success", "succeeded", "fail", "failed", "error", "warning", "warn")
+	}
+	hasTool := hasAny(normalized,
+		"go test", "npm run", "pnpm", "yarn", "pytest", "cargo test", "go vet", "staticcheck",
+		"govulncheck", "playwright", "vitest", "jest", "build", "test", "lint", "smoke",
+		"browser", "screenshot", "deploy", "url",
+	)
+	hasOutcome := hasAny(normalized,
+		"passed", "pass", "succeeded", "success", "verified", "checked", "captured", "built",
+		"failed", "blocked", "warning", "warn",
+	)
+	return hasTool && hasOutcome
 }
 
 func noisyMemoryText(text string) bool {
@@ -278,6 +378,7 @@ func noisyMemoryText(text string) bool {
 	return hasAny(normalized,
 		"hyper run created", "`hyper run` created", "created goal-", "created `goal-", "runtime packet created",
 		"created runtime packet", "screenshot saved", "screenshot path", "pending.", "no learnable signal",
+		"only documentation changed", "no code changed", "status only", "summary only",
 	) || isNoIssueText(normalized) || isPassiveNoChangeText(normalized)
 }
 

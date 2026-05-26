@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,10 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	defer db.Close()
 	if err := ensureSchema(db); err != nil {
+		return commandOutput{}, err
+	}
+	refreshedMemories, err := refreshLegacyMemoryQuality(db)
+	if err != nil {
 		return commandOutput{}, err
 	}
 	before := readGrowthStateIfExists(root)
@@ -45,6 +50,7 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	return stdout(strings.Join([]string{
 		"Hyper Run Migration",
 		"",
+		fmt.Sprintf("Learn quality gate: refreshed %d legacy memory quality value(s)", refreshedMemories),
 		"Growth state: refreshed",
 		fmt.Sprintf("Visible pressures: %d -> %d", visibleGrowthPressureCount(before.Pressures), visibleGrowthPressureCount(growth.Pressures)),
 		fmt.Sprintf("Visible candidates: %d -> %d", visibleGrowthCandidateCount(before.Candidates), visibleGrowthCandidateCount(growth.Candidates)),
@@ -56,6 +62,37 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"  hyper status",
 		"",
 	}, "\n")), nil
+}
+
+func refreshLegacyMemoryQuality(db *sql.DB) (int, *hyperError) {
+	rows, err := db.Query(`select id, kind, text, coalesce(confidence, 0) from memories where stale_at is null and (quality is null or trim(quality) = '')`)
+	if err != nil {
+		return 0, dbError(err)
+	}
+	defer rows.Close()
+	type update struct {
+		id      int64
+		quality string
+	}
+	updates := []update{}
+	for rows.Next() {
+		var id int64
+		var kind, text string
+		var confidence float64
+		if err := rows.Scan(&id, &kind, &text, &confidence); err != nil {
+			return 0, dbError(err)
+		}
+		updates = append(updates, update{id: id, quality: memoryQuality(kind, text, firstNonZeroFloat(confidence, 0.7))})
+	}
+	if err := rows.Err(); err != nil {
+		return 0, dbError(err)
+	}
+	for _, item := range updates {
+		if _, err := db.Exec(`update memories set quality = ? where id = ?`, item.quality, item.id); err != nil {
+			return 0, dbError(err)
+		}
+	}
+	return len(updates), nil
 }
 
 func growthMigrationNeeded(growth growthState) bool {

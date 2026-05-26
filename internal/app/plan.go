@@ -286,7 +286,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 		Tasks:    buildTasksDoc(goalID, buildStyle, stage, readiness, growth),
 		Evidence: buildEvidenceDoc(goalID, readiness),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
-		Next:     fmt.Sprintf("# %s Next\n\n## Recommended Next Goal\n\nPending.\n\n## Learn Notes\n\n- Decision: Pending.\n- Pattern: Pending.\n- Constraint: Pending.\n- Failure: Pending.\n", goalID),
+		Next:     buildNextDoc(goalID),
 	}
 	return episode{
 		Plan:          plan,
@@ -299,6 +299,24 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 		StopCondition: stopCondition,
 		Docs:          docs,
 	}
+}
+
+func buildNextDoc(goalID string) string {
+	return fmt.Sprintf(`# %s Next
+
+## Recommended Next Goal
+
+Pending.
+
+## Learn Notes
+
+Write only durable signals that should change a future runtime packet. Leave a line as Pending. or remove it when there is no reusable signal.
+
+- Decision: Pending.
+- Pattern: Pending.
+- Constraint: Pending.
+- Failure: Pending.
+`, goalID)
 }
 
 func runtimeObjective(focus string, plan map[string]string, stage, product string, readiness readinessState) string {
@@ -661,6 +679,10 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 
 %s
 
+## Execution Contract
+
+%s
+
 ## Proof Contract
 
 %s
@@ -685,11 +707,54 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 - Repeated need, failure, or proof that should influence future structure
 - Blocker, constraint, or failure signal when applicable
 - Screenshot path when applicable
+- Learn Notes must contain only durable signals: decision, pattern, constraint, or failure that should change a future packet.
+
+## Done Checklist
+
+%s
 
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), executionContractDoc(stage, readiness, growth), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), doneChecklistDoc(stage, readiness, growth), stopCondition)
+}
+
+func executionContractDoc(stage string, readiness readinessState, growth growthState) string {
+	lines := []string{
+		"- Work one coherent episode only; do not start a second runtime packet inside this packet.",
+		"- Prefer the smallest reversible implementation that moves the current readiness pressure.",
+		"- If validation fails twice for the same reason, stop and record the failure instead of broadening scope.",
+		"- Close the packet with evidence.md, next.md, and `hyper complete`; do not create the next packet first.",
+	}
+	if readiness.StageGate.Status == "ready" {
+		lines = append(lines, "- Gate-ready packets may recommend `hyper advance`, but must not silently change plan.md stage.")
+	}
+	if activeStructureCount(growth.Candidates) > 0 {
+		lines = append(lines, "- Active capabilities are required behavior for this packet unless explicitly blocked with a reason.")
+	}
+	if strings.Contains(normalizeLabel(stage), "service") || strings.Contains(normalizeLabel(stage), "production") {
+		lines = append(lines, "- Service Quality packets require deployment, security, docs, or operational evidence when those surfaces are touched.")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func doneChecklistDoc(stage string, readiness readinessState, growth growthState) string {
+	lines := []string{
+		"- evidence.md contains real validation output or a concrete blocked reason.",
+		"- evidence.md names the changed files and the user-visible or operational behavior changed.",
+		"- next.md recommends exactly one next runtime episode.",
+		"- Learn Notes avoid summaries and keep only reusable project signals.",
+	}
+	if readiness.NextPressure.AxisName != "" && readiness.NextPressure.Axis != "stage_advancement" {
+		lines = append(lines, "- Readiness Evidence includes concrete proof for "+readiness.NextPressure.AxisName+".")
+	}
+	if activeStructureCount(growth.Candidates) > 0 {
+		lines = append(lines, "- Active Capability Evidence shows each active validator ran or why it was blocked.")
+	}
+	if strings.Contains(normalizeLabel(stage), "beta") || strings.Contains(normalizeLabel(stage), "service") {
+		lines = append(lines, "- Stop conditions cover failure, regression, and missing credential cases found during this packet.")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func proofContractDoc(stage, buildStyle string, readiness readinessState) string {
@@ -806,11 +871,11 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if activeStructureCount(growth.Candidates) > 0 {
 		activeTask = "- [ ] Run or explicitly block every active capability listed in goal.md\n"
 	}
-	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with the next recommended runtime episode and Learn Notes\n", goalID, stage, browserTask, readinessTask, activeTask)
+	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, readinessTask, activeTask)
 }
 
 func buildEvidenceDoc(goalID string, readiness readinessState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
 }
 
 func readinessEvidenceTemplate(readiness readinessState) string {

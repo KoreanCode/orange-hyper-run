@@ -4,6 +4,10 @@
 
 - Verify GitHub release checksums during `hyper update`.
 - Add a Windows PowerShell installer with SHA256 checksum verification.
+- Add Learn quality-gate filtering for weak/noisy memory signals.
+- Add runtime packet execution contracts and done checklists.
+- Refresh legacy memory quality during `hyper migrate` with fixture coverage.
+- Sign release assets with cosign keyless bundles and optionally verify them during install/update.
 
 ## v0.5.1 - 2026-05-22
 

@@ -4,6 +4,10 @@
 
 - `hyper update`가 GitHub release checksum을 검증하도록 개선했습니다.
 - SHA256 checksum 검증을 포함한 Windows PowerShell installer를 추가했습니다.
+- 약하거나 noisy한 memory signal을 걸러내는 Learn quality gate를 추가했습니다.
+- runtime packet에 execution contract와 done checklist를 추가했습니다.
+- `hyper migrate`에서 legacy memory quality를 현재 규칙으로 보정하고 fixture 테스트를 추가했습니다.
+- release asset에 cosign keyless signature bundle을 만들고 install/update에서 선택적으로 검증합니다.
 
 ## v0.5.1 - 2026-05-22
 

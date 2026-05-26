@@ -7,6 +7,8 @@ $asset = "hyper-windows-amd64.exe"
 if ($repo -match "^https?://") {
     $url = $repo
     $checksumUrl = if ($env:HYPER_RUN_CHECKSUM_URL) { $env:HYPER_RUN_CHECKSUM_URL } else { "" }
+    $signatureUrl = if ($env:HYPER_RUN_SIGNATURE_URL) { $env:HYPER_RUN_SIGNATURE_URL } else { "" }
+    $identityRegexp = if ($env:HYPER_RUN_COSIGN_IDENTITY_REGEXP) { $env:HYPER_RUN_COSIGN_IDENTITY_REGEXP } else { "" }
     $asset = Split-Path -Leaf ([Uri]$url).AbsolutePath
 }
 else {
@@ -15,12 +17,15 @@ else {
     }
     $url = "https://github.com/$repo/releases/latest/download/$asset"
     $checksumUrl = "https://github.com/$repo/releases/latest/download/checksums.txt"
+    $signatureUrl = "https://github.com/$repo/releases/latest/download/$asset.sigstore.json"
+    $identityRegexp = if ($env:HYPER_RUN_COSIGN_IDENTITY_REGEXP) { $env:HYPER_RUN_COSIGN_IDENTITY_REGEXP } else { "https://github.com/$repo/.github/workflows/release.yml@refs/tags/v.*" }
 }
 
 New-Item -ItemType Directory -Force $installDir | Out-Null
 
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("hyper-install-{0}.exe" -f $PID)
 $checksumsTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("hyper-install-{0}.checksums.txt" -f $PID)
+$signatureTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("hyper-install-{0}.sigstore.json" -f $PID)
 $target = Join-Path $installDir "hyper.exe"
 
 try {
@@ -48,6 +53,48 @@ try {
         }
     }
 
+    $verifySignature = if ($env:HYPER_RUN_VERIFY_SIGNATURE) { $env:HYPER_RUN_VERIFY_SIGNATURE.ToLowerInvariant() } else { "auto" }
+    if ($signatureUrl) {
+        $cosign = Get-Command cosign -ErrorAction SilentlyContinue
+        if ($cosign) {
+            if (-not $identityRegexp) {
+                throw "Signature verification requires HYPER_RUN_COSIGN_IDENTITY_REGEXP for custom URLs"
+            }
+            Write-Host "Verifying signature from $signatureUrl"
+            $downloadedSignature = $false
+            try {
+                Invoke-WebRequest -Uri $signatureUrl -OutFile $signatureTmp
+                $downloadedSignature = $true
+            }
+            catch {
+                if ($verifySignature -in @("1", "true", "required", "always")) {
+                    throw
+                }
+                Write-Host "Signature verification skipped: signature bundle not found; checksum still verified"
+            }
+            if ($downloadedSignature) {
+                $oidcIssuer = if ($env:HYPER_RUN_COSIGN_OIDC_ISSUER) { $env:HYPER_RUN_COSIGN_OIDC_ISSUER } else { "https://token.actions.githubusercontent.com" }
+                & cosign verify-blob `
+                    --bundle $signatureTmp `
+                    --certificate-identity-regexp $identityRegexp `
+                    --certificate-oidc-issuer $oidcIssuer `
+                    $tmp
+                if ($LASTEXITCODE -ne 0) {
+                    throw "cosign signature verification failed"
+                }
+            }
+        }
+        elseif ($verifySignature -in @("1", "true", "required", "always")) {
+            throw "Signature verification requires cosign. Install cosign or unset HYPER_RUN_VERIFY_SIGNATURE."
+        }
+        else {
+            Write-Host "Signature verification skipped: cosign not found; checksum still verified"
+        }
+    }
+    elseif ($verifySignature -in @("1", "true", "required", "always")) {
+        throw "Signature verification requires HYPER_RUN_SIGNATURE_URL for custom URLs."
+    }
+
     Move-Item -Force $tmp $target
     Write-Host "Installed: $target"
 
@@ -66,5 +113,8 @@ finally {
     }
     if (Test-Path $checksumsTmp) {
         Remove-Item -Force $checksumsTmp
+    }
+    if (Test-Path $signatureTmp) {
+        Remove-Item -Force $signatureTmp
     }
 }

@@ -38,6 +38,18 @@ jobs:
       - name: Build
         run: go build ./cmd/hyper
 
+      - name: PowerShell installer syntax
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("install.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+
   analysis:
     name: Static analysis and vulnerabilities
     runs-on: ubuntu-latest

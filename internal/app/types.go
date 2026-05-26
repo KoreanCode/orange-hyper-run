@@ -76,6 +76,7 @@ type learnResult struct {
 	Inserted    int
 	MemoryCount int
 	Quality     map[string]int
+	Rejected    map[string]int
 }
 
 type similarContext struct {

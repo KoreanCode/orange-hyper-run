@@ -21,10 +21,11 @@ const (
 )
 
 type memoryRecord struct {
-	ID      int64
-	Kind    string
-	Text    string
-	Quality string
+	ID         int64
+	Kind       string
+	Text       string
+	Confidence float64
+	Quality    string
 }
 
 type pressureAccumulator struct {
@@ -85,7 +86,7 @@ func readGrowthStateIfExists(root string) growthState {
 }
 
 func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
-	rows, err := db.Query(`select id, kind, text, coalesce(quality, '') from memories where stale_at is null order by created_at asc, id asc`)
+	rows, err := db.Query(`select id, kind, text, coalesce(confidence, 0), coalesce(quality, '') from memories where stale_at is null order by created_at asc, id asc`)
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -93,8 +94,11 @@ func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
 	records := []memoryRecord{}
 	for rows.Next() {
 		var record memoryRecord
-		if err := rows.Scan(&record.ID, &record.Kind, &record.Text, &record.Quality); err != nil {
+		if err := rows.Scan(&record.ID, &record.Kind, &record.Text, &record.Confidence, &record.Quality); err != nil {
 			return nil, dbError(err)
+		}
+		if strings.TrimSpace(record.Quality) == "" {
+			record.Quality = memoryQuality(record.Kind, record.Text, firstNonZeroFloat(record.Confidence, 0.7))
 		}
 		records = append(records, record)
 	}
@@ -104,7 +108,7 @@ func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
 func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 	accs := []*pressureAccumulator{}
 	for _, record := range records {
-		if memoryQualityIsIgnored(record.Quality) {
+		if !growthRecordAllowed(record) {
 			continue
 		}
 		signal := memorySignal(record.Text)
@@ -167,6 +171,21 @@ func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 		pressures = pressures[:24]
 	}
 	return pressures
+}
+
+func growthRecordAllowed(record memoryRecord) bool {
+	quality := strings.ToLower(strings.TrimSpace(record.Quality))
+	if memoryQualityIsIgnored(quality) {
+		return false
+	}
+	signal := memorySignal(record.Text)
+	if signal == "" || isNoisyGrowthSignal(signal) {
+		return false
+	}
+	if quality == "weak" {
+		return usefulValidationSignal(signal) || hasAny(normalizeSentence(signal), "before every", "before each", "repeatable")
+	}
+	return true
 }
 
 func findPressureAccumulator(accs []*pressureAccumulator, pressureType, canonical string) *pressureAccumulator {
