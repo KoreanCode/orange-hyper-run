@@ -78,6 +78,23 @@ func TestVersionShowsBuildAndExecutable(t *testing.T) {
 	assertContains(t, out.Stdout, "Update source: github:KoreanCode/orange-hyper-run")
 }
 
+func TestSubcommandHelpDoesNotError(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{args("run", "--help"), "Usage:\n  hyper run [--auto] [--until stage] [focus]"},
+		{args("status", "--help"), "Usage:\n  hyper status\n  hyper status --short"},
+		{args("update", "--help"), "Usage:\n  hyper update [source]"},
+	} {
+		out, err := runCLI(tc.args, testRoot(t.TempDir()), fakeUpdater{})
+		if err != nil {
+			t.Fatalf("%v failed: %v", tc.args, err)
+		}
+		assertContains(t, out.Stdout, tc.want)
+	}
+}
+
 func TestInitRejectsObjectiveArgument(t *testing.T) {
 	root := t.TempDir()
 	_, err := runCLI(args("init", "Build a tiny CRM MVP"), testRoot(root), fakeUpdater{})
@@ -1759,6 +1776,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strong.Status != "covered" {
 		t.Fatalf("expected strong validation evidence to be covered, got %+v", strong)
 	}
+	shellSmoke, ok := parseReadinessEvidenceLine("GOAL-0001", "Validation coverage: The shell smoke command proved the add/list/handle flow end to end with real command output.", defs)
+	if !ok {
+		t.Fatal("expected shell smoke validation evidence to parse")
+	}
+	if shellSmoke.Status != "covered" {
+		t.Fatalf("expected shell smoke validation evidence to be covered, got %+v", shellSmoke)
+	}
 	weakUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: flow exists.", defs)
 	if !ok {
 		t.Fatal("expected weak UX evidence to parse")
@@ -2014,6 +2038,34 @@ func TestPlanAliasesAcceptBriefAndSuccessSignals(t *testing.T) {
 	}
 	if got := plan["Success Criteria"]; got != "Create and list one note." {
 		t.Fatalf("Success Criteria alias = %q", got)
+	}
+}
+
+func TestPlanAliasesAcceptInlineFields(t *testing.T) {
+	plan := parsePlan(`# Plan
+
+Project: Service Desk Lite
+Current Stage: Tiny MVP
+
+Product brief:
+A tiny internal support queue where a teammate can create one request, see it in a list, and mark it handled.
+
+Build Style: Thin vertical slice first.
+
+Validation:
+Use the smallest command or smoke check that proves the useful flow still works.
+`)
+	if got := plan["Product"]; got != "Service Desk Lite" {
+		t.Fatalf("Product inline field = %q", got)
+	}
+	if got := plan["Current Stage"]; got != "Tiny MVP" {
+		t.Fatalf("Current Stage inline field = %q", got)
+	}
+	if got := plan["Build Style"]; got != "Thin vertical slice first." {
+		t.Fatalf("Build Style inline field = %q", got)
+	}
+	if got := plan["Success Criteria"]; got != "Use the smallest command or smoke check that proves the useful flow still works." {
+		t.Fatalf("Validation inline field = %q", got)
 	}
 }
 

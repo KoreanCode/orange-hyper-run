@@ -481,7 +481,7 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 			"empty, loading, error, failure, fallback, or edge-state evidence"
 	case "validation_coverage":
 		return hasAny(normalized, "smoke", "playwright", "go test", "npm run", "pytest", "build", "command", "validation", "browser", "screenshot", "`") &&
-				hasAny(normalized, "passed", "repeatable", "covered", "verified"),
+				hasAny(normalized, "passed", "repeatable", "covered", "verified", "proved", "proven", "works"),
 			"repeatable command, build, test, smoke, or coverage evidence"
 	case "security_baseline":
 		return securityBaselineEvidenceCovered(normalized),

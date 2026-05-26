@@ -313,6 +313,22 @@ How do we know this stage is done?
 What should the next run improve?
 ```
 
+Short form also works:
+
+```markdown
+# Plan
+
+Project: Service Desk Lite
+Current Stage: Tiny MVP
+Build Style: Thin vertical slice first.
+
+Product brief:
+A teammate can create one support request, see it in a list, and mark it handled.
+
+Validation:
+One smoke command proves the create/list/handle flow.
+```
+
 If `plan.md` is sparse, Hyper Run may create `.hyper/plan-candidates.md` from README or docs so you can copy useful product context into `plan.md`.
 
 ## What `hyper run` Does

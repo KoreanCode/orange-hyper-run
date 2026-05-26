@@ -83,6 +83,7 @@ func parsePlan(body string) map[string]string {
 }
 
 func augmentPlanAliases(plan map[string]string, body string) {
+	augmentInlinePlanAliases(plan, body)
 	for heading, value := range plan {
 		canonical := canonicalPlanKey(heading)
 		if canonical == "" {
@@ -95,6 +96,82 @@ func augmentPlanAliases(plan map[string]string, body string) {
 	}
 }
 
+func augmentInlinePlanAliases(plan map[string]string, body string) {
+	lines := strings.Split(body, "\n")
+	inFence := false
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence || line == "" {
+			continue
+		}
+		label, value, ok := splitInlinePlanField(line)
+		if !ok {
+			continue
+		}
+		canonical := canonicalPlanKey(label)
+		if canonical == "" {
+			continue
+		}
+		if strings.TrimSpace(value) == "" {
+			value = followingInlinePlanValue(lines, i+1)
+		}
+		setPlanAliasIfMissing(plan, canonical, value)
+	}
+}
+
+func splitInlinePlanField(line string) (string, string, bool) {
+	line = strings.TrimSpace(line)
+	line = strings.TrimLeft(line, "#")
+	line = strings.TrimSpace(line)
+	line = strings.TrimLeft(line, "-*")
+	line = strings.TrimSpace(line)
+	index := strings.Index(line, ":")
+	if index <= 0 {
+		return "", "", false
+	}
+	label := strings.TrimSpace(line[:index])
+	if label == "" || len([]rune(label)) > 48 {
+		return "", "", false
+	}
+	return label, strings.TrimSpace(line[index+1:]), true
+}
+
+func followingInlinePlanValue(lines []string, start int) string {
+	values := []string{}
+	inFence := false
+	for i := start; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
+			inFence = !inFence
+			if len(values) == 0 {
+				continue
+			}
+		}
+		if inFence {
+			values = append(values, line)
+			continue
+		}
+		if line == "" {
+			if len(values) == 0 {
+				continue
+			}
+			break
+		}
+		if strings.HasPrefix(line, "#") {
+			break
+		}
+		if label, _, ok := splitInlinePlanField(line); ok && canonicalPlanKey(label) != "" {
+			break
+		}
+		values = append(values, line)
+	}
+	return strings.Join(values, "\n")
+}
+
 func canonicalPlanKey(heading string) string {
 	normalized := compactPlanHeading(heading)
 	aliases := map[string]string{
@@ -104,7 +181,9 @@ func canonicalPlanKey(heading string) string {
 		"productdefinition": "Product",
 		"service":           "Product",
 		"servicedefinition": "Product",
+		"project":           "Product",
 		"projectname":       "Product",
+		"name":              "Product",
 		"oneliner":          "Product",
 		"제품":                "Product",
 		"제품정의":              "Product",
@@ -154,9 +233,13 @@ func canonicalPlanKey(heading string) string {
 		"successmetrics":    "Success Criteria",
 		"successsignals":    "Success Criteria",
 		"successsignal":     "Success Criteria",
+		"validation":        "Success Criteria",
+		"validationplan":    "Success Criteria",
 		"성공지표":              "Success Criteria",
 		"성공기준":              "Success Criteria",
 		"완료기준":              "Success Criteria",
+		"검증":                "Success Criteria",
+		"검증방법":              "Success Criteria",
 		"currentfocus":      "Current Focus",
 		"priority":          "Current Focus",
 		"priorities":        "Current Focus",
