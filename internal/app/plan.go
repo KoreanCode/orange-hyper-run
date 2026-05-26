@@ -803,7 +803,7 @@ func doneChecklistDoc(stage string, readiness readinessState, growth growthState
 	if strings.Contains(normalizeLabel(stage), "beta") || strings.Contains(normalizeLabel(stage), "service") {
 		lines = append(lines, "- Stop conditions cover failure, regression, and missing credential cases found during this packet.")
 	}
-	if serviceQualityStage(stage) {
+	if referenceBenchmarkRequired(stage, readiness) {
 		lines = append(lines, "- Reference Benchmark Evidence lists 3-5 references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and the next pressure.")
 	}
 	return strings.Join(lines, "\n")
@@ -959,6 +959,16 @@ func serviceQualityStage(stage string) bool {
 }
 
 func referenceBenchmarkRequired(stage string, readiness readinessState) bool {
+	if readiness.Version != 0 {
+		if readiness.NextPressure.Axis == "reference_benchmark" {
+			return true
+		}
+		if readinessAxisRequired(readiness, "reference_benchmark") {
+			dim := readinessDimensionMap(readiness.Dimensions)["reference_benchmark"]
+			return dim.Status != "covered"
+		}
+		return false
+	}
 	normalized := normalizeLabel(stage)
 	if strings.Contains(normalized, "beta") || serviceQualityStage(stage) {
 		return true

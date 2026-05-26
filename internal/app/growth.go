@@ -838,7 +838,7 @@ func harnessCandidateForPressure(pressure growthPressure) growthCandidate {
 		Signal:              pressure.Signal,
 		PressureType:        pressure.PressureType,
 		Sources:             pressure.Sources,
-		EvidenceCount:       pressure.GoalCount,
+		EvidenceCount:       pressure.MemoryCount,
 		RepeatedThreshold:   growthHarnessStablePressures,
 		PromotionThreshold:  growthHarnessPromotableSignals,
 		ActivationThreshold: growthHarnessActiveSignals,

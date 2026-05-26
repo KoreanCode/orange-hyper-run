@@ -941,7 +941,7 @@ func selectReadinessPressure(plan map[string]string, stage string, dimensions []
 			AxisName:         "Sustained quality",
 			Status:           "ongoing",
 			Reason:           gate.CurrentStage + " is active; continue the next focused quality improvement instead of advancing stage.",
-			RecommendedGoal:  readinessRecommendedGoal(plan, stage, "sustained_quality"),
+			RecommendedGoal:  readinessSustainedOngoingGoal(plan),
 			WorkBoundary:     "Stay in sustained operation: reduce one repeated validation, operational, or maintainability friction without broad feature expansion.",
 			ValidationSignal: "Run active validators, active harnesses, or the safest equivalent quality check and record the result.",
 		}
@@ -1023,6 +1023,10 @@ func readinessRecommendedGoal(plan map[string]string, stage, axis string) string
 	default:
 		return fmt.Sprintf("Advance %s toward %s readiness.", product, stage)
 	}
+}
+
+func readinessSustainedOngoingGoal(plan map[string]string) string {
+	return fmt.Sprintf("Run active quality checks and reduce one small operational, validation, or maintainability friction for %s.", readinessProductName(plan))
 }
 
 func readinessProductName(plan map[string]string) string {

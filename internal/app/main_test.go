@@ -1244,6 +1244,21 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), "Required active validator validator-go-test")
 }
 
+func TestHarnessCandidateEvidenceCountUsesStablePressureCount(t *testing.T) {
+	pressure := aggregateHarnessPressure([]growthPressure{
+		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0001", "GOAL-0002"}},
+		{Effect: "implementation", GoalCount: 2, Sources: []string{"GOAL-0003", "GOAL-0004"}},
+		{Effect: "work_boundary", GoalCount: 2, Sources: []string{"GOAL-0005", "GOAL-0006"}},
+	})
+	candidate := harnessCandidateForPressure(pressure)
+	if candidate.Status != "repeated" {
+		t.Fatalf("expected repeated harness candidate, got %+v", candidate)
+	}
+	if candidate.EvidenceCount != 3 {
+		t.Fatalf("expected harness evidence count to use stable pressure count, got %+v", candidate)
+	}
+}
+
 func TestActiveValidatorBecomesRequiredValidationSignal(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
@@ -2164,6 +2179,8 @@ func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
 	if sustained.NextPressure.Axis == "stage_advancement" {
 		t.Fatalf("sustained stage should continue quality work, got %+v", sustained.NextPressure)
 	}
+	assertContains(t, sustained.NextPressure.RecommendedGoal, "Run active quality checks")
+	assertNotContains(t, sustained.NextPressure.RecommendedGoal, "until active validation")
 }
 
 func TestReferenceBenchmarkPressureShapesRuntimePacket(t *testing.T) {
@@ -2395,6 +2412,31 @@ func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T
 
 	tasks := buildTasksDoc("GOAL-0001", "Web app", "Service Quality", readinessState{}, growthState{})
 	assertContains(t, tasks, "Fill Reference Benchmark Evidence")
+}
+
+func TestReferenceBenchmarkEvidenceNotRepeatedAfterCovered(t *testing.T) {
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Sustained Service Quality",
+		Dimensions: []readinessDimension{
+			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "covered"},
+			{ID: "sustained_quality", Name: "Sustained quality", Status: "covered"},
+		},
+		StageGate: readinessStageGate{
+			Status:       "ready",
+			CurrentStage: "Sustained Service Quality",
+			NextStage:    "Sustained Service Quality",
+			RequiredAxes: []string{"validation_coverage", "operations_docs", "maintainability", "sustained_quality", "reference_benchmark"},
+		},
+		NextPressure: readinessPressure{Axis: "sustained_quality", AxisName: "Sustained quality", Status: "ongoing"},
+	}
+
+	evidence := buildEvidenceDoc("GOAL-0009", "Sustained Service Quality", readiness)
+	assertNotContains(t, evidence, "## Reference Benchmark Evidence")
+	tasks := buildTasksDoc("GOAL-0009", "Go CLI", "Sustained Service Quality", readiness, growthState{})
+	assertNotContains(t, tasks, "Fill Reference Benchmark Evidence")
+	checklist := doneChecklistDoc("Sustained Service Quality", readiness, growthState{})
+	assertNotContains(t, checklist, "Reference Benchmark Evidence lists")
 }
 
 func TestReferenceBenchmarkEvidenceSectionFeedsReadiness(t *testing.T) {
