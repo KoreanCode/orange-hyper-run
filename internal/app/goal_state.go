@@ -45,7 +45,7 @@ func memoriesForDerivedState(state goalState, goalID, evidenceText, nextText str
 	case "blocked":
 		memories = appendMemoryIfUseful(memories, "failure", fmt.Sprintf("%s blocked: %s", goalID, state.Reason), 0.8)
 	case "completed":
-		if validation := firstUsefulValidationMemory(sectionBody(evidenceText, "Validation")); validation != "" {
+		for _, validation := range usefulValidationMemories(sectionBody(evidenceText, "Validation")) {
 			memories = appendMemoryIfUseful(memories, "pattern", fmt.Sprintf("%s validation pattern: %s", goalID, validation), 0.65)
 		}
 	case "waiting_user":
@@ -79,7 +79,7 @@ func rejectedMemoryQualityCounts(goalID, evidenceText, nextText string) map[stri
 		}
 		countRejectedMemoryQuality(rejected, kind, fmt.Sprintf("%s learn %s: %s", goalID, kind, value), 0.7)
 	}
-	if validation := firstNonPendingLine(sectionBody(evidenceText, "Validation")); validation != "" {
+	for _, validation := range usefulValidationMemories(sectionBody(evidenceText, "Validation")) {
 		countRejectedMemoryQuality(rejected, "pattern", fmt.Sprintf("%s validation pattern: %s", goalID, validation), 0.65)
 	}
 	return rejected
@@ -315,20 +315,47 @@ func memoryQualityIsIgnored(quality string) bool {
 }
 
 func firstUsefulValidationMemory(text string) string {
+	memories := usefulValidationMemories(text)
+	if len(memories) == 0 {
+		return ""
+	}
+	return memories[0]
+}
+
+func usefulValidationMemories(text string) []string {
 	command := ""
+	commandEmitted := false
+	seen := map[string]bool{}
+	memories := []string{}
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
-		if command == "" {
-			command = firstBacktickCommand(trimmed)
+		if validationCommandBoundary(trimmed) {
+			if nextCommand := firstBacktickCommand(trimmed); nextCommand != "" {
+				command = nextCommand
+				commandEmitted = false
+			}
 		}
 		if usefulValidationSignal(trimmed) {
+			memory := trimmed
 			if firstBacktickCommand(trimmed) == "" && command != "" {
-				return commandValidationMemory(command, trimmed)
+				if commandEmitted {
+					continue
+				}
+				memory = commandValidationMemory(command, trimmed)
+				commandEmitted = true
+			} else if firstBacktickCommand(trimmed) != "" {
+				command = firstBacktickCommand(trimmed)
+				commandEmitted = true
 			}
-			return trimmed
+			if !seen[memory] {
+				seen[memory] = true
+				memories = append(memories, memory)
+			}
+		} else if command == "" {
+			command = firstBacktickCommand(trimmed)
 		}
 	}
-	return ""
+	return memories
 }
 
 func commandValidationMemory(command, outcome string) string {
@@ -347,16 +374,6 @@ func commandValidationMemory(command, outcome string) string {
 	default:
 		return "`" + command + "` passed."
 	}
-}
-
-func firstNonPendingLine(text string) string {
-	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
-		if trimmed != "" && !isPlaceholder(trimmed) {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func weakLearnSignal(kind, text string, confidence float64) bool {
@@ -390,7 +407,7 @@ func usefulValidationSignal(text string) bool {
 	)
 	hasOutcome := hasAny(normalized,
 		"passed", "pass", "succeeded", "success", "verified", "checked", "captured", "built",
-		"failed", "blocked", "warning", "warn",
+		"created", "failed", "blocked", "warning", "warn",
 	)
 	return hasTool && hasOutcome
 }

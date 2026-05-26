@@ -3122,6 +3122,36 @@ func TestValidationMemoryPrefersCommandOverOutputLine(t *testing.T) {
 	}
 }
 
+func TestValidationMemoriesCaptureMultipleCommandBlocks(t *testing.T) {
+	validation := strings.Join([]string{
+		"Command: `npm test`",
+		"",
+		"Output:",
+		"",
+		"```text",
+		"tiny-panel smoke passed",
+		"```",
+		"",
+		"Command: `npm run build`",
+		"",
+		"Output:",
+		"",
+		"```text",
+		"dist build created",
+		"```",
+	}, "\n")
+	memories := usefulValidationMemories(validation)
+	if len(memories) != 2 {
+		t.Fatalf("expected two validation memories, got %+v", memories)
+	}
+	if memories[0] != "`npm test` passed." {
+		t.Fatalf("expected npm test memory, got %+v", memories)
+	}
+	if memories[1] != "`npm run build` passed." {
+		t.Fatalf("expected npm run build memory, got %+v", memories)
+	}
+}
+
 func TestStatusDerivesCompletedForNoOpBlocker(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
