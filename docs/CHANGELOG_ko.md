@@ -1,5 +1,10 @@
 # 변경 기록
 
+## Unreleased
+
+- `hyper update`가 GitHub release checksum을 검증하도록 개선했습니다.
+- SHA256 checksum 검증을 포함한 Windows PowerShell installer를 추가했습니다.
+
 ## v0.5.1 - 2026-05-22
 
 - CLI entrypoint와 application runtime package를 분리했습니다.

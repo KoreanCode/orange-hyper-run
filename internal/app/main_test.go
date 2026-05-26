@@ -1355,8 +1355,23 @@ func TestUpdateURL(t *testing.T) {
 	if !strings.Contains(resolveUpdateURL("github:Example/fork"), "https://github.com/Example/fork/releases/latest/download/hyper-") {
 		t.Fatalf("bad github update url")
 	}
+	request := resolveUpdateRequest("github:Example/fork")
+	if !strings.Contains(request.ChecksumURL, "https://github.com/Example/fork/releases/latest/download/checksums.txt") {
+		t.Fatalf("bad github checksum url: %s", request.ChecksumURL)
+	}
+	if request.AssetName != updateAssetName() {
+		t.Fatalf("bad github asset name: %s", request.AssetName)
+	}
 	if resolveUpdateURL("https://example.com/hyper") != "https://example.com/hyper" {
 		t.Fatalf("explicit URL should pass through")
+	}
+	t.Setenv("HYPER_RUN_CHECKSUM_URL", "https://example.com/checksums.txt")
+	explicit := resolveUpdateRequest("https://example.com/download/hyper-windows-amd64.exe?token=1")
+	if explicit.AssetName != "hyper-windows-amd64.exe" {
+		t.Fatalf("bad explicit asset name: %s", explicit.AssetName)
+	}
+	if explicit.ChecksumURL != "https://example.com/checksums.txt" {
+		t.Fatalf("bad explicit checksum url: %s", explicit.ChecksumURL)
 	}
 	out, err := runCLI(args("update", "https://example.com/hyper"), testRoot(t.TempDir()), fakeUpdater{})
 	if err != nil {
@@ -1372,7 +1387,7 @@ func (r testRoot) root() string { return string(r) }
 
 type fakeUpdater struct{}
 
-func (fakeUpdater) update(string) (updateResult, error) {
+func (fakeUpdater) update(updateRequest) (updateResult, error) {
 	return updateResult{Target: "/tmp/fake-hyper"}, nil
 }
 
