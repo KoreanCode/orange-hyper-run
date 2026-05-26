@@ -1550,6 +1550,70 @@ func TestHarnessCandidateEvidenceCountUsesStablePressureCount(t *testing.T) {
 	}
 }
 
+func TestHarnessCandidateRequiresEnoughSourceGoalsForActivation(t *testing.T) {
+	twoGoalPressure := aggregateHarnessPressure([]growthPressure{
+		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0003", "GOAL-0004"}},
+		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0003", "GOAL-0004"}},
+		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0003", "GOAL-0004"}},
+		{Effect: "implementation", GoalCount: 2, Sources: []string{"GOAL-0003", "GOAL-0004"}},
+		{Effect: "work_boundary", GoalCount: 2, Sources: []string{"GOAL-0003", "GOAL-0004"}},
+	})
+	candidate := harnessCandidateForPressure(twoGoalPressure)
+	if candidate.Status != "repeated" {
+		t.Fatalf("harness must not become active from many pressures in only two packets, got %+v", candidate)
+	}
+	assertContains(t, candidate.LifecyclePath, filepath.Join(".hyper", "capabilities", "candidates", "harness"))
+
+	fiveGoalPressure := aggregateHarnessPressure([]growthPressure{
+		{Effect: "validation", GoalCount: 5, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004", "GOAL-0005"}},
+		{Effect: "validation", GoalCount: 5, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004", "GOAL-0005"}},
+		{Effect: "implementation", GoalCount: 5, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004", "GOAL-0005"}},
+		{Effect: "work_boundary", GoalCount: 5, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004", "GOAL-0005"}},
+		{Effect: "work_boundary", GoalCount: 5, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004", "GOAL-0005"}},
+	})
+	candidate = harnessCandidateForPressure(fiveGoalPressure)
+	if candidate.Status != "active" {
+		t.Fatalf("expected active harness only after enough stable pressures and source goals, got %+v", candidate)
+	}
+}
+
+func TestReadinessEvidenceDoesNotBecomeValidatorExceptValidationCoverage(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, hyperDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	db, hyperErr := openDB(root)
+	if hyperErr != nil {
+		t.Fatalf("open db failed: %v", hyperErr)
+	}
+	defer db.Close()
+	if hyperErr := ensureSchema(db); hyperErr != nil {
+		t.Fatalf("schema failed: %v", hyperErr)
+	}
+	for _, goal := range []string{"GOAL-0001", "GOAL-0002"} {
+		insertTestMemory(t, db, "pattern", goal+" readiness evidence: Security baseline: Local-only file storage is explicit, no network or telemetry exists, and sensitive words are rejected by the CLI smoke command.")
+		insertTestMemory(t, db, "pattern", goal+" readiness evidence: Reference benchmark: Category: Local file-backed utility CLI; References: Git, SQLite CLI, Taskfile, Make; Baseline expectations: local commands are documented and repeatable command output exists.")
+		insertTestMemory(t, db, "pattern", goal+" readiness evidence: Validation coverage: `./check.sh` passed and is repeatable.")
+	}
+	state, hyperErr := updateGrowthState(root, db)
+	if hyperErr != nil {
+		t.Fatalf("growth failed: %v", hyperErr)
+	}
+	for _, candidate := range state.Candidates {
+		if strings.Contains(candidate.Name, "security-baseline") || strings.Contains(candidate.Name, "reference-benchmark") {
+			t.Fatalf("readiness evidence for %s should not become a validator candidate: %+v", candidate.Name, state.Candidates)
+		}
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-check-sh.md")), "Status: repeated")
+}
+
+func TestCommandHandoffPatternClassifiesAsValidation(t *testing.T) {
+	pressureType, effect := growthClassification("pattern", "Pattern: Run `./check.sh` before every service-quality handoff.")
+	if pressureType != "repeated_validation" || effect != "validation" {
+		t.Fatalf("expected command handoff pattern to be validation pressure, got %s/%s", pressureType, effect)
+	}
+}
+
 func TestActiveValidatorBecomesRequiredValidationSignal(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
@@ -1844,6 +1908,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if cliDeploy.Status != "covered" {
 		t.Fatalf("expected CLI deployment evidence to be covered, got %+v", cliDeploy)
 	}
+	exportDeploy, ok := parseReadinessEvidenceLine("GOAL-0001", "Deployment readiness: `./check.sh` verifies export artifact creation outside the normal add/list path.", defs)
+	if !ok {
+		t.Fatal("expected export deployment evidence to parse")
+	}
+	if exportDeploy.Status != "covered" {
+		t.Fatalf("expected export deployment evidence to be covered, got %+v", exportDeploy)
+	}
 	weakReference, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Compared against three comparable project-growth CLIs; category baseline is fine and above-baseline strength exists.", defs)
 	if !ok {
 		t.Fatal("expected weak reference benchmark evidence to parse")
@@ -1872,12 +1943,26 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if opsNotes.Status != "covered" {
 		t.Fatalf("expected operations notes evidence to be covered, got %+v", opsNotes)
 	}
+	maintainabilityHandoff, ok := parseReadinessEvidenceLine("GOAL-0001", "Maintainability: `DEVELOPMENT.md` documents the required `./check.sh` service-quality smoke, what it proves, and the files that must stay synchronized when command behavior changes.", defs)
+	if !ok {
+		t.Fatal("expected maintainability handoff evidence to parse")
+	}
+	if maintainabilityHandoff.Status != "covered" {
+		t.Fatalf("expected maintainability handoff evidence to be covered, got %+v", maintainabilityHandoff)
+	}
 	referenceBenchmark, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Category: Developer CLI; References: namba-ai, pi.dev, Claude Code; Baseline expectations: install is clear and one command creates useful work context; Current comparison: setup meets baseline and evidence loop is above baseline; Below-baseline gaps: None; no critical user or operator baseline gap remains; Above-baseline strength: project-local evidence pressure; Decision: Service Quality is allowed from the benchmark perspective.", defs)
 	if !ok {
 		t.Fatal("expected reference benchmark evidence to parse")
 	}
 	if referenceBenchmark.Status != "covered" {
 		t.Fatalf("expected reference benchmark evidence to be covered, got %+v", referenceBenchmark)
+	}
+	naturalReferenceBenchmark, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Category: Local file-backed utility CLI; References: Git, SQLite CLI, Taskfile, Make; Baseline expectations: local commands are documented and repeatable command output exists; Current comparison: this sample meets the repeatable local CLI baseline; Below-baseline gaps: None for this smoke path; Above-baseline strength: evidence is captured before learning; Decision: Service Quality can continue from this benchmark.", defs)
+	if !ok {
+		t.Fatal("expected natural reference benchmark evidence to parse")
+	}
+	if naturalReferenceBenchmark.Status != "covered" {
+		t.Fatalf("expected natural reference benchmark evidence to be covered, got %+v", naturalReferenceBenchmark)
 	}
 	errorHandling, ok := parseReadinessEvidenceLine("GOAL-0001", "Error handling: Covered. Empty, loading, error, fallback, and recovery states are handled for the primary path: missing profile fields, future birth date, incomplete daily log, empty report, and storage-disabled browser fallback. Playwright verified each state at 390x844.", defs)
 	if !ok {
@@ -2527,6 +2612,20 @@ func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
 	kind, value = parseLearnNote("- Failure: None in this run.")
 	if kind != "" || value != "" {
 		t.Fatalf("expected no-op failure learn note for this run to be ignored, got %q %q", kind, value)
+	}
+}
+
+func TestValidationMemoryPrefersCommandOverOutputLine(t *testing.T) {
+	validation := strings.Join([]string{
+		"Command: `./check.sh`",
+		"Output:",
+		"```text",
+		"no items",
+		"service-quality smoke passed",
+		"```",
+	}, "\n")
+	if got := firstUsefulValidationMemory(validation); got != "`./check.sh` passed." {
+		t.Fatalf("expected command-centered validation memory, got %q", got)
 	}
 }
 

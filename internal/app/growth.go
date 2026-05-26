@@ -252,6 +252,9 @@ func growthRecordAllowed(record memoryRecord) bool {
 	if memoryQualityIsIgnored(quality) {
 		return false
 	}
+	if !readinessEvidenceContributesToGrowth(record.Text) {
+		return false
+	}
 	signal := memorySignal(record.Text)
 	if signal == "" || isNoisyGrowthSignal(signal) {
 		return false
@@ -260,6 +263,17 @@ func growthRecordAllowed(record memoryRecord) bool {
 		return usefulValidationSignal(signal) || hasAny(normalizeSentence(signal), "before every", "before each", "repeatable")
 	}
 	return true
+}
+
+func readinessEvidenceContributesToGrowth(text string) bool {
+	normalized := normalizeSentence(text)
+	prefix := "readiness evidence:"
+	index := strings.Index(normalized, prefix)
+	if index == -1 {
+		return true
+	}
+	rest := strings.TrimSpace(normalized[index+len(prefix):])
+	return strings.HasPrefix(rest, "validation coverage:")
 }
 
 func findPressureAccumulator(accs []*pressureAccumulator, pressureType, canonical string) *pressureAccumulator {
@@ -470,6 +484,12 @@ func isKnownImplementationGap(signal string) bool {
 
 func isValidationPattern(signal string) bool {
 	normalized := strings.ToLower(signal)
+	if strings.Contains(normalized, "readiness evidence:") && !strings.Contains(normalized, "validation coverage:") {
+		return false
+	}
+	if command := firstBacktickCommand(signal); command != "" && hasAny(normalized, "run", "check", "smoke", "validation", "handoff", "before every", "before each", "passed", "repeatable") {
+		return true
+	}
 	return hasAny(normalized, "test", "build", "smoke", "validate", "validation", "playwright", "browser", "go test", "npm run", "pytest")
 }
 
@@ -826,7 +846,7 @@ func cleanCandidateSignal(signal string) string {
 }
 
 func harnessCandidateForPressure(pressure growthPressure) growthCandidate {
-	status := harnessStatusForPressure(pressure.MemoryCount)
+	status := harnessStatusForPressure(pressure.GoalCount, pressure.MemoryCount)
 	name := "harness-growth-candidate"
 	return growthCandidate{
 		Kind:                "harness",
@@ -874,11 +894,11 @@ func capabilityStatusForEvidence(goalCount int) string {
 	}
 }
 
-func harnessStatusForPressure(stablePressureCount int) string {
+func harnessStatusForPressure(sourceGoalCount, stablePressureCount int) string {
 	switch {
-	case stablePressureCount >= growthHarnessActiveSignals:
+	case sourceGoalCount >= growthHarnessActiveSignals && stablePressureCount >= growthHarnessActiveSignals:
 		return "active"
-	case stablePressureCount >= growthHarnessPromotableSignals:
+	case sourceGoalCount >= growthHarnessPromotableSignals && stablePressureCount >= growthHarnessPromotableSignals:
 		return "promotable"
 	default:
 		return "repeated"
@@ -965,7 +985,7 @@ func aggregateHarnessPressure(pressures []growthPressure) growthPressure {
 		Signal:          "Promote repeated decisions, validation patterns, and constraints into a project-specific harness candidate.",
 		CanonicalSignal: "harness emergence",
 		Effect:          "harness",
-		State:           harnessStatusForPressure(stablePressureCount),
+		State:           harnessStatusForPressure(len(sources), stablePressureCount),
 		GoalCount:       len(sources),
 		MemoryCount:     stablePressureCount,
 		Score:           growthScore(len(sources), stablePressureCount),

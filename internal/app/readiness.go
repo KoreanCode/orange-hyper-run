@@ -493,8 +493,8 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 		return operationsDocsEvidenceCovered(normalized),
 			"README, docs, setup, runbook, rollback, smoke path, stop conditions, or environment evidence"
 	case "maintainability":
-		return hasAny(normalized, "refactor", "cleanup", "component", "module", "architecture", "helper", "table-driven", "test", "extracted", "reduced", "documented"),
-			"refactor, modularity, test, helper, cleanup, or architecture evidence"
+		return hasAny(normalized, "refactor", "cleanup", "component", "module", "architecture", "helper", "table-driven", "test", "extracted", "reduced", "documented", "document", "documents", "handoff", "maintenance", "synchronized", "sync"),
+			"refactor, modularity, test, helper, cleanup, documentation, handoff, or maintenance evidence"
 	case "reference_benchmark":
 		return referenceBenchmarkEvidenceQuality(normalized)
 	case "sustained_quality":
@@ -713,7 +713,8 @@ func specificBenchmarkField(value string) bool {
 func currentComparisonCovered(value string) bool {
 	normalized := normalizeSentence(value)
 	return specificBenchmarkField(value) &&
-		hasAny(normalized, "below baseline", "below-baseline", "meets baseline", "meet baseline", "above baseline", "above-baseline")
+		(hasAny(normalized, "below baseline", "below-baseline", "meets baseline", "meet baseline", "above baseline", "above-baseline") ||
+			(strings.Contains(normalized, "baseline") && hasAny(normalized, "below", "meets", "meet", "above")))
 }
 
 func noCriticalBelowBaselineGap(value string) bool {
@@ -777,7 +778,7 @@ func deploymentEvidenceCovered(normalized string) bool {
 	)
 	deploymentProof := hasAny(normalized,
 		"passed", "available", "hosted", "deployed", "built", "released", "verified", "validated", "proved", "proven",
-		"created", "served", "extracted", "smoke", "parity", "ran",
+		"verifies", "validates", "creates", "creation", "created", "served", "extracted", "smoke", "parity", "ran",
 	)
 	return deploymentTarget && deploymentProof
 }

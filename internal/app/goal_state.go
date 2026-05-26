@@ -315,13 +315,38 @@ func memoryQualityIsIgnored(quality string) bool {
 }
 
 func firstUsefulValidationMemory(text string) string {
+	command := ""
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
+		if command == "" {
+			command = firstBacktickCommand(trimmed)
+		}
 		if usefulValidationSignal(trimmed) {
+			if firstBacktickCommand(trimmed) == "" && command != "" {
+				return commandValidationMemory(command, trimmed)
+			}
 			return trimmed
 		}
 	}
 	return ""
+}
+
+func commandValidationMemory(command, outcome string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return strings.TrimSpace(outcome)
+	}
+	normalized := normalizeSentence(outcome)
+	switch {
+	case hasAny(normalized, "failed", "failure", "error"):
+		return "`" + command + "` failed."
+	case hasAny(normalized, "blocked"):
+		return "`" + command + "` blocked."
+	case hasAny(normalized, "warning", "warn"):
+		return "`" + command + "` completed with warning."
+	default:
+		return "`" + command + "` passed."
+	}
 }
 
 func firstNonPendingLine(text string) string {
