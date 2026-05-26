@@ -1133,6 +1133,22 @@ func TestGrowthIgnoresStageAdvancementProtocolNoise(t *testing.T) {
 	}
 }
 
+func TestGrowthTreatsKnownGapFailureAsImplementationPressure(t *testing.T) {
+	pressures := deriveGrowthPressures([]memoryRecord{
+		{Kind: "failure", Text: "GOAL-0003 learn failure: Malformed `.release_notes.json` recovery is not handled yet.", Confidence: 0.8, Quality: "durable"},
+	})
+	if len(pressures) != 1 {
+		t.Fatalf("expected one implementation gap pressure, got %+v", pressures)
+	}
+	if pressures[0].PressureType != "implementation_gap" || pressures[0].Effect != "implementation" {
+		t.Fatalf("expected implementation gap pressure, got %+v", pressures[0])
+	}
+	behavior := growthBehaviorFromPressures(pressures)
+	if len(behavior.StopConditions) != 0 {
+		t.Fatalf("known implementation gap should not become a stop condition, got %+v", behavior.StopConditions)
+	}
+}
+
 func TestSimilarContextIgnoresProtocolNoiseMemories(t *testing.T) {
 	root := t.TempDir()
 	if err := ensureProjectLayout(root); err != nil {
@@ -2480,6 +2496,16 @@ func TestReadinessEvidenceRequiresAxisLabelAndCoversMySQLPersistence(t *testing.
 	record, ok := parseReadinessEvidenceLine("GOAL-0001", "Data persistence: API smoke persisted a pin/message and MySQL confirmed the browser-created row.", defs)
 	if !ok {
 		t.Fatal("expected labeled MySQL persistence evidence to parse")
+	}
+	if record.Axis != "persistence" || record.Status != "covered" {
+		t.Fatalf("expected covered persistence evidence, got %+v", record)
+	}
+}
+
+func TestReadinessEvidenceCoversFileBackedPersistence(t *testing.T) {
+	record, ok := parseReadinessEvidenceLine("GOAL-0002", "Data persistence: `.release_notes.json` stored the release note and a separate `go run . list` command re-read it after the add command exited.", readinessDimensionDefs())
+	if !ok {
+		t.Fatal("expected labeled file persistence evidence to parse")
 	}
 	if record.Axis != "persistence" || record.Status != "covered" {
 		t.Fatalf("expected covered persistence evidence, got %+v", record)

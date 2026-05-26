@@ -450,8 +450,8 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 			"browser, screenshot, smoke, or verified primary-flow evidence"
 	case "persistence":
 		return hasAny(normalized, "persist", "reload", "restart", "saved", "survive", "stored", "created", "re-read", "reread", "confirmed", "row") &&
-				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage"),
-			"MySQL, SQLite, DB, reload, restart, storage, or database evidence"
+				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage", "json", ".json", "file", "disk", "filesystem"),
+			"MySQL, SQLite, DB, file, JSON, reload, restart, storage, or database evidence"
 	case "error_handling":
 		return hasAny(normalized, "empty", "error", "loading", "fallback", "failure", "edge") &&
 				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works"),

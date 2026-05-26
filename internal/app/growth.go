@@ -439,6 +439,9 @@ func growthClassification(kind, signal string) (string, string) {
 	case "constraint":
 		return "recurring_constraint", "work_boundary"
 	case "failure":
+		if isKnownImplementationGap(signal) {
+			return "implementation_gap", "implementation"
+		}
 		return "recurring_failure", "stop_condition"
 	case "pattern":
 		if isSurfaceValidationPattern(signal) {
@@ -451,6 +454,18 @@ func growthClassification(kind, signal string) (string, string) {
 	default:
 		return "context", "context"
 	}
+}
+
+func isKnownImplementationGap(signal string) bool {
+	normalized := normalizeSentence(signal)
+	return hasAny(normalized,
+		"not handled yet",
+		"not implemented yet",
+		"not covered yet",
+		"not built yet",
+		"needs implementation",
+		"needs recovery",
+	)
 }
 
 func isValidationPattern(signal string) bool {
