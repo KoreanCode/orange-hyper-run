@@ -185,6 +185,9 @@ func doctorNextPacketPlanCheck(root string) doctorCheck {
 	if consistency.Derived.State == "active" {
 		return doctorCheck{"Next packet plan", "OK", "not required while the current runtime packet is active"}
 	}
+	if refresh := statusRefreshFor(root); statusRefreshActionable(state, consistency.Derived, refresh) {
+		return doctorCheck{"Next packet plan", "WARN", "cannot trust next-packet until refresh completes: " + refresh.Reason}
+	}
 	if !exists(path) {
 		return doctorCheck{"Next packet plan", "WARN", "missing; run `hyper migrate` or complete the current packet again"}
 	}

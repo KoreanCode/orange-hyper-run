@@ -280,6 +280,31 @@ func TestDoctorWarnsWhenNextPacketPlanIsStale(t *testing.T) {
 	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected `hyper run \"Implement the smallest usable A tiny notes API core flow: the primary user flow\"`, found `hyper advance`; run `hyper migrate`")
 }
 
+func TestDoctorDoesNotTrustNextPacketWhenRefreshIsNeeded(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+	stale := growthState{
+		Version: 1,
+		Pressures: []growthPressure{
+			{State: "repeated", PressureType: "recurring_failure", Effect: "stop_condition", Signal: "None in this run.", GoalCount: 2},
+		},
+	}
+	if err := writeJSON(filepath.Join(root, ".hyper", "growth", "state.json"), stale); err != nil {
+		t.Fatalf("write stale growth failed: %v", err)
+	}
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Growth migration: legacy or noisy growth entries found; run `hyper migrate`")
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: cannot trust next-packet until refresh completes: legacy or noisy growth entries found; run `hyper migrate`")
+}
+
 func TestDoctorReadinessComparisonIgnoresIrrelevantFutureAxes(t *testing.T) {
 	stored := readinessState{
 		Stage: "Tiny MVP",
