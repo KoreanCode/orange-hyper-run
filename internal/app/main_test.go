@@ -2247,6 +2247,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if commandUX.Status != "covered" {
 		t.Fatalf("expected command UX evidence to be covered, got %+v", commandUX)
 	}
+	namedCommandUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: CLI smoke passed for the primary greet command and verified the expected `Hello, Ada` output.", defs)
+	if !ok {
+		t.Fatal("expected named command UX evidence to parse")
+	}
+	if namedCommandUX.Status != "covered" {
+		t.Fatalf("expected named command UX evidence to be covered, got %+v", namedCommandUX)
+	}
 	apiProduct, ok := parseReadinessEvidenceLine("GOAL-0001", "Product completeness: A tiny notes API now has a measurable create-and-list flow: `POST /notes` creates one note and `GET /notes` returns it.", defs)
 	if !ok {
 		t.Fatal("expected API product evidence to parse")

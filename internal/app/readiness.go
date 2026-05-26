@@ -333,8 +333,8 @@ func coreUXEvidenceCovered(normalized string) bool {
 	if screenProof {
 		return true
 	}
-	actionProof := hasAny(normalized, "create", "list", "send", "complete", "read", "write", "post", "get", "run", "execute", "start", "invoke", "primary flow", "primary command", "run command")
-	resultProof := hasAny(normalized, "verified", "passed", "proved", "proven", "works", "test", "httptest", "smoke", "exit code 0", "output matched")
+	actionProof := hasAny(normalized, "create", "list", "send", "complete", "read", "write", "post", "get", "run", "execute", "start", "invoke", "return", "returns", "returned", "print", "prints", "printed", "output", "primary flow", "primary command", "run command")
+	resultProof := hasAny(normalized, "verified", "passed", "proved", "proven", "works", "test", "httptest", "smoke", "exit code 0", "output matched", "expected output", "returned")
 	apiOrCLIProof := hasAny(normalized, "api", "endpoint", "cli", "command", "http", "route") &&
 		actionProof &&
 		resultProof
