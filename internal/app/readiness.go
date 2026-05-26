@@ -467,11 +467,6 @@ func inferReadinessEvidenceFromReferenceBenchmark(goalID string, lines []string)
 	return []readinessEvidenceRecord{readinessEvidenceRecordForAxis(goalID, "reference_benchmark", text)}
 }
 
-func referenceBenchmarkEvidenceCovered(normalized string) bool {
-	covered, _ := referenceBenchmarkEvidenceQuality(normalized)
-	return covered
-}
-
 func referenceBenchmarkEvidenceQuality(text string) (bool, string) {
 	fields := parseReferenceBenchmarkEvidence(text)
 	missing := referenceBenchmarkMissingRequirements(fields)
