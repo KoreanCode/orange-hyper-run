@@ -1392,9 +1392,103 @@ func TestAdvanceUpdatesPlanWhenGateReady(t *testing.T) {
 	assertContains(t, out.Stdout, "Stage advanced: Tiny MVP -> Usable MVP")
 	assertContains(t, out.Stdout, "Updated: plan.md Current Stage -> Usable MVP")
 	assertContains(t, out.Stdout, "Readiness gate: Usable MVP -> Beta")
+	assertContains(t, out.Stdout, "Next packet plan: .hyper/next-packet.md")
 	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Current Stage\n\nUsable MVP")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"stage": "Usable MVP"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl")), `"stage_advanced"`)
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: run")
+	assertNotContains(t, nextPlan, "Command: hyper advance")
+}
+
+func TestAdvanceStopsAutoPlanWhenRunUntilTargetReached(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
+		"# Product Plan",
+		"",
+		"## Product",
+		"",
+		"Local Clip Shelf",
+		"",
+		"## Target Users",
+		"",
+		"Developers and operators",
+		"",
+		"## MVP",
+		"",
+		"Save, search, pin, and restart clipboard snippets.",
+		"",
+		"## Current Stage",
+		"",
+		"Beta",
+		"",
+		"## Build Style",
+		"",
+		"Native desktop helper with local SQLite storage.",
+		"",
+		"## Success Criteria",
+		"",
+		"Primary flow validates with realistic data and local privacy boundaries.",
+	}, "\n"))
+
+	out, err := runCLI(args("run", "--auto", "--until", "service-quality", "Prepare service quality"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("auto run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), strings.Join([]string{
+		"# GOAL-0001 Evidence",
+		"",
+		"## Validation",
+		"",
+		"`clip-shelf smoke` passed for save, search, pin, and restart using realistic command text.",
+		"",
+		"## Readiness Evidence",
+		"",
+		"Validation coverage: `clip-shelf smoke` passed and is repeatable for save, search, pin, and restart.",
+		"Security baseline: Privacy boundary verified: clipboard content stays local in SQLite, no cloud sync or telemetry, and sensitive text can be deleted locally.",
+		"Deployment readiness: Packaged helper binary smoke passed outside the development command path.",
+		"Operations and docs: README documents setup, local data path, delete path, rollback, and smoke command.",
+		"",
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Local clipboard history helper.",
+		"- References: Raycast Clipboard History, Alfred Clipboard History, Maccy.",
+		"- Baseline expectations: Save recent text, search quickly, pin snippets, and keep local privacy boundaries clear.",
+		"- Current comparison: below baseline = none for command-helper path; meets baseline = save/search/pin/restart and privacy proof; above baseline = operator command-snippet smoke.",
+		"- Below-baseline gaps: No critical below-baseline gap for the command-helper path.",
+		"- Above-baseline strength: Restart persistence and privacy proof are explicit.",
+		"- Decision: Service Quality is allowed for the helper command path.",
+		"",
+		"## Changed Files",
+		"",
+		"Prototype helper behavior and docs.",
+		"",
+		"## Blocker",
+		"",
+		"None blocking.",
+	}, "\n"))
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	advance, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("advance failed: %v", err)
+	}
+	assertContains(t, advance.Stdout, "Stage advanced: Beta -> Service Quality")
+	assertContains(t, advance.Stdout, "Next action: hyper status --short")
+	assertContains(t, advance.Stdout, "Why: Auto target Service Quality is reached; review status before choosing a new target or manual next run.")
+	if strings.Count(advance.Stdout, "  hyper status --short") != 1 {
+		t.Fatalf("expected one status next command, got:\n%s", advance.Stdout)
+	}
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Mode: auto until Service Quality")
+	assertContains(t, nextPlan, "Action: stop")
+	assertContains(t, nextPlan, "Command: hyper status --short")
+	assertContains(t, nextPlan, "Reason: Auto target Service Quality is reached; review status before choosing a new target or manual next run.")
+	assertNotContains(t, nextPlan, "Command: hyper advance")
 }
 
 func TestAdvanceRejectsWhenGateNotReady(t *testing.T) {

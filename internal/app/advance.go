@@ -113,6 +113,11 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		}
 	}
 
+	nextPlan, nextErr := writeNextPacketPlan(root, state, consistency.Derived, updatedReadiness, growth)
+	if nextErr != nil {
+		return commandOutput{}, nextErr
+	}
+
 	lines := []string{
 		"Hyper Run Stage Advance",
 		"",
@@ -125,14 +130,15 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	lines = append(lines,
 		"Readiness gate: "+readinessGateSummary(updatedReadiness),
 		"Readiness pressure: "+readinessPressureSummary(updatedReadiness),
+		"Next action: "+nextPlan.Command,
+		"Why: "+nextPlan.Reason,
+		"Next packet plan: "+filepath.Join(hyperDir, "next-packet.md"),
 		"",
 		"Next:",
-		"  hyper status",
+		"  "+nextPlan.Command,
 	)
-	if updatedReadiness.NextPressure.RecommendedGoal != "" {
-		lines = append(lines, "  hyper run \""+compactText(updatedReadiness.NextPressure.RecommendedGoal, 120)+"\"")
-	} else {
-		lines = append(lines, "  hyper run [next focus]")
+	if nextPlan.Command != "hyper status --short" {
+		lines = append(lines, "  hyper status --short")
 	}
 	lines = append(lines, "")
 	return stdout(strings.Join(lines, "\n")), nil

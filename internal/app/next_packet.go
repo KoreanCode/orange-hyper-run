@@ -18,7 +18,7 @@ func buildNextPacketPlan(state projectState, derived goalState, readiness readin
 		return plannedNextPacket{
 			Action:   "stop",
 			Command:  "hyper status --short",
-			Reason:   "Run-until target reached: " + state.RunUntil,
+			Reason:   firstNonBlank(statusActionReason(state, derived, readiness, growth), "Run-until target reached: "+state.RunUntil),
 			Terminal: true,
 		}
 	}
