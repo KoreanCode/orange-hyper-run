@@ -441,6 +441,7 @@ func TestStatusDoesNotReportSurfaceGapWhenCoreUXIsNotRequired(t *testing.T) {
 	assertContains(t, short, "Proof: functional covered, operational covered")
 	assertNotContains(t, short, "surface emerging")
 	assertNotContains(t, short, "surface proof for the primary user flow")
+	assertNotContains(t, short, "Gap:")
 }
 
 func TestStatusDoesNotShowFutureReferenceBenchmarkBeforeRequired(t *testing.T) {

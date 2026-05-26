@@ -219,6 +219,9 @@ func nextProofGap(readiness readinessState) string {
 	if readiness.Version == 0 {
 		return "not selected"
 	}
+	if readiness.StageGate.CurrentStage == readiness.StageGate.NextStage && readiness.StageGate.Status == "ready" {
+		return "none"
+	}
 	switch {
 	case readinessAxisRequired(readiness, "core_ux") && proofAxisStatus(readiness, "core_ux") != "covered":
 		return "surface proof for the primary user flow"
