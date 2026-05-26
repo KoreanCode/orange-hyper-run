@@ -998,7 +998,7 @@ func retiredGrowthCandidates(root string, previous growthState, current []growth
 func harnessPressureReady(pressures []growthPressure) bool {
 	stable := 0
 	hasValidation := false
-	hasNonValidationStructure := false
+	nonValidationStructures := 0
 	for _, pressure := range pressures {
 		if pressure.GoalCount < growthRepeatedSignalGoals {
 			continue
@@ -1007,13 +1007,13 @@ func harnessPressureReady(pressures []growthPressure) bool {
 			hasValidation = true
 		}
 		if pressure.Effect == "implementation" || pressure.Effect == "work_boundary" {
-			hasNonValidationStructure = true
+			nonValidationStructures++
 		}
 		if pressure.Effect == "validation" || pressure.Effect == "implementation" || pressure.Effect == "work_boundary" {
 			stable++
 		}
 	}
-	return hasValidation && hasNonValidationStructure && stable >= growthHarnessStablePressures
+	return hasValidation && nonValidationStructures >= 2 && stable >= growthHarnessStablePressures
 }
 
 func aggregateHarnessPressure(pressures []growthPressure) growthPressure {

@@ -1573,6 +1573,18 @@ func TestHarnessCandidateEvidenceCountUsesStablePressureCount(t *testing.T) {
 	}
 }
 
+func TestHarnessCandidateNeedsMultipleNonValidationStructures(t *testing.T) {
+	pressures := []growthPressure{
+		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0001", "GOAL-0002"}},
+		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0001", "GOAL-0002"}},
+		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0001", "GOAL-0002"}},
+		{Effect: "work_boundary", GoalCount: 2, Sources: []string{"GOAL-0001", "GOAL-0002"}},
+	}
+	if harnessPressureReady(pressures) {
+		t.Fatal("single repeated decision plus repeated validation must not create a harness candidate")
+	}
+}
+
 func TestHarnessCandidateRequiresEnoughSourceGoalsForActivation(t *testing.T) {
 	twoGoalPressure := aggregateHarnessPressure([]growthPressure{
 		{Effect: "validation", GoalCount: 2, Sources: []string{"GOAL-0003", "GOAL-0004"}},
