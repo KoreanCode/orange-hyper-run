@@ -490,8 +490,16 @@ func runtimeObjective(focus string, plan map[string]string, stage, product strin
 
 func broadRuntimeFocus(focus string) bool {
 	normalized := normalizeLabel(focus)
+	fields := strings.Fields(normalized)
+	if len(fields) > 5 && !hasAny(normalized, "실서비스", "서비스화") {
+		return false
+	}
+	serviceAction := hasAny(normalized, "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better")
+	if strings.Contains(normalized, "service") && !hasAny(normalized, "service quality", "service-level", "service ready", "service-ready", "production service") && !serviceAction {
+		return false
+	}
 	return hasAny(normalized,
-		"service", "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better",
+		"service quality", "service-level", "service ready", "service-ready", "production service", "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better",
 		"실서비스", "서비스", "품질", "고도화", "업그레이드", "완성", "개선", "베타", "프로덕션",
 	)
 }
@@ -1110,7 +1118,7 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 }
 
 func buildEvidenceDoc(goalID, stage string, readiness readinessState, growth growthState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
 }
 
 func activeCapabilityEvidenceTemplate(growth growthState) string {

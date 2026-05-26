@@ -333,9 +333,11 @@ func coreUXEvidenceCovered(normalized string) bool {
 	if screenProof {
 		return true
 	}
+	actionProof := hasAny(normalized, "create", "list", "send", "complete", "read", "write", "post", "get", "run", "execute", "start", "invoke", "primary flow", "primary command", "run command")
+	resultProof := hasAny(normalized, "verified", "passed", "proved", "proven", "works", "test", "httptest", "smoke", "exit code 0", "output matched")
 	apiOrCLIProof := hasAny(normalized, "api", "endpoint", "cli", "command", "http", "route") &&
-		hasAny(normalized, "create", "list", "send", "complete", "read", "write", "post", "get", "primary flow") &&
-		hasAny(normalized, "verified", "passed", "proved", "proven", "works", "test", "httptest", "smoke")
+		actionProof &&
+		resultProof
 	return apiOrCLIProof
 }
 
@@ -476,7 +478,7 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage", "json", ".json", ".txt", "file", "disk", "filesystem"),
 			"MySQL, SQLite, DB, file, JSON, reload, restart, storage, or database evidence"
 	case "error_handling":
-		return hasAny(normalized, "empty", "error", "loading", "fallback", "failure", "edge", "missing argument", "missing input", "invalid input", "invalid command", "unknown command", "required field", "required input") &&
+		return hasAny(normalized, "empty", "error", "loading", "fallback", "failure", "edge", "missing argument", "missing input", "missing state", "missing file", "missing data", "corrupt", "corrupted", "invalid input", "invalid command", "unknown command", "required field", "required input") &&
 				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works", "rejected", "proves", "proved", "passed"),
 			"empty, loading, error, failure, fallback, or edge-state evidence"
 	case "validation_coverage":

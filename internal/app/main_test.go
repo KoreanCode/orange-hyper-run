@@ -2148,12 +2148,26 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if apiUX.Status != "covered" {
 		t.Fatalf("expected API UX evidence to be covered, got %+v", apiUX)
 	}
+	commandUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: CLI smoke passed for the primary run command and verified the expected output.", defs)
+	if !ok {
+		t.Fatal("expected command UX evidence to parse")
+	}
+	if commandUX.Status != "covered" {
+		t.Fatalf("expected command UX evidence to be covered, got %+v", commandUX)
+	}
 	apiProduct, ok := parseReadinessEvidenceLine("GOAL-0001", "Product completeness: A tiny notes API now has a measurable create-and-list flow: `POST /notes` creates one note and `GET /notes` returns it.", defs)
 	if !ok {
 		t.Fatal("expected API product evidence to parse")
 	}
 	if apiProduct.Status != "covered" {
 		t.Fatalf("expected API product evidence to be covered, got %+v", apiProduct)
+	}
+	missingState, ok := parseReadinessEvidenceLine("GOAL-0001", "Error handling: Missing state is handled by creating the state file and the recovery command passed.", defs)
+	if !ok {
+		t.Fatal("expected missing-state error evidence to parse")
+	}
+	if missingState.Status != "covered" {
+		t.Fatalf("expected missing-state evidence to be covered, got %+v", missingState)
 	}
 	inferred := inferReadinessEvidenceFromValidationLine("GOAL-0001", "`npm run check` passed.")
 	if len(inferred) != 1 || inferred[0].Axis != "validation_coverage" || inferred[0].Status != "covered" {
@@ -2541,6 +2555,20 @@ func TestBroadFocusIsRewrittenThroughReadinessPressure(t *testing.T) {
 	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
 	assertContains(t, goal, "Translate `실서비스 수준으로 업그레이드` into the smallest Tiny MVP step")
 	assertContains(t, goal, "- Current focus: 실서비스 수준으로 업그레이드")
+}
+
+func TestSpecificServiceFocusIsNotOverRewritten(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+
+	focus := "Reduce service handoff friction without adding a harness"
+	if _, err := runCLI(args("run", focus), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
+	assertContains(t, goal, "## Current Episode\n\n"+focus)
+	assertNotContains(t, goal, "Translate `"+focus+"`")
 }
 
 func TestStageAdvancementCandidateWhenGateReady(t *testing.T) {
@@ -3253,6 +3281,7 @@ func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T
 	assertContains(t, betaEvidence, "References: Pending")
 	assertContains(t, betaEvidence, "Below-baseline gaps")
 	assertContains(t, betaEvidence, "Above-baseline strength")
+	assertContains(t, betaEvidence, "- Decision: Pending. State whether Service Quality is allowed or blocked, and what the next pressure should be.\n\n## Active Capability Evidence")
 
 	serviceEvidence := buildEvidenceDoc("GOAL-0001", "Service Quality", readinessState{}, growthState{})
 	assertContains(t, serviceEvidence, "## Reference Benchmark Evidence")

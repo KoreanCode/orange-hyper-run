@@ -81,7 +81,30 @@ func readinessFinishGateFinding(state projectState, evidenceText string, readine
 			return ""
 		}
 	}
-	return "Add covered readiness evidence for `" + axisName + "` or record a real blocker."
+	return "Add covered readiness evidence for `" + axisName + "`" + readinessFinishGateHint(axis) + " or record a real blocker."
+}
+
+func readinessFinishGateHint(axis string) string {
+	switch axis {
+	case "core_ux":
+		return " (for CLI work, use evidence like `Core UX: CLI smoke passed for the primary run command and verified the expected output.`)"
+	case "validation_coverage":
+		return " (include the exact command and a passed, verified, or repeatable result)"
+	case "error_handling":
+		return " (name the empty, error, fallback, or edge state and how it was verified)"
+	case "security_baseline":
+		return " (name the security/privacy boundary and whether it was documented, verified, or implemented)"
+	case "deployment_readiness":
+		return " (name the build, artifact, URL, release, or isolated run path that was verified)"
+	case "operations_docs":
+		return " (name the README, runbook, setup, rollback, or smoke path that was documented)"
+	case "reference_benchmark":
+		return " (include category, 3-5 references, current comparison, baseline gaps, and decision)"
+	case "sustained_quality":
+		return " (name the active validator, active harness, or equivalent reusable quality structure)"
+	default:
+		return ""
+	}
 }
 
 func activeCapabilityFinishGateFinding(root, evidenceText string) string {
