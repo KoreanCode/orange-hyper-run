@@ -194,15 +194,15 @@ hyper version
 
 ### Windows
 
-Download the Windows x64 binary with PowerShell:
+Install the latest Windows x64 binary with PowerShell:
 
 ```powershell
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.local\bin" | Out-Null
-Invoke-WebRequest -Uri "https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-windows-amd64.exe" -OutFile "$env:USERPROFILE\.local\bin\hyper.exe"
-& "$env:USERPROFILE\.local\bin\hyper.exe" version
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/KoreanCode/orange-hyper-run/main/install.ps1 | iex"
 ```
 
-Add it to the user `PATH`:
+The PowerShell installer downloads `checksums.txt` and verifies the binary with SHA256 before moving it into place.
+
+If the installer warns that `~\.local\bin` is not on `PATH`, add it:
 
 ```powershell
 [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:USERPROFILE\.local\bin", "User")
@@ -213,8 +213,6 @@ Open a new terminal, then check:
 ```powershell
 hyper version
 ```
-
-The Windows binary is built and tested in CI, but there is no PowerShell installer script yet.
 
 Other release binaries:
 
@@ -238,6 +236,7 @@ hyper update
 ```
 
 This downloads the latest GitHub release. If Hyper Run cannot replace the current executable, it installs to `~/.local/bin/hyper`.
+For GitHub release updates, Hyper Run downloads `checksums.txt` and verifies the binary before replacing the executable.
 
 To update from a fork:
 

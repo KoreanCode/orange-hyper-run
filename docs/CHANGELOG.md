@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Verify GitHub release checksums during `hyper update`.
+- Add a Windows PowerShell installer with SHA256 checksum verification.
+
 ## v0.5.1 - 2026-05-22
 
 - Split the CLI entrypoint from the application runtime package.

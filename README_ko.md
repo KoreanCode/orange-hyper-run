@@ -194,15 +194,15 @@ hyper version
 
 ### Windows
 
-PowerShell에서 Windows x64 binary를 내려받습니다.
+PowerShell에서 최신 Windows x64 binary를 설치합니다.
 
 ```powershell
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.local\bin" | Out-Null
-Invoke-WebRequest -Uri "https://github.com/KoreanCode/orange-hyper-run/releases/latest/download/hyper-windows-amd64.exe" -OutFile "$env:USERPROFILE\.local\bin\hyper.exe"
-& "$env:USERPROFILE\.local\bin\hyper.exe" version
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/KoreanCode/orange-hyper-run/main/install.ps1 | iex"
 ```
 
-사용자 `PATH`에 추가합니다.
+PowerShell installer는 `checksums.txt`를 함께 내려받고, binary를 옮기기 전에 SHA256 checksum을 검증합니다.
+
+installer가 `~\.local\bin`이 `PATH`에 없다고 경고하면 추가합니다.
 
 ```powershell
 [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:USERPROFILE\.local\bin", "User")
@@ -213,8 +213,6 @@ Invoke-WebRequest -Uri "https://github.com/KoreanCode/orange-hyper-run/releases/
 ```powershell
 hyper version
 ```
-
-Windows binary는 CI에서 빌드/테스트하지만, 아직 PowerShell installer script는 없습니다.
 
 다른 release binary:
 
@@ -238,6 +236,7 @@ hyper update
 ```
 
 최신 GitHub release를 내려받습니다. 현재 실행 파일을 교체할 수 없으면 `~/.local/bin/hyper`에 설치합니다.
+GitHub release에서 업데이트할 때 Hyper Run은 `checksums.txt`를 내려받고 binary를 검증한 뒤 실행 파일을 교체합니다.
 
 fork에서 업데이트하려면:
 

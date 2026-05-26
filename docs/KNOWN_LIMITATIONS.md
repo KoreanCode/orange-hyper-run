@@ -18,14 +18,12 @@ Hyper Run is usable, but some parts are still early. This document is intentiona
 - Capability candidates are generated from repeated evidence, but activation policy is still conservative.
 - Package boundaries are still mostly inside `cmd/hyper`; this is acceptable for the current CLI size, but should be split later.
 - Existing `.hyper/` projects may need `hyper migrate` after larger growth/readiness changes.
-- Windows release binaries are built and CI-tested, but there is no PowerShell installer script yet.
 
 ## Security And Supply Chain
 
 - Release builds publish checksums.
-- The installer verifies checksums for GitHub release downloads.
+- The macOS/Linux installer, Windows PowerShell installer, and `hyper update` verify checksums for GitHub release downloads.
 - Release binaries are not signed yet. Cosign signing is a future step.
-- `hyper update` should gain checksum verification next so it matches `install.sh`.
 
 ## Agent Behavior
 
