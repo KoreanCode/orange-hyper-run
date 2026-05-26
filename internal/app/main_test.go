@@ -2,6 +2,7 @@ package app
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,6 +120,8 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, goal, "## Stage Runtime Behavior")
 	assertContains(t, goal, "## Active Capabilities")
 	assertContains(t, goal, "## Proof Contract")
+	assertContains(t, goal, "## Execution Contract")
+	assertContains(t, goal, "## Done Checklist")
 	assertContains(t, goal, "Functional Proof")
 	assertContains(t, goal, "Surface Proof")
 	assertContains(t, goal, "Operational Proof")
@@ -134,8 +137,10 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, evidence, "## Active Capability Evidence")
 	assertContains(t, evidence, "## Decisions")
 	assertContains(t, evidence, "## Reusable Patterns")
+	assertContains(t, evidence, "## Learn Quality Gate")
 	next := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"))
 	assertContains(t, next, "## Learn Notes")
+	assertContains(t, next, "Write only durable signals")
 	assertContains(t, next, "- Decision: Pending.")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "RUN-0001.jsonl")), "goal_created")
 }
@@ -710,6 +715,46 @@ func TestMigrateRetiresLegacyNoIssueGrowthCandidates(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "retired", "validator", "preflight-none-in-this-run.md")), "Status: retired")
 	if exists(filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "preflight-none-in-this-run.md")) {
 		t.Fatal("expected no-op preflight candidate to move out of candidates")
+	}
+}
+
+func TestMigrateRefreshesLegacyMemoryQualityFixture(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+	for _, item := range readLegacyMemoryFixture(t, "legacy-quality-gate") {
+		_, err := db.Exec(`insert into memories (project_id, kind, text, source_event_ids, confidence, quality, created_at, last_used_at, stale_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`, "default", item.Kind, item.Text, nil, item.Confidence, item.Quality, nowISO(), nil, nil)
+		if err != nil {
+			t.Fatalf("insert fixture memory failed: %v", err)
+		}
+	}
+
+	out, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Learn quality gate: refreshed 3 legacy memory quality value(s)")
+
+	state := readGrowthStateIfExists(root)
+	if visibleGrowthPressureCount(state.Pressures) != 1 {
+		t.Fatalf("expected one visible pressure after quality-gate migration, got %+v", state.Pressures)
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), "Run go test before every runtime packet handoff")
+	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), "None in this run")
+
+	var blank int
+	if err := db.QueryRow(`select count(*) from memories where quality is null or trim(quality) = ''`).Scan(&blank); err != nil {
+		t.Fatalf("count blank qualities failed: %v", err)
+	}
+	if blank != 0 {
+		t.Fatalf("expected migration to fill legacy memory quality values, got %d blank", blank)
 	}
 }
 
@@ -1359,6 +1404,12 @@ func TestUpdateURL(t *testing.T) {
 	if !strings.Contains(request.ChecksumURL, "https://github.com/Example/fork/releases/latest/download/checksums.txt") {
 		t.Fatalf("bad github checksum url: %s", request.ChecksumURL)
 	}
+	if !strings.Contains(request.SignatureURL, "https://github.com/Example/fork/releases/latest/download/") || !strings.HasSuffix(request.SignatureURL, ".sigstore.json") {
+		t.Fatalf("bad github signature url: %s", request.SignatureURL)
+	}
+	if !strings.Contains(request.SignatureIdentityRegexp, "https://github.com/Example/fork/.github/workflows/release.yml@refs/tags/v.*") {
+		t.Fatalf("bad github signature identity: %s", request.SignatureIdentityRegexp)
+	}
 	if request.AssetName != updateAssetName() {
 		t.Fatalf("bad github asset name: %s", request.AssetName)
 	}
@@ -1372,6 +1423,9 @@ func TestUpdateURL(t *testing.T) {
 	}
 	if explicit.ChecksumURL != "https://example.com/checksums.txt" {
 		t.Fatalf("bad explicit checksum url: %s", explicit.ChecksumURL)
+	}
+	if explicit.SignatureURL != "" {
+		t.Fatalf("explicit URL should not infer signature URL: %s", explicit.SignatureURL)
 	}
 	out, err := runCLI(args("update", "https://example.com/hyper"), testRoot(t.TempDir()), fakeUpdater{})
 	if err != nil {
@@ -1458,4 +1512,24 @@ func insertRawTestMemory(t *testing.T, db *sql.DB, kind, text, quality string) {
 	if err != nil {
 		t.Fatalf("insert raw memory failed: %v", err)
 	}
+}
+
+type legacyMemoryFixture struct {
+	Kind       string  `json:"kind"`
+	Text       string  `json:"text"`
+	Confidence float64 `json:"confidence"`
+	Quality    string  `json:"quality"`
+}
+
+func readLegacyMemoryFixture(t *testing.T, name string) []legacyMemoryFixture {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("testdata", "migrations", name, "memories.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var items []legacyMemoryFixture
+	if err := json.Unmarshal(body, &items); err != nil {
+		t.Fatal(err)
+	}
+	return items
 }

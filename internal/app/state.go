@@ -54,6 +54,9 @@ func formatAutoLearn(result learnResult) string {
 
 func formatMemoryQuality(result learnResult) string {
 	if len(result.Quality) == 0 {
+		if rejected := formatRejectedMemoryQuality(result); rejected != "none" {
+			return "rejected " + rejected
+		}
 		return "none"
 	}
 	order := []string{"durable", "weak", "passive", "one_off"}
@@ -61,6 +64,29 @@ func formatMemoryQuality(result learnResult) string {
 	for _, key := range order {
 		if result.Quality[key] > 0 {
 			parts = append(parts, fmt.Sprintf("%s %d", key, result.Quality[key]))
+		}
+	}
+	if len(parts) == 0 {
+		if rejected := formatRejectedMemoryQuality(result); rejected != "none" {
+			return "rejected " + rejected
+		}
+		return "none"
+	}
+	if rejected := formatRejectedMemoryQuality(result); rejected != "none" {
+		parts = append(parts, "rejected "+rejected)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatRejectedMemoryQuality(result learnResult) string {
+	if len(result.Rejected) == 0 {
+		return "none"
+	}
+	order := []string{"noisy", "passive", "one_off", "invalid"}
+	parts := []string{}
+	for _, key := range order {
+		if result.Rejected[key] > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d", key, result.Rejected[key]))
 		}
 	}
 	if len(parts) == 0 {

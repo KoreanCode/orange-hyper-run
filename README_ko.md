@@ -166,6 +166,8 @@ curl -fsSL https://raw.githubusercontent.com/KoreanCode/orange-hyper-run/main/in
 
 GitHub release에서 설치할 때 installer는 `checksums.txt`를 함께 내려받고, binary를 옮기기 전에 SHA256 checksum을 검증합니다.
 
+Release asset에는 cosign keyless signature bundle도 포함됩니다. `cosign`이 설치되어 있으면 installer가 checksum 검증 후 signature도 검증합니다. signature 검증을 필수로 만들려면 `HYPER_RUN_VERIFY_SIGNATURE=required`를 설정합니다.
+
 설치 확인:
 
 ```bash
@@ -201,6 +203,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 ```
 
 PowerShell installer는 `checksums.txt`를 함께 내려받고, binary를 옮기기 전에 SHA256 checksum을 검증합니다.
+
+Release asset에는 cosign keyless signature bundle도 포함됩니다. `cosign`이 설치되어 있으면 installer가 checksum 검증 후 signature도 검증합니다. signature 검증을 필수로 만들려면 `$env:HYPER_RUN_VERIFY_SIGNATURE="required"`를 설정합니다.
 
 installer가 `~\.local\bin`이 `PATH`에 없다고 경고하면 추가합니다.
 

@@ -16,14 +16,15 @@ Hyper Run is usable, but some parts are still early. This document is intentiona
 
 - Growth pressure classification is heuristic. It is useful, but not a formal semantic model.
 - Capability candidates are generated from repeated evidence, but activation policy is still conservative.
-- Package boundaries are still mostly inside `cmd/hyper`; this is acceptable for the current CLI size, but should be split later.
+- Package boundaries are still mostly inside `internal/app`; this is acceptable for the current CLI size, but should be split later.
 - Existing `.hyper/` projects may need `hyper migrate` after larger growth/readiness changes.
 
 ## Security And Supply Chain
 
 - Release builds publish checksums.
 - The macOS/Linux installer, Windows PowerShell installer, and `hyper update` verify checksums for GitHub release downloads.
-- Release binaries are not signed yet. Cosign signing is a future step.
+- Release builds publish cosign keyless signature bundles. Installers and `hyper update` verify them when `cosign` is available, and can require them with `HYPER_RUN_VERIFY_SIGNATURE=required`.
+- Signature verification depends on the local `cosign` executable; checksum verification remains the default baseline.
 
 ## Agent Behavior
 

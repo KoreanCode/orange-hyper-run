@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -22,6 +23,11 @@ func updateHyper(source string, updater updater) (commandOutput, *hyperError) {
 	}
 	if result.ChecksumVerified {
 		stdoutText += "Verified checksum: " + result.ChecksumAsset + "\n"
+	}
+	if result.SignatureVerified {
+		stdoutText += "Verified signature: " + result.SignatureAsset + "\n"
+	} else if result.SignatureSkipped != "" {
+		stdoutText += "Signature verification: skipped (" + result.SignatureSkipped + ")\n"
 	}
 	if result.Target != "" {
 		stdoutText += "Installed executable: " + result.Target + "\n"
@@ -49,17 +55,23 @@ func resolveUpdateRequest(source string) updateRequest {
 	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
 		asset := assetNameFromDownloadURL(source)
 		return updateRequest{
-			DownloadURL: source,
-			ChecksumURL: strings.TrimSpace(os.Getenv("HYPER_RUN_CHECKSUM_URL")),
-			AssetName:   asset,
+			DownloadURL:               source,
+			ChecksumURL:               strings.TrimSpace(os.Getenv("HYPER_RUN_CHECKSUM_URL")),
+			SignatureURL:              strings.TrimSpace(os.Getenv("HYPER_RUN_SIGNATURE_URL")),
+			SignatureIdentityRegexp:   strings.TrimSpace(os.Getenv("HYPER_RUN_COSIGN_IDENTITY_REGEXP")),
+			SignatureCertificateOIDCI: signatureOIDCIssuer(),
+			AssetName:                 asset,
 		}
 	}
 	source = strings.TrimPrefix(source, "github:")
 	asset := updateAssetName()
 	return updateRequest{
-		DownloadURL: fmt.Sprintf("https://github.com/%s/releases/latest/download/%s", source, asset),
-		ChecksumURL: fmt.Sprintf("https://github.com/%s/releases/latest/download/checksums.txt", source),
-		AssetName:   asset,
+		DownloadURL:               fmt.Sprintf("https://github.com/%s/releases/latest/download/%s", source, asset),
+		ChecksumURL:               fmt.Sprintf("https://github.com/%s/releases/latest/download/checksums.txt", source),
+		SignatureURL:              fmt.Sprintf("https://github.com/%s/releases/latest/download/%s.sigstore.json", source, asset),
+		SignatureIdentityRegexp:   firstNonBlank(strings.TrimSpace(os.Getenv("HYPER_RUN_COSIGN_IDENTITY_REGEXP")), fmt.Sprintf("https://github.com/%s/.github/workflows/release.yml@refs/tags/v.*", source)),
+		SignatureCertificateOIDCI: signatureOIDCIssuer(),
+		AssetName:                 asset,
 	}
 }
 
@@ -82,18 +94,24 @@ type updater interface {
 }
 
 type updateRequest struct {
-	DownloadURL string
-	ChecksumURL string
-	AssetName   string
+	DownloadURL               string
+	ChecksumURL               string
+	SignatureURL              string
+	SignatureIdentityRegexp   string
+	SignatureCertificateOIDCI string
+	AssetName                 string
 }
 
 type updateResult struct {
-	Target           string
-	FallbackUsed     bool
-	FallbackReason   string
-	Warning          string
-	ChecksumVerified bool
-	ChecksumAsset    string
+	Target            string
+	FallbackUsed      bool
+	FallbackReason    string
+	Warning           string
+	ChecksumVerified  bool
+	ChecksumAsset     string
+	SignatureVerified bool
+	SignatureAsset    string
+	SignatureSkipped  string
 }
 
 type realUpdater struct{}
@@ -133,12 +151,36 @@ func (realUpdater) update(request updateRequest) (updateResult, error) {
 		}
 		checksumVerified = true
 	}
+	signatureVerified := false
+	signatureSkipped := ""
+	if request.SignatureURL == "" && signatureVerificationRequired() {
+		return updateResult{}, fmt.Errorf("signature verification requires a signature URL; set HYPER_RUN_SIGNATURE_URL for custom update URLs")
+	}
+	if request.SignatureURL != "" {
+		verify, skip, err := signatureVerificationPlan()
+		if err != nil {
+			return updateResult{}, err
+		}
+		if verify {
+			if request.SignatureIdentityRegexp == "" {
+				return updateResult{}, fmt.Errorf("signature verification requires HYPER_RUN_COSIGN_IDENTITY_REGEXP for custom update URLs")
+			}
+			verified, skip, err := verifyRemoteSignature(downloadPath, request.SignatureURL, request.SignatureIdentityRegexp, request.SignatureCertificateOIDCI)
+			if err != nil {
+				return updateResult{}, err
+			}
+			signatureVerified = verified
+			signatureSkipped = skip
+		} else {
+			signatureSkipped = skip
+		}
+	}
 
 	currentInstallErr := ""
 	current, err := os.Executable()
 	if err == nil && strings.TrimSpace(current) != "" {
 		if err := installDownloadedBinary(downloadPath, current); err == nil {
-			return updateResult{Target: current, ChecksumVerified: checksumVerified, ChecksumAsset: request.AssetName}, nil
+			return updateResult{Target: current, ChecksumVerified: checksumVerified, ChecksumAsset: request.AssetName, SignatureVerified: signatureVerified, SignatureAsset: request.AssetName + ".sigstore.json", SignatureSkipped: signatureSkipped}, nil
 		} else {
 			currentInstallErr = err.Error()
 		}
@@ -148,11 +190,73 @@ func (realUpdater) update(request updateRequest) (updateResult, error) {
 	if err := installDownloadedBinary(downloadPath, fallback); err != nil {
 		return updateResult{}, fmt.Errorf("could not install fallback %s: %s", fallback, err.Error())
 	}
-	result := updateResult{Target: fallback, FallbackUsed: true, FallbackReason: currentInstallErr, ChecksumVerified: checksumVerified, ChecksumAsset: request.AssetName}
+	result := updateResult{Target: fallback, FallbackUsed: true, FallbackReason: currentInstallErr, ChecksumVerified: checksumVerified, ChecksumAsset: request.AssetName, SignatureVerified: signatureVerified, SignatureAsset: request.AssetName + ".sigstore.json", SignatureSkipped: signatureSkipped}
 	if !pathContains(filepath.Dir(fallback)) {
 		result.Warning = filepath.Dir(fallback) + " is not on PATH"
 	}
 	return result, nil
+}
+
+func signatureVerificationPlan() (bool, string, error) {
+	if _, err := exec.LookPath("cosign"); err == nil {
+		return true, "", nil
+	}
+	if signatureVerificationRequired() {
+		return false, "", fmt.Errorf("signature verification requires cosign; install cosign or unset HYPER_RUN_VERIFY_SIGNATURE")
+	}
+	return false, "cosign not found; checksum still verified", nil
+}
+
+func signatureVerificationRequired() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HYPER_RUN_VERIFY_SIGNATURE"))) {
+	case "1", "true", "required", "always":
+		return true
+	default:
+		return false
+	}
+}
+
+func signatureOIDCIssuer() string {
+	return firstNonBlank(strings.TrimSpace(os.Getenv("HYPER_RUN_COSIGN_OIDC_ISSUER")), "https://token.actions.githubusercontent.com")
+}
+
+func verifyRemoteSignature(path, signatureURL, identityRegexp, oidcIssuer string) (bool, string, error) {
+	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("hyper-signature-%d.sigstore.json", os.Getpid()))
+	defer os.Remove(bundlePath)
+	response, err := http.Get(signatureURL)
+	if err != nil {
+		return false, "", err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		if signatureVerificationRequired() {
+			return false, "", fmt.Errorf("signature download returned %s", response.Status)
+		}
+		return false, "signature bundle not found; checksum still verified", nil
+	}
+	file, err := os.OpenFile(bundlePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		return false, "", err
+	}
+	if _, err := io.Copy(file, response.Body); err != nil {
+		file.Close()
+		return false, "", err
+	}
+	if err := file.Close(); err != nil {
+		return false, "", err
+	}
+	output, err := exec.Command(
+		"cosign",
+		"verify-blob",
+		"--bundle", bundlePath,
+		"--certificate-identity-regexp", identityRegexp,
+		"--certificate-oidc-issuer", oidcIssuer,
+		path,
+	).CombinedOutput()
+	if err != nil {
+		return false, "", fmt.Errorf("signature verification failed: %s", strings.TrimSpace(string(output)))
+	}
+	return true, "", nil
 }
 
 func verifyRemoteChecksum(path, checksumURL, asset string) error {

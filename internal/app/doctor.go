@@ -64,6 +64,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 
 	checks = append(checks, doctorStateChecks(root)...)
 	checks = append(checks, doctorGrowthMigrationCheck(root))
+	checks = append(checks, doctorSignatureCheck())
 	checks = append(checks, doctorDBCheck(root))
 	checks = append(checks, doctorCodexChecks(root)...)
 
@@ -77,6 +78,16 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	lines = append(lines, "", doctorSummary(checks), "")
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func doctorSignatureCheck() doctorCheck {
+	if _, err := exec.LookPath("cosign"); err == nil {
+		return doctorCheck{"Signature verification", "OK", "cosign available for release signature checks"}
+	}
+	if signatureVerificationRequired() {
+		return doctorCheck{"Signature verification", "FAIL", "HYPER_RUN_VERIFY_SIGNATURE requires cosign, but cosign is not on PATH"}
+	}
+	return doctorCheck{"Signature verification", "OK", "optional cosign not installed; checksum verification remains active"}
 }
 
 func missingPlanFields(plan map[string]string) []string {

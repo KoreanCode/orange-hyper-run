@@ -26,18 +26,24 @@ case "$repo" in
   http://*|https://*)
     url="$repo"
     checksum_url="${HYPER_RUN_CHECKSUM_URL:-}"
+    signature_url="${HYPER_RUN_SIGNATURE_URL:-}"
+    identity_regexp="${HYPER_RUN_COSIGN_IDENTITY_REGEXP:-}"
     ;;
   github:*)
     release_repo="${repo#github:}"
     asset="hyper-$os-$arch"
     url="https://github.com/$release_repo/releases/latest/download/$asset"
     checksum_url="https://github.com/$release_repo/releases/latest/download/checksums.txt"
+    signature_url="https://github.com/$release_repo/releases/latest/download/$asset.sigstore.json"
+    identity_regexp="${HYPER_RUN_COSIGN_IDENTITY_REGEXP:-https://github.com/$release_repo/.github/workflows/release.yml@refs/tags/v.*}"
     ;;
   *)
     release_repo="$repo"
     asset="hyper-$os-$arch"
     url="https://github.com/$release_repo/releases/latest/download/$asset"
     checksum_url="https://github.com/$release_repo/releases/latest/download/checksums.txt"
+    signature_url="https://github.com/$release_repo/releases/latest/download/$asset.sigstore.json"
+    identity_regexp="${HYPER_RUN_COSIGN_IDENTITY_REGEXP:-https://github.com/$release_repo/.github/workflows/release.yml@refs/tags/v.*}"
     ;;
 esac
 
@@ -46,6 +52,7 @@ asset="${asset:-$(basename "$url")}"
 target="$install_dir/hyper"
 tmp="${TMPDIR:-/tmp}/hyper-install-$$"
 checksums_tmp="$tmp.checksums"
+signature_tmp="$tmp.sigstore.json"
 
 mkdir -p "$install_dir"
 echo "Installing Hyper Run from $url"
@@ -77,6 +84,57 @@ if [ -n "${checksum_url:-}" ]; then
     exit 1
   fi
   rm -f "$checksums_tmp"
+fi
+
+verify_signature="${HYPER_RUN_VERIFY_SIGNATURE:-auto}"
+if [ -n "${signature_url:-}" ]; then
+  if command -v cosign >/dev/null 2>&1; then
+    if [ -z "${identity_regexp:-}" ]; then
+      echo "Signature verification requires HYPER_RUN_COSIGN_IDENTITY_REGEXP for custom URLs" >&2
+      rm -f "$tmp" "$checksums_tmp" "$signature_tmp"
+      exit 1
+    fi
+    echo "Verifying signature from $signature_url"
+    if curl -fsSL "$signature_url" -o "$signature_tmp"; then
+      cosign verify-blob \
+        --bundle "$signature_tmp" \
+        --certificate-identity-regexp "$identity_regexp" \
+        --certificate-oidc-issuer "${HYPER_RUN_COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}" \
+        "$tmp"
+      rm -f "$signature_tmp"
+    else
+      case "$verify_signature" in
+        1|true|required|always)
+          echo "Signature bundle download failed for $asset" >&2
+          rm -f "$tmp" "$checksums_tmp" "$signature_tmp"
+          exit 1
+          ;;
+        *)
+          echo "Signature verification skipped: signature bundle not found; checksum still verified"
+          rm -f "$signature_tmp"
+          ;;
+      esac
+    fi
+  else
+    case "$verify_signature" in
+      1|true|required|always)
+        echo "Signature verification requires cosign. Install cosign or unset HYPER_RUN_VERIFY_SIGNATURE." >&2
+        rm -f "$tmp" "$checksums_tmp" "$signature_tmp"
+        exit 1
+        ;;
+      *)
+        echo "Signature verification skipped: cosign not found; checksum still verified"
+        ;;
+    esac
+  fi
+else
+  case "$verify_signature" in
+    1|true|required|always)
+      echo "Signature verification requires HYPER_RUN_SIGNATURE_URL for custom URLs." >&2
+      rm -f "$tmp" "$checksums_tmp" "$signature_tmp"
+      exit 1
+      ;;
+  esac
 fi
 
 chmod 0755 "$tmp"

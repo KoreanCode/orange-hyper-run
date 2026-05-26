@@ -6,20 +6,20 @@ This roadmap describes the current product direction. Hyper Run should stay smal
 
 - Keep `hyper run` as the main user command.
 - Make `hyper status`, `hyper doctor`, `hyper repair`, and `hyper migrate` reliable enough for daily use.
-- Improve release trust beyond checksum verification with signing and clearer verification docs.
-- Tighten Learn quality so only durable project signals become memory.
-- Make runtime packets easier for coding agents to execute without extra explanation.
+- Add clearer signature verification docs for users who want mandatory cosign checks.
+- Continue tightening Learn quality using real project evidence.
+- Keep improving runtime packets so coding agents can execute them without extra explanation.
 
 ## Next
 
-- Add migration coverage for older `.hyper/` project states.
+- Add more migration coverage for older `.hyper/` project states.
 - Add clearer examples for web app, CLI, and desktop app projects.
 - Add a release checklist for maintainers.
 - Start splitting packages only after the domain boundaries stabilize.
 
 ## Later
 
-- Consider cosign signatures for release binaries.
+- Consider package-manager distribution after the direct installer path stabilizes.
 - Add richer project demos, including terminal recordings or short GIFs.
 - Add optional agent/capability activation policies for teams that want stricter gates.
 - Evaluate package extraction into focused internal packages such as state, storage, growth, readiness, and packet generation.
