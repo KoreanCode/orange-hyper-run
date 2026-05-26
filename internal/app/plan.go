@@ -64,13 +64,17 @@ Tiny MVP
 func parsePlan(body string) map[string]string {
 	result := map[string]string{}
 	current := ""
+	currentWritable := false
 	for _, line := range strings.Split(body, "\n") {
 		if strings.HasPrefix(line, "## ") {
 			current = strings.TrimSpace(strings.TrimPrefix(line, "## "))
-			result[current] = ""
+			if _, ok := result[current]; !ok {
+				result[current] = ""
+			}
+			currentWritable = firstRuntimeValue(result[current]) == ""
 			continue
 		}
-		if current != "" {
+		if current != "" && currentWritable {
 			existing := result[current]
 			if existing != "" {
 				existing += "\n"

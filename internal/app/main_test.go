@@ -2254,6 +2254,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if namedCommandUX.Status != "covered" {
 		t.Fatalf("expected named command UX evidence to be covered, got %+v", namedCommandUX)
 	}
+	missingNameError, ok := parseReadinessEvidenceLine("GOAL-0001", "Error handling: Missing name input is rejected with `missing name` and exit status 2, verified by CLI smoke.", defs)
+	if !ok {
+		t.Fatal("expected missing-name error evidence to parse")
+	}
+	if missingNameError.Status != "covered" {
+		t.Fatalf("expected missing-name error evidence to be covered, got %+v", missingNameError)
+	}
 	apiProduct, ok := parseReadinessEvidenceLine("GOAL-0001", "Product completeness: A tiny notes API now has a measurable create-and-list flow: `POST /notes` creates one note and `GET /notes` returns it.", defs)
 	if !ok {
 		t.Fatal("expected API product evidence to parse")
@@ -2524,6 +2531,42 @@ func TestPlanAliasesAcceptBriefAndSuccessSignals(t *testing.T) {
 	}
 	if got := plan["Success Criteria"]; got != "Create and list one note." {
 		t.Fatalf("Success Criteria alias = %q", got)
+	}
+}
+
+func TestParsePlanDoesNotLetBlankDuplicateTemplateOverrideContent(t *testing.T) {
+	plan := parsePlan(strings.Join([]string{
+		"# Product Plan",
+		"",
+		"## Product",
+		"",
+		"TinyFlow CLI",
+		"",
+		"## Current Stage",
+		"",
+		"Usable MVP",
+		"",
+		"## Success Criteria",
+		"",
+		"`go test ./...` passes.",
+		"",
+		"## Product",
+		"",
+		"## Current Stage",
+		"",
+		"Tiny MVP",
+		"",
+		"## Success Criteria",
+		"",
+	}, "\n"))
+	if got := firstRuntimeValue(plan["Product"]); got != "TinyFlow CLI" {
+		t.Fatalf("expected first non-empty Product to survive duplicate blank heading, got %q", got)
+	}
+	if got := firstRuntimeValue(plan["Current Stage"]); got != "Usable MVP" {
+		t.Fatalf("expected first non-empty Current Stage to survive duplicate template heading, got %q", got)
+	}
+	if got := firstRuntimeValue(plan["Success Criteria"]); got != "`go test ./...` passes." {
+		t.Fatalf("expected Success Criteria to survive duplicate blank heading, got %q", got)
 	}
 }
 
