@@ -2852,6 +2852,38 @@ func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T
 	assertContains(t, tasks, "Fill Reference Benchmark Evidence")
 }
 
+func TestReferenceBenchmarkTemplateWaitsForPressure(t *testing.T) {
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Beta",
+		Dimensions: []readinessDimension{
+			{ID: "security_baseline", Name: "Security baseline", Status: "missing"},
+			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "missing"},
+		},
+		StageGate: readinessStageGate{
+			Status:       "not_ready",
+			CurrentStage: "Beta",
+			NextStage:    "Service Quality",
+			RequiredAxes: []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark"},
+		},
+		NextPressure: readinessPressure{Axis: "security_baseline", AxisName: "Security baseline", Status: "missing"},
+	}
+
+	evidence := buildEvidenceDoc("GOAL-0001", "Beta", readiness, growthState{})
+	assertContains(t, evidence, "Reference benchmark: Pending.")
+	assertNotContains(t, evidence, "## Reference Benchmark Evidence")
+	tasks := buildTasksDoc("GOAL-0001", "Local CLI", "Beta", readiness, growthState{})
+	assertNotContains(t, tasks, "Fill Reference Benchmark Evidence")
+	checklist := doneChecklistDoc("Beta", readiness, growthState{})
+	assertNotContains(t, checklist, "Reference Benchmark Evidence lists")
+
+	readiness.NextPressure = readinessPressure{Axis: "reference_benchmark", AxisName: "Reference benchmark", Status: "missing"}
+	evidence = buildEvidenceDoc("GOAL-0002", "Beta", readiness, growthState{})
+	assertContains(t, evidence, "## Reference Benchmark Evidence")
+	tasks = buildTasksDoc("GOAL-0002", "Local CLI", "Beta", readiness, growthState{})
+	assertContains(t, tasks, "Fill Reference Benchmark Evidence")
+}
+
 func TestReferenceBenchmarkEvidenceNotRepeatedAfterCovered(t *testing.T) {
 	readiness := readinessState{
 		Version: 1,

@@ -1131,14 +1131,7 @@ func serviceQualityStage(stage string) bool {
 
 func referenceBenchmarkRequired(stage string, readiness readinessState) bool {
 	if readiness.Version != 0 {
-		if readiness.NextPressure.Axis == "reference_benchmark" {
-			return true
-		}
-		if readinessAxisRequired(readiness, "reference_benchmark") {
-			dim := readinessDimensionMap(readiness.Dimensions)["reference_benchmark"]
-			return dim.Status != "covered"
-		}
-		return false
+		return readiness.NextPressure.Axis == "reference_benchmark"
 	}
 	normalized := normalizeLabel(stage)
 	if strings.Contains(normalized, "beta") || serviceQualityStage(stage) {
