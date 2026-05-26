@@ -552,6 +552,13 @@ func isKnownImplementationGap(signal string) bool {
 		"not built yet",
 		"needs implementation",
 		"needs recovery",
+		"remains incomplete",
+		"remain incomplete",
+		"remains minimal",
+		"remain minimal",
+		"remains thin",
+		"remain thin",
+		"remains for the next stage",
 	)
 }
 
@@ -560,10 +567,27 @@ func isValidationPattern(signal string) bool {
 	if strings.Contains(normalized, "readiness evidence:") && !strings.Contains(normalized, "validation coverage:") {
 		return false
 	}
+	if documentationPatternSignal(normalized) || referenceBenchmarkPatternSignal(normalized) {
+		return false
+	}
 	if command := firstBacktickCommand(signal); looksLikeRuntimeCommand(command) && hasAny(normalized, "run", "check", "smoke", "validation", "handoff", "before every", "before each", "passed", "repeatable") {
 		return true
 	}
 	return hasAny(normalized, "test", "build", "smoke", "validate", "validation", "playwright", "browser", "go test", "npm run", "pytest")
+}
+
+func documentationPatternSignal(normalized string) bool {
+	if !hasAny(normalized, "readme", "docs", "documentation", "runbook", "operator handoff", "rollback") {
+		return false
+	}
+	return !hasAny(normalized, "passed", "validated", "verified", "check.sh", "go test", "npm run", "`./", "playwright")
+}
+
+func referenceBenchmarkPatternSignal(normalized string) bool {
+	if !hasAny(normalized, "reference benchmark", "category baseline", "baseline gap", "stage advancement") {
+		return false
+	}
+	return !hasAny(normalized, "passed", "validated", "verified", "check.sh", "go test", "npm run", "`./", "playwright")
 }
 
 func looksLikeRuntimeCommand(command string) bool {
@@ -604,18 +628,30 @@ func growthBehaviorFromPressures(pressures []growthPressure) growthBehavior {
 		ValidationSignals: []string{},
 		StopConditions:    []string{},
 	}
+	seenBoundary := map[string]bool{}
 	seenValidation := map[string]bool{}
 	for _, pressure := range pressures {
 		switch pressure.Effect {
 		case "work_boundary":
+			key := growthBehaviorBoundaryKey(pressure)
+			if key != "" && seenBoundary[key] {
+				continue
+			}
 			if len(behavior.WorkBoundary) >= 4 {
 				continue
 			}
+			line := ""
 			switch pressure.Kind {
 			case "decision":
-				behavior.WorkBoundary = append(behavior.WorkBoundary, growthLine("Carry forward", pressure, "learned decision"))
+				line = growthLine("Carry forward", pressure, "learned decision")
 			case "constraint":
-				behavior.WorkBoundary = append(behavior.WorkBoundary, growthLine("Respect", pressure, "learned constraint"))
+				line = growthLine("Respect", pressure, "learned constraint")
+			}
+			if line != "" {
+				behavior.WorkBoundary = append(behavior.WorkBoundary, line)
+				if key != "" {
+					seenBoundary[key] = true
+				}
 			}
 		case "validation":
 			key := growthBehaviorValidationKey(pressure)
@@ -637,6 +673,14 @@ func growthBehaviorFromPressures(pressures []growthPressure) growthBehavior {
 	return behavior
 }
 
+func growthBehaviorBoundaryKey(pressure growthPressure) string {
+	normalized := normalizeSentence(pressure.Signal)
+	if hasAny(normalized, "harness") && hasAny(normalized, "do not", "not create", "not add", "avoid", "without", "until repeated", "while one", "instead of adding") {
+		return "no-harness"
+	}
+	return pressure.Kind + ":" + pressure.CanonicalSignal
+}
+
 func growthBehaviorValidationKey(pressure growthPressure) string {
 	if command := normalizeSentence(inferredCommandForSignal(pressure.Signal)); command != "" {
 		return "command:" + command
@@ -649,6 +693,23 @@ func growthBehaviorWithActiveCapabilities(root string, pressures []growthPressur
 	validators, err := activeValidatorCapabilities(root)
 	if err != nil {
 		return behavior, err
+	}
+	activeCommands := map[string]bool{}
+	for _, validator := range validators {
+		if command := normalizeSentence(inferredCommandForSignal(validator.Signal)); command != "" {
+			activeCommands[command] = true
+		}
+	}
+	if len(activeCommands) > 0 {
+		filtered := behavior.ValidationSignals[:0]
+		for _, signal := range behavior.ValidationSignals {
+			command := normalizeSentence(inferredCommandForSignal(signal))
+			if command != "" && activeCommands[command] {
+				continue
+			}
+			filtered = append(filtered, signal)
+		}
+		behavior.ValidationSignals = filtered
 	}
 	seen := map[string]bool{}
 	for _, signal := range behavior.ValidationSignals {

@@ -1508,6 +1508,22 @@ func TestGrowthTreatsKnownGapFailureAsImplementationPressure(t *testing.T) {
 	}
 }
 
+func TestGrowthTreatsRemainingGapFailureAsImplementationPressure(t *testing.T) {
+	pressures := deriveGrowthPressures([]memoryRecord{
+		{Kind: "failure", Text: "GOAL-0003 learn failure: Operations docs and reference benchmark remain incomplete.", Confidence: 0.8, Quality: "durable"},
+	})
+	if len(pressures) != 1 {
+		t.Fatalf("expected one implementation pressure, got %+v", pressures)
+	}
+	if pressures[0].PressureType != "implementation_gap" || pressures[0].Effect != "implementation" {
+		t.Fatalf("expected remaining gap to become implementation pressure, got %+v", pressures[0])
+	}
+	behavior := growthBehaviorFromPressures(pressures)
+	if len(behavior.StopConditions) != 0 {
+		t.Fatalf("remaining gap should not become a stop condition, got %+v", behavior.StopConditions)
+	}
+}
+
 func TestGrowthGroupsRepeatedValidationByCommand(t *testing.T) {
 	pressures := deriveGrowthPressures([]memoryRecord{
 		{Kind: "pattern", Text: "GOAL-0001 reusable patterns: Use `./check.sh` as the narrow local smoke command for the add/list flow.", Confidence: 0.75, Quality: "durable"},
@@ -1683,6 +1699,37 @@ func TestGrowthBehaviorDedupesValidationSignalsByCommand(t *testing.T) {
 	assertContains(t, behavior.ValidationSignals[0], "./check.sh")
 }
 
+func TestGrowthBehaviorDedupesNoHarnessBoundaryPressure(t *testing.T) {
+	behavior := growthBehaviorFromPressures([]growthPressure{
+		{Kind: "constraint", Effect: "work_boundary", Signal: "Do not create harnesses until repeated evidence shows the project needs one.", CanonicalSignal: "create do evidence harnesses needs not one project repeated shows until"},
+		{Kind: "constraint", Effect: "work_boundary", Signal: "Do not add a harness while active validator promotion can cover the repeated smoke command.", CanonicalSignal: "active add command cover harness not promotion repeated smoke validator while"},
+		{Kind: "constraint", Effect: "work_boundary", Signal: "Do not create a harness while one local smoke command still covers the required proof.", CanonicalSignal: "command covers create do harness local not one proof required smoke still while"},
+		{Kind: "decision", Effect: "work_boundary", Signal: "Keep edge-state checks inside the same narrow smoke command instead of adding a separate harness.", CanonicalSignal: "adding checks command edge harness inside instead keep narrow same separate smoke state"},
+	})
+	if len(behavior.WorkBoundary) != 1 {
+		t.Fatalf("expected overlapping no-harness constraints to dedupe, got %+v", behavior.WorkBoundary)
+	}
+	assertContains(t, behavior.WorkBoundary[0], "harness")
+}
+
+func TestActiveValidatorReplacesSameCommandValidationSignal(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-check-sh.md"), "# validator-check-sh\n\nStatus: active\nKind: validator\nSignal: Use `./check.sh` as the repeated validation path.\n")
+	behavior, hyperErr := growthBehaviorWithActiveCapabilities(root, []growthPressure{
+		{Effect: "validation", Signal: "Use `./check.sh` as the narrow local smoke command.", CanonicalSignal: "check command local narrow sh smoke use"},
+	})
+	if hyperErr != nil {
+		t.Fatalf("growth behavior failed: %v", hyperErr)
+	}
+	if len(behavior.ValidationSignals) != 1 {
+		t.Fatalf("expected active validator to replace same-command reuse signal, got %+v", behavior.ValidationSignals)
+	}
+	assertContains(t, behavior.ValidationSignals[0], "Required active validator validator-check-sh")
+}
+
 func TestDuplicateCommandCandidatesKeepStrongestLifecycle(t *testing.T) {
 	root := t.TempDir()
 	if err := ensureProjectLayout(root); err != nil {
@@ -1808,6 +1855,20 @@ func TestBacktickCodeSymbolDoesNotClassifyAsValidationCommand(t *testing.T) {
 	pressureType, effect := growthClassification("pattern", "Pattern: Check `loadState()` fallback before rendering.")
 	if pressureType != "implementation_pattern" || effect != "implementation" {
 		t.Fatalf("expected code-symbol pattern to remain implementation pressure, got %s/%s", pressureType, effect)
+	}
+}
+
+func TestDocumentationPatternDoesNotBecomeValidationSignal(t *testing.T) {
+	pressureType, effect := growthClassification("pattern", "Use README setup/build/rollback sections as the operator handoff for this local CLI.")
+	if pressureType != "implementation_pattern" || effect != "implementation" {
+		t.Fatalf("expected documentation handoff pattern to remain implementation pressure, got %s/%s", pressureType, effect)
+	}
+}
+
+func TestReferenceBenchmarkPatternDoesNotBecomeValidationSignal(t *testing.T) {
+	pressureType, effect := growthClassification("pattern", "Use reference benchmark evidence to prevent stage advancement on validation alone.")
+	if pressureType != "implementation_pattern" || effect != "implementation" {
+		t.Fatalf("expected reference benchmark pattern to remain implementation pressure, got %s/%s", pressureType, effect)
 	}
 }
 
@@ -2161,6 +2222,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	}
 	if naturalReferenceBenchmark.Status != "covered" {
 		t.Fatalf("expected natural reference benchmark evidence to be covered, got %+v", naturalReferenceBenchmark)
+	}
+	noneCriticalReferenceBenchmark, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Category: Local CLI release-note tracker; References: git-chglog, standard-version, release-it; Baseline expectations: local entries, local data, repeatable smoke, setup docs, and rollback docs; Current comparison: this CLI meets baseline for local add/list, file persistence, validation, setup, and rollback; Below baseline gaps: none critical for the local-only CLI category; Above baseline strength: active validator promotion is evidence-driven; Decision: Service Quality is allowed because no core category-baseline gap remains.", defs)
+	if !ok {
+		t.Fatal("expected none-critical reference benchmark evidence to parse")
+	}
+	if noneCriticalReferenceBenchmark.Status != "covered" {
+		t.Fatalf("expected none-critical reference benchmark evidence to be covered, got %+v", noneCriticalReferenceBenchmark)
 	}
 	errorHandling, ok := parseReadinessEvidenceLine("GOAL-0001", "Error handling: Covered. Empty, loading, error, fallback, and recovery states are handled for the primary path: missing profile fields, future birth date, incomplete daily log, empty report, and storage-disabled browser fallback. Playwright verified each state at 390x844.", defs)
 	if !ok {
@@ -2829,6 +2897,10 @@ func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
 	if kind != "" || value != "" {
 		t.Fatalf("expected no-op failure learn note for this run to be ignored, got %q %q", kind, value)
 	}
+	kind, value = parseLearnNote("- Failure: None critical for the local-only CLI category.")
+	if kind != "" || value != "" {
+		t.Fatalf("expected no-critical failure learn note to be ignored, got %q %q", kind, value)
+	}
 }
 
 func TestValidationMemoryPrefersCommandOverOutputLine(t *testing.T) {
@@ -3422,6 +3494,7 @@ func TestGrowthIgnoresNoIssueAndNoChangeSignals(t *testing.T) {
 	insertTestMemory(t, db, "failure", "GOAL-0003 learn failure: None in this episode.")
 	insertRawTestMemory(t, db, "failure", "GOAL-0004 learn failure: None in this run.", "durable")
 	insertRawTestMemory(t, db, "failure", "GOAL-0005 blocked: Clear: implementation and validation completed for this packet.", "durable")
+	insertRawTestMemory(t, db, "failure", "GOAL-0006 learn failure: None critical for the local-only CLI category.", "durable")
 
 	state, hyperErr := updateGrowthState(root, db)
 	if hyperErr != nil {

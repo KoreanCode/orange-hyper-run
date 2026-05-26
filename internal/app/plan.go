@@ -545,6 +545,9 @@ func isNoIssueText(normalized string) bool {
 		normalized == "no blockers remain" ||
 		normalized == "no failure" ||
 		normalized == "no failures" ||
+		normalized == "none critical" ||
+		normalized == "no critical gap" ||
+		normalized == "no critical gaps" ||
 		normalized == "no failure in this episode" ||
 		normalized == "no failures in this episode" ||
 		normalized == "no failure in this run" ||
@@ -580,6 +583,10 @@ func isNoIssueText(normalized string) bool {
 		strings.HasPrefix(normalized, "no failures for this episode") ||
 		strings.HasPrefix(normalized, "no failure in this run") ||
 		strings.HasPrefix(normalized, "no failures in this run") ||
+		strings.HasPrefix(normalized, "none critical for") ||
+		strings.HasPrefix(normalized, "no critical gap for") ||
+		strings.HasPrefix(normalized, "no critical gaps for") ||
+		strings.HasPrefix(normalized, "no core category-baseline gap") ||
 		strings.HasPrefix(normalized, "clear: implementation and validation completed") ||
 		strings.HasPrefix(normalized, "clear implementation and validation completed") ||
 		strings.HasPrefix(normalized, "implementation and validation completed for this packet")
@@ -1010,8 +1017,17 @@ func stageRuntimeBehaviorDoc(stage, buildStyle string, readiness readinessState)
 func activeCapabilitiesDoc(growth growthState) string {
 	candidates := visibleGrowthCandidates(growth.Candidates)
 	lines := []string{}
+	requiredActiveValidators := map[string]bool{}
+	for _, signal := range growth.RuntimeBehavior.ValidationSignals {
+		if name := requiredActiveValidatorName(signal); name != "" {
+			requiredActiveValidators[name] = true
+		}
+	}
 	for _, candidate := range candidates {
 		if candidate.Status != "active" {
+			continue
+		}
+		if candidate.Kind == "validator" && requiredActiveValidators[candidate.Name] {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("- Active %s %s: %s", candidate.Kind, displayGrowthCandidateName(candidate), compactText(candidate.Signal, 180)))
@@ -1025,6 +1041,17 @@ func activeCapabilitiesDoc(growth growthState) string {
 		return "- None active. Candidate structures are informational until promoted."
 	}
 	return strings.Join(lines, "\n")
+}
+
+func requiredActiveValidatorName(signal string) string {
+	fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(signal), "- "))
+	if len(fields) < 4 {
+		return ""
+	}
+	if fields[0] == "Required" && fields[1] == "active" && fields[2] == "validator" {
+		return strings.TrimSuffix(fields[3], ":")
+	}
+	return ""
 }
 
 func formatGrowthPrinciples() string {

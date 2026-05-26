@@ -719,11 +719,8 @@ func currentComparisonCovered(value string) bool {
 
 func noCriticalBelowBaselineGap(value string) bool {
 	normalized := normalizeSentence(value)
-	if normalized == "none" {
-		return true
-	}
 	if normalized == "" || isPlaceholder(normalized) {
-		return false
+		return normalized == "none" || strings.HasPrefix(normalized, "none critical")
 	}
 	return hasAny(normalized, "none", "no critical", "no core", "no below baseline", "no below-baseline", "not blocked", "none blocking")
 }
