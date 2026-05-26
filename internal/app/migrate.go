@@ -37,14 +37,26 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		}
 	}
 	stateMessage := "not checked"
+	nextPacketMessage := "not updated; no completed runtime packet state found"
 	if state, stateErr := readState(filepath.Join(root, hyperDir, "state.json")); stateErr == nil {
 		consistency := currentStateConsistency(root, state)
 		if consistency.Consistent {
 			stateMessage = "state.json is consistent"
+			if consistency.Derived.State == "active" {
+				nextPacketMessage = "unchanged while the current runtime packet is active"
+			} else {
+				nextPlan, nextErr := writeNextPacketPlan(root, state, consistency.Derived, readiness, growth)
+				if nextErr != nil {
+					return commandOutput{}, nextErr
+				}
+				nextPacketMessage = filepath.Join(hyperDir, "next-packet.md") + " (" + nextPlan.Action + ")"
+			}
 		} else if consistency.Repairable {
 			stateMessage = "state.json needs repair; run `hyper repair`"
+			nextPacketMessage = "not updated; run `hyper repair` first"
 		} else {
 			stateMessage = "state.json mismatch is not repairable while packet is active"
+			nextPacketMessage = "not updated while packet state is inconsistent"
 		}
 	}
 	return stdout(strings.Join([]string{
@@ -56,6 +68,7 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		fmt.Sprintf("Visible candidates: %d -> %d", visibleGrowthCandidateCount(before.Candidates), visibleGrowthCandidateCount(growth.Candidates)),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"State consistency: " + stateMessage,
+		"Next packet plan: " + nextPacketMessage,
 		"",
 		"Next:",
 		"  hyper doctor",
