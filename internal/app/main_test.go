@@ -601,6 +601,25 @@ func TestRunBlocksPendingActiveGoal(t *testing.T) {
 	assertContains(t, err.Message, "hyper complete")
 }
 
+func TestRunBlocksCompletedEvidenceBeforeFinishGate(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd the primary notes flow.\n\n## Learn Notes\n\n- Pattern: Run go test before handoff.\n")
+
+	_, err := runCLI(args("run", "Start another packet"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected finish gate guard to block next run")
+	}
+	assertContains(t, err.Message, "has not passed the finish gate yet")
+	assertContains(t, err.Message, "hyper complete")
+	assertContains(t, err.Message, "review.md")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("new runtime packet should not be created before the finish gate passes")
+	}
+}
+
 func TestCompleteLearnsAndRefreshesReadiness(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -1153,25 +1172,27 @@ func TestAutoLearnFeedsNextGoalContext(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CRM", "Build a tiny CRM MVP")
 	mustRun(t, root, "run")
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCustomer records persisted in SQLite. go test passed.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCustomer records persisted in SQLite. go test passed.\n\n## Readiness Evidence\n\nProduct completeness: Tiny CRM has a measurable create-and-list customer record flow.\nCore UX: CLI smoke verified create and list customer records from the command surface.\nValidation coverage: go test passed and the customer persistence smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd persisted customer records.\n")
+	mustRun(t, root, "complete")
 
 	out, err := runCLI(args("run", "Add persisted customer records"), testRoot(root), fakeUpdater{})
 	if err != nil {
 		t.Fatalf("second run failed: %v", err)
 	}
-	assertContains(t, out.Stdout, "Auto learn: completed, inserted 1")
+	assertContains(t, out.Stdout, "Auto learn: completed, inserted 0")
 	assertContains(t, out.Stdout, "Similar context: ")
 	assertContains(t, strings.ToLower(readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0002", "goal.md"))), "customer records persisted")
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "RUN-0001.jsonl")), "auto_learn_completed")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "RUN-0001.jsonl")), "runtime_packet_completed")
 }
 
 func TestGrowthStateChangesNextRuntimePacket(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a local-first notes MVP")
 	mustRun(t, root, "run")
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Changed Files\n\ncmd/notes.go\n\n## Decisions\n\nKeep local-first storage.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nPending.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Readiness Evidence\n\nProduct completeness: Tiny notes has a measurable local note command slice.\nCore UX: CLI smoke verified the primary note command surface.\nValidation coverage: go test ./... passed and is repeatable.\n\n## Changed Files\n\ncmd/notes.go\n\n## Decisions\n\nKeep local-first storage.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd note editing polish.\n\n## Learn Notes\n\n- Pattern: Run go test before every runtime packet handoff.\n- Constraint: Do not add external services without credentials.\n")
+	mustRun(t, root, "complete")
 
 	if _, err := runCLI(args("run", "Add note editing polish"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("second run failed: %v", err)
@@ -1193,14 +1214,16 @@ func TestGrowthGeneratesValidatorCandidateAfterRepeatedPressure(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
 	mustRun(t, root, "run")
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Changed Files\n\ncmd/app.go\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nPending.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Readiness Evidence\n\nProduct completeness: Tiny CLI has a measurable command flow.\nCore UX: CLI smoke verified the primary command surface.\nValidation coverage: go test ./... passed and is repeatable.\n\n## Changed Files\n\ncmd/app.go\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd CLI persistence.\n\n## Learn Notes\n\n- Pattern: Run go test before every runtime packet handoff.\n")
+	mustRun(t, root, "complete")
 
 	if _, err := runCLI(args("run", "Add CLI persistence"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("second run failed: %v", err)
 	}
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0002", "evidence.md"), "# GOAL-0002 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Changed Files\n\ncmd/storage.go\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nPending.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0002", "evidence.md"), "# GOAL-0002 Evidence\n\n## Validation\n\ngo test ./... passed.\n\n## Readiness Evidence\n\nProduct completeness: Tiny CLI persistence keeps the measurable command flow intact.\nCore UX: CLI smoke verifies the primary command surface.\nValidation coverage: go test ./... passed and is repeatable.\n\n## Changed Files\n\ncmd/storage.go\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nRun go test before every runtime packet handoff.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0002", "next.md"), "# GOAL-0002 Next\n\n## Recommended Next Goal\n\nPolish CLI output.\n\n## Learn Notes\n\n- Pattern: Run go test before every runtime packet handoff.\n")
+	mustRun(t, root, "complete")
 
 	if _, err := runCLI(args("run", "Polish CLI output"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("third run failed: %v", err)
@@ -1813,6 +1836,7 @@ func TestReadinessEvidenceProgressesSelectedAxis(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nBrowser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified add and revisit customer notes flow.\nData persistence: Customer notes persist across reload using local storage.\n\n## Changed Files\n\nsrc/App.tsx\n\n## Decisions\n\nKeep storage local-first.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nHandle empty and failure states.\n\n## Learn Notes\n\n- Pattern: Record readiness evidence with an axis label.\n")
+	mustRun(t, root, "complete")
 
 	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("second run failed: %v", err)
@@ -2059,6 +2083,7 @@ func TestSurfaceProofEvidenceProgressesReadiness(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed.\n\n## Surface Proof Evidence\n\n- Evidence: Browser smoke verified the primary action create customer note flow at mobile 390x844 and desktop 1440x900; screenshots captured and passed.\n\n## Changed Files\n\nsrc/App.tsx\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage readiness.\n")
+	mustRun(t, root, "complete")
 
 	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("second run failed: %v", err)
@@ -2268,6 +2293,7 @@ func TestStageAdvancementCandidateWhenGateReady(t *testing.T) {
 	mustRun(t, root, "run")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create, complete, and delete flow.\nValidation coverage: `npm run build` passed and primary flow smoke test passed.\n\n## Changed Files\n\nsrc/App.tsx\n\n## Decisions\n\nKeep local-first storage.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n\n## Learn Notes\n\n- Pattern: Record axis-labeled readiness evidence.\n")
+	mustRun(t, root, "complete")
 
 	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("second run failed: %v", err)

@@ -508,16 +508,37 @@ func blockingActiveGoal(root string, state projectState) string {
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return ""
 	}
-	if state.Status != "" && state.Status != "active" {
-		return ""
-	}
 	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
-	if derived.State != "active" {
+	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && state.Status != "active" && state.Status != derived.State {
+		return strings.Join([]string{
+			"Current runtime packet state is inconsistent: " + state.CurrentGoalID,
+			"State file: " + state.Status,
+			"Evidence state: " + derived.State,
+			"",
+			"Repair it before creating another packet:",
+			"  hyper status --short",
+			"  hyper repair",
+			"  hyper complete",
+		}, "\n")
+	}
+	if state.Status != "" && state.Status != "active" {
 		return ""
 	}
 	path := state.CurrentGoalPath
 	if strings.TrimSpace(path) == "" {
 		path = fmt.Sprintf(".hyper/goals/%s/goal.md", state.CurrentGoalID)
+	}
+	if derived.State != "active" {
+		return strings.Join([]string{
+			"Current runtime packet has not passed the finish gate yet: " + state.CurrentGoalID,
+			"Evidence state: " + derived.State,
+			"Reason: " + derived.Reason,
+			"",
+			"Finish it before creating another packet:",
+			"  hyper complete",
+			"  if the finish gate fails, fix " + strings.TrimSuffix(path, "goal.md") + "review.md",
+			"  then run hyper complete again",
+		}, "\n")
 	}
 	return strings.Join([]string{
 		"Current runtime packet is still active: " + state.CurrentGoalID,
