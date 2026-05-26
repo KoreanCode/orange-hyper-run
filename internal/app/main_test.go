@@ -1247,12 +1247,12 @@ func TestReadinessPressureSelectsStageGateGap(t *testing.T) {
 	readiness := readFile(t, filepath.Join(root, ".hyper", "readiness", "state.json"))
 	assertContains(t, readiness, `"current_stage": "Usable MVP"`)
 	assertContains(t, readiness, `"next_stage": "Beta"`)
-	assertContains(t, readiness, `"axis": "persistence"`)
+	assertContains(t, readiness, `"axis": "core_ux"`)
 	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
 	assertContains(t, goal, "Current gate: Usable MVP -> Beta")
-	assertContains(t, goal, "Next readiness pressure: Data persistence")
-	assertContains(t, goal, "Make the primary Tiny CRM flow persist real user data")
-	assertContains(t, goal, "Capture readiness evidence for Data persistence")
+	assertContains(t, goal, "Next readiness pressure: Core UX")
+	assertContains(t, goal, "Implement the smallest usable Tiny CRM core flow")
+	assertContains(t, goal, "Capture readiness evidence for Core UX")
 }
 
 func TestReadinessEvidenceProgressesSelectedAxis(t *testing.T) {
@@ -1263,7 +1263,7 @@ func TestReadinessEvidenceProgressesSelectedAxis(t *testing.T) {
 	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("first run failed: %v", err)
 	}
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nBrowser smoke passed.\n\n## Readiness Evidence\n\nData persistence: Customer notes persist across reload using local storage.\n\n## Changed Files\n\nsrc/App.tsx\n\n## Decisions\n\nKeep storage local-first.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nBrowser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified add and revisit customer notes flow.\nData persistence: Customer notes persist across reload using local storage.\n\n## Changed Files\n\nsrc/App.tsx\n\n## Decisions\n\nKeep storage local-first.\n\n## Reusable Patterns\n\nPending.\n\n## Blocker\n\nPending.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nHandle empty and failure states.\n\n## Learn Notes\n\n- Pattern: Record readiness evidence with an axis label.\n")
 
 	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
@@ -2145,6 +2145,23 @@ func TestServiceQualityPressureFollowsGateOrderOverPlanMentions(t *testing.T) {
 	}
 	if state.NextPressure.Status != "emerging" {
 		t.Fatalf("expected mentioned validation to remain emerging until evidence exists, got %+v", state.NextPressure)
+	}
+}
+
+func TestTinyMVPPressureFollowsGateOrderOverPlanMentions(t *testing.T) {
+	plan := map[string]string{
+		"Product":          "Active Guard CLI",
+		"Current Stage":    "Tiny MVP",
+		"MVP":              "Create one handoff packet and require evidence before the next one.",
+		"Success Criteria": "A second run is blocked until the active packet is completed.",
+	}
+
+	state := deriveReadinessState(plan, growthState{}, nil)
+	if state.NextPressure.Axis != "core_ux" {
+		t.Fatalf("expected Tiny MVP pressure to prove the useful flow before validation, got %+v", state.NextPressure)
+	}
+	if state.NextPressure.Status != "emerging" {
+		t.Fatalf("expected mentioned core flow to remain emerging until evidence exists, got %+v", state.NextPressure)
 	}
 }
 

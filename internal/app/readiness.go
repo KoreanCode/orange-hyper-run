@@ -955,12 +955,7 @@ func selectReadinessPressure(plan map[string]string, stage string, dimensions []
 }
 
 func readinessPressureShouldFollowGateOrder(gate readinessStageGate) bool {
-	switch gate.CurrentStage {
-	case "Beta", "Service Quality", "Sustained Service Quality":
-		return true
-	default:
-		return false
-	}
+	return len(gate.RequiredAxes) > 0
 }
 
 func readinessPressureForDimension(plan map[string]string, stage string, dim readinessDimension, gate readinessStageGate) readinessPressure {
