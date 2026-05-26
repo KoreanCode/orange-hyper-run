@@ -332,6 +332,53 @@ func TestStatusShowsActionGuidance(t *testing.T) {
 	assertContains(t, out, "Do not do yet: Do not advance Tiny MVP until blocking readiness gaps are closed.")
 }
 
+func TestStatusHighlightsReferenceBenchmarkWhenRequired(t *testing.T) {
+	state := projectState{Project: "Tiny CRM", Stage: "Beta", Status: "completed", ActiveRunID: "RUN-0003", CurrentGoalID: "GOAL-0003", CurrentGoalPath: ".hyper/goals/GOAL-0003/goal.md", UpdatedAt: "now"}
+	derived := goalState{State: "completed", Reason: "done"}
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Beta",
+		Dimensions: []readinessDimension{
+			{ID: "core_ux", Name: "Core UX", Status: "covered", Evidence: "Browser smoke covered the primary flow."},
+			{ID: "validation_coverage", Name: "Validation coverage", Status: "covered", Evidence: "`go test ./...` passed."},
+			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "missing", Gap: "Reference comparison has not proven category baseline and differentiating strength."},
+		},
+		StageGate: readinessStageGate{
+			CurrentStage: "Beta",
+			NextStage:    "Service Quality",
+			Status:       "not_ready",
+			RequiredAxes: []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark"},
+			BlockingGaps: []string{"Reference benchmark: Reference comparison has not proven category baseline and differentiating strength."},
+		},
+		NextPressure: readinessPressure{Axis: "reference_benchmark", AxisName: "Reference benchmark", Status: "missing", Reason: "Reference benchmark is missing for the Beta -> Service Quality gate.", RecommendedGoal: "Compare the service against references."},
+	}
+
+	full := strings.Join(statusDashboardLines(state, derived, readiness, growthState{}, 3, 3), "\n")
+	assertContains(t, full, "Proof: functional covered, surface covered, operational covered, benchmark missing")
+	assertContains(t, full, "Reference benchmark: missing - Reference comparison has not proven category baseline and differentiating strength.")
+	assertContains(t, full, "Next proof gap: Reference benchmark")
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Benchmark: missing - Reference comparison has not proven category baseline and differentiating strength.")
+	assertContains(t, short, "Gap: Reference benchmark: Reference comparison has not proven category baseline")
+}
+
+func TestStatusDoesNotShowFutureReferenceBenchmarkBeforeRequired(t *testing.T) {
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Tiny MVP",
+		Dimensions: []readinessDimension{
+			{ID: "core_ux", Name: "Core UX", Status: "covered", Evidence: "Browser smoke covered the primary flow."},
+			{ID: "validation_coverage", Name: "Validation coverage", Status: "covered", Evidence: "`go test ./...` passed."},
+			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "missing", Gap: "Reference comparison has not proven category baseline and differentiating strength."},
+		},
+		StageGate: readinessStageGate{CurrentStage: "Tiny MVP", NextStage: "Usable MVP", Status: "ready", RequiredAxes: []string{"product_completeness", "core_ux", "validation_coverage"}},
+	}
+
+	out := strings.Join(readinessDashboardLines(readiness), "\n")
+	assertNotContains(t, out, "Reference benchmark: missing")
+}
+
 func TestRunBlocksPendingActiveGoal(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -1028,12 +1075,81 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongDeploy.Status != "covered" {
 		t.Fatalf("expected strong deployment evidence to be covered, got %+v", strongDeploy)
 	}
+	weakReference, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Compared against three comparable project-growth CLIs; category baseline is fine and above-baseline strength exists.", defs)
+	if !ok {
+		t.Fatal("expected weak reference benchmark evidence to parse")
+	}
+	if weakReference.Status != "emerging" {
+		t.Fatalf("expected weak reference benchmark evidence to be emerging, got %+v", weakReference)
+	}
+	staticDeploy, ok := parseReadinessEvidenceLine("GOAL-0001", "Deployment readiness: proof. Release/build artifacts are created at `dist/llog-beta-demo/index.html` and `dist/llog-beta-demo.zip` outside the development path. Validation proved the release artifacts through direct `file://` execution, isolated artifact server URL `http://127.0.0.1:4201/?artifact=1`, extracted zip release URL, artifact parity, and mobile Playwright smoke with realistic data.", defs)
+	if !ok {
+		t.Fatal("expected static artifact deployment evidence to parse")
+	}
+	if staticDeploy.Status != "covered" {
+		t.Fatalf("expected static artifact deployment evidence to be covered, got %+v", staticDeploy)
+	}
+	opsDocs, ok := parseReadinessEvidenceLine("GOAL-0001", "Operations and docs: `demo-release.md` documents artifact creation, direct file run, static server run, smoke path, rollback, and stop conditions.", defs)
+	if !ok {
+		t.Fatal("expected operations docs evidence to parse")
+	}
+	if opsDocs.Status != "covered" {
+		t.Fatalf("expected operations docs evidence to be covered, got %+v", opsDocs)
+	}
+	referenceBenchmark, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Category: Developer CLI; References: namba-ai, pi.dev, Claude Code; Baseline expectations: install is clear and one command creates useful work context; Current comparison: setup meets baseline and evidence loop is above baseline; Below-baseline gaps: None; no critical user or operator baseline gap remains; Above-baseline strength: project-local evidence pressure; Decision: Service Quality is allowed from the benchmark perspective.", defs)
+	if !ok {
+		t.Fatal("expected reference benchmark evidence to parse")
+	}
+	if referenceBenchmark.Status != "covered" {
+		t.Fatalf("expected reference benchmark evidence to be covered, got %+v", referenceBenchmark)
+	}
 	errorHandling, ok := parseReadinessEvidenceLine("GOAL-0001", "Error handling: Covered. Empty, loading, error, fallback, and recovery states are handled for the primary path: missing profile fields, future birth date, incomplete daily log, empty report, and storage-disabled browser fallback. Playwright verified each state at 390x844.", defs)
 	if !ok {
 		t.Fatal("expected error handling evidence with missing input text to parse")
 	}
 	if errorHandling.Status != "covered" {
 		t.Fatalf("expected error handling evidence with missing input text to be covered, got %+v", errorHandling)
+	}
+}
+
+func TestBetaGateAcceptsStaticDeploymentAndRunbookEvidence(t *testing.T) {
+	defs := readinessDimensionDefs()
+	lines := []string{
+		"Validation coverage: Playwright smoke passed and HTTP check passed; primary flow validation is repeatable.",
+		"Security baseline: security boundary documented and verified for local-only storage, token and session limits.",
+		"Deployment readiness: proof. Release/build artifacts are created at `dist/llog-beta-demo/index.html` and `dist/llog-beta-demo.zip` outside the `prototype/` development path. Demo deployment path is documented in `demo-release.md`. Validation proved the release artifacts through direct `file://` execution, isolated artifact server URL `http://127.0.0.1:4201/?artifact=1`, extracted zip release URL `http://127.0.0.1:4202/?release=zip`, artifact parity, and mobile Playwright smoke with realistic data.",
+		"Operations and docs: `demo-release.md` documents artifact creation, direct file run, static server run, smoke path, rollback, and stop conditions.",
+		"Reference benchmark: Category: Static journaling app; References: Day One, Journey, Diarium; Baseline expectations: daily entry, report, setup, and handoff are understandable; Current comparison: core entry and report meet baseline, and local artifact release evidence is above baseline; Below-baseline gaps: None; no critical user or operator baseline gap remains; Above-baseline strength: local artifact release evidence; Decision: Service Quality is allowed from the benchmark perspective.",
+	}
+	records := []readinessEvidenceRecord{}
+	for _, line := range lines {
+		record, ok := parseReadinessEvidenceLine("GOAL-0010", line, defs)
+		if !ok {
+			t.Fatalf("expected readiness evidence to parse: %s", line)
+		}
+		records = append(records, record)
+	}
+
+	state := deriveReadinessState(map[string]string{
+		"Current Stage": "Beta",
+		"Product":       "LLog / 엘로그",
+		"MVP":           "A static fortune calendar and daily log demo.",
+	}, growthState{}, records)
+	dims := readinessDimensionMap(state.Dimensions)
+	if dims["deployment_readiness"].Status != "covered" {
+		t.Fatalf("expected deployment readiness covered, got %+v", dims["deployment_readiness"])
+	}
+	if dims["operations_docs"].Status != "covered" {
+		t.Fatalf("expected operations docs covered, got %+v", dims["operations_docs"])
+	}
+	if dims["reference_benchmark"].Status != "covered" {
+		t.Fatalf("expected reference benchmark covered, got %+v", dims["reference_benchmark"])
+	}
+	if state.StageGate.Status != "ready" {
+		t.Fatalf("expected Beta gate ready, got %+v", state.StageGate)
+	}
+	if state.NextPressure.Axis != "stage_advancement" {
+		t.Fatalf("expected stage advancement next pressure, got %+v", state.NextPressure)
 	}
 }
 
@@ -1398,6 +1514,169 @@ func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
 	assertContains(t, goal, "primary Pickachat flow")
 }
 
+func TestReferenceBenchmarkPressureShapesRuntimePacket(t *testing.T) {
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Beta",
+		StageGate: readinessStageGate{
+			CurrentStage: "Beta",
+			NextStage:    "Service Quality",
+			Status:       "not_ready",
+			RequiredAxes: []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark"},
+		},
+		NextPressure: readinessPressure{
+			Axis:             "reference_benchmark",
+			AxisName:         "Reference benchmark",
+			Status:           "missing",
+			Reason:           "Reference benchmark is missing for the Beta -> Service Quality gate.",
+			RecommendedGoal:  "Compare Tiny CRM against references.",
+			WorkBoundary:     "Compare the current result against 3-5 named category references before adding feature breadth; close only the strongest critical below-baseline gap if one is found.",
+			ValidationSignal: "Fill Reference Benchmark Evidence with named references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and decision.",
+		},
+	}
+	plan := map[string]string{
+		"Product":       "Tiny CRM is a local-first sales notes app.",
+		"MVP":           "Capture and revisit one customer note.",
+		"Current Stage": "Beta",
+	}
+
+	goal := readinessRecommendedGoal(plan, "Beta", "reference_benchmark")
+	assertContains(t, goal, "3-5 named category references")
+	assertContains(t, goal, "define the baseline")
+	assertContains(t, goal, "strongest critical below-baseline gap")
+
+	boundary := runtimeWorkBoundary(goal, "Beta", plan, growthState{}, readiness)
+	assertContains(t, boundary, "Do not add broad feature work")
+	assertContains(t, boundary, "Select 3-5 named references")
+	assertContains(t, boundary, "implement only the smallest fix")
+	assertContains(t, boundary, "do not advance the stage")
+
+	next := buildNextDoc("GOAL-0009", readiness)
+	assertContains(t, next, "durable reference signals")
+	assertContains(t, next, "category baseline")
+	assertContains(t, next, "comparison-driven constraint")
+	assertContains(t, next, "Do not record one-off reference names")
+}
+
+func TestServiceQualityStageDefinesOperationalStandard(t *testing.T) {
+	done := stageDoneCondition("Service Quality")
+	assertContains(t, done, "Required validation, security, deployment, operations, and maintainability evidence")
+	assertContains(t, done, "Setup, release, rollback, and recovery paths")
+	assertContains(t, done, "Reference benchmark evidence")
+	assertContains(t, done, "No critical blocker remains")
+
+	if boundary := stageRuntimeBoundary("Service Quality"); !hasAny(boundary, "security/privacy boundaries", "release and rollback proof", "operator docs") {
+		t.Fatalf("expected service quality boundary to name operational acceptance criteria, got %q", boundary)
+	} else {
+		assertContains(t, boundary, "category-baseline comparison")
+	}
+	if signal := stageValidationSignal("Service Quality"); !hasAny(signal, "set up", "rolled back", "handed off") {
+		t.Fatalf("expected service quality validation signal to describe handoff checks, got %q", signal)
+	} else {
+		assertContains(t, signal, "compared against category references")
+	}
+
+	_, _, axes, evidence := readinessGateDefinition("Service Quality")
+	for _, axis := range []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark"} {
+		found := false
+		for _, got := range axes {
+			if got == axis {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected service quality gate axis %s in %+v", axis, axes)
+		}
+	}
+	joinedEvidence := strings.Join(evidence, "\n")
+	assertContains(t, joinedEvidence, "Required validation")
+	assertContains(t, joinedEvidence, "rollback")
+	assertContains(t, joinedEvidence, "hidden context")
+	assertContains(t, joinedEvidence, "Reference benchmark evidence")
+}
+
+func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T) {
+	betaEvidence := buildEvidenceDoc("GOAL-0001", "Beta", readinessState{})
+	assertContains(t, betaEvidence, "## Reference Benchmark Evidence")
+	assertContains(t, betaEvidence, "References: Pending")
+	assertContains(t, betaEvidence, "Below-baseline gaps")
+	assertContains(t, betaEvidence, "Above-baseline strength")
+
+	serviceEvidence := buildEvidenceDoc("GOAL-0001", "Service Quality", readinessState{})
+	assertContains(t, serviceEvidence, "## Reference Benchmark Evidence")
+
+	tinyEvidence := buildEvidenceDoc("GOAL-0001", "Tiny MVP", readinessState{})
+	assertNotContains(t, tinyEvidence, "## Reference Benchmark Evidence")
+
+	tasks := buildTasksDoc("GOAL-0001", "Web app", "Service Quality", readinessState{}, growthState{})
+	assertContains(t, tasks, "Fill Reference Benchmark Evidence")
+}
+
+func TestReferenceBenchmarkEvidenceSectionFeedsReadiness(t *testing.T) {
+	root := t.TempDir()
+	goalDir := filepath.Join(root, ".hyper", "goals", "GOAL-0001")
+	if err := os.MkdirAll(goalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(goalDir, "evidence.md"), strings.Join([]string{
+		"# GOAL-0001 Evidence",
+		"",
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Static journaling app",
+		"- References: Journal A, Journal B, Journal C",
+		"- Baseline expectations: daily entry, report, setup, and handoff are understandable",
+		"- Current comparison: core entry and report meet baseline; release evidence is above baseline",
+		"- Below-baseline gaps: None; no critical user or operator baseline gap remains",
+		"- Above-baseline strength: local artifact release evidence and explicit handoff notes",
+		"- Decision: Service Quality is allowed from the benchmark perspective",
+	}, "\n"))
+
+	records, err := loadReadinessEvidence(root, readinessDimensionDefs())
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, ok := readinessEvidenceForAxis(records, "reference_benchmark")
+	if !ok {
+		t.Fatalf("expected reference benchmark readiness record in %+v", records)
+	}
+	if record.Status != "covered" {
+		t.Fatalf("expected reference benchmark section to be covered, got %+v", record)
+	}
+}
+
+func TestReferenceBenchmarkExampleDocsMatchParser(t *testing.T) {
+	body := readFile(t, filepath.Join("..", "..", "docs", "examples", "reference-benchmark.md"))
+	covered := markdownCodeBlockAfterHeading(t, body, "Covered Example")
+	emerging := markdownCodeBlockAfterHeading(t, body, "Emerging Example")
+	blocked := markdownCodeBlockAfterHeading(t, body, "Blocked Example")
+
+	coveredRecord := referenceBenchmarkRecordFromExample(t, covered)
+	if coveredRecord.Status != "covered" {
+		t.Fatalf("expected covered example to parse as covered, got %+v", coveredRecord)
+	}
+
+	emergingRecord := referenceBenchmarkRecordFromExample(t, emerging)
+	if emergingRecord.Status != "emerging" {
+		t.Fatalf("expected emerging example to parse as emerging, got %+v", emergingRecord)
+	}
+	if !strings.Contains(emergingRecord.Quality, "reference benchmark needs") {
+		t.Fatalf("expected emerging example to report missing benchmark requirements, got %+v", emergingRecord)
+	}
+
+	blockedRecords := readinessEvidenceRecordsFromGoalText("GOAL-DOC", "# GOAL-DOC Evidence\n\n"+blocked)
+	if record, ok := readinessEvidenceForAxis(blockedRecords, "reference_benchmark"); ok && record.Status == "covered" {
+		t.Fatalf("blocked example must not be covered, got %+v", record)
+	}
+	assertContains(t, blocked, "recovery is below baseline")
+	assertContains(t, blocked, "Service Quality is blocked")
+
+	koBody := readFile(t, filepath.Join("..", "..", "docs", "examples", "reference-benchmark_ko.md"))
+	assertContains(t, koBody, "## Covered")
+	assertContains(t, koBody, "## Status")
+}
+
 func TestReadinessEvidenceRequiresAxisLabelAndCoversMySQLPersistence(t *testing.T) {
 	defs := readinessDimensionDefs()
 	if _, ok := parseReadinessEvidenceLine("GOAL-0001", "Local MySQL proof for browser-created pin returned pin test.", defs); ok {
@@ -1565,6 +1844,41 @@ func assertNotContains(t *testing.T, value, unexpected string) {
 	if strings.Contains(value, unexpected) {
 		t.Fatalf("expected %q not to contain %q", value, unexpected)
 	}
+}
+
+func markdownCodeBlockAfterHeading(t *testing.T, body, heading string) string {
+	t.Helper()
+	marker := "## " + heading
+	sectionStart := strings.Index(body, marker)
+	if sectionStart < 0 {
+		t.Fatalf("heading %q not found", heading)
+	}
+	afterHeading := body[sectionStart+len(marker):]
+	fenceStart := strings.Index(afterHeading, "```")
+	if fenceStart < 0 {
+		t.Fatalf("code fence after heading %q not found", heading)
+	}
+	afterFence := afterHeading[fenceStart+len("```"):]
+	firstNewline := strings.Index(afterFence, "\n")
+	if firstNewline < 0 {
+		t.Fatalf("code fence after heading %q has no body", heading)
+	}
+	afterFence = afterFence[firstNewline+1:]
+	fenceEnd := strings.Index(afterFence, "```")
+	if fenceEnd < 0 {
+		t.Fatalf("closing code fence after heading %q not found", heading)
+	}
+	return strings.TrimSpace(afterFence[:fenceEnd])
+}
+
+func referenceBenchmarkRecordFromExample(t *testing.T, example string) readinessEvidenceRecord {
+	t.Helper()
+	records := readinessEvidenceRecordsFromGoalText("GOAL-DOC", "# GOAL-DOC Evidence\n\n"+example)
+	record, ok := readinessEvidenceForAxis(records, "reference_benchmark")
+	if !ok {
+		t.Fatalf("expected reference benchmark record from example:\n%s", example)
+	}
+	return record
 }
 
 func readFile(t *testing.T, path string) string {
