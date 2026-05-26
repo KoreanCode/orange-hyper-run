@@ -442,15 +442,82 @@ func isPassiveNoChangeText(normalized string) bool {
 }
 
 func dedupeMemories(memories []memory) []memory {
-	seen := map[string]bool{}
 	deduped := []memory{}
 	for _, mem := range memories {
-		key := mem.Kind + "\x00" + mem.Text
-		if seen[key] {
+		duplicateIndex := -1
+		for i, existing := range deduped {
+			if memoriesOverlap(existing, mem) {
+				duplicateIndex = i
+				break
+			}
+		}
+		if duplicateIndex >= 0 {
+			if memoryPreferred(mem, deduped[duplicateIndex]) {
+				deduped[duplicateIndex] = mem
+			}
 			continue
 		}
-		seen[key] = true
 		deduped = append(deduped, mem)
 	}
 	return deduped
+}
+
+func memoriesOverlap(left, right memory) bool {
+	if !strings.EqualFold(strings.TrimSpace(left.Kind), strings.TrimSpace(right.Kind)) {
+		return false
+	}
+	leftSignal := memorySignal(left.Text)
+	rightSignal := memorySignal(right.Text)
+	if leftSignal == "" || rightSignal == "" {
+		return normalizeSentence(left.Text) == normalizeSentence(right.Text)
+	}
+	leftTokens := tokenSet(pressureTokens(leftSignal))
+	rightTokens := tokenSet(pressureTokens(rightSignal))
+	if len(leftTokens) == 0 || len(rightTokens) == 0 {
+		return normalizeSentence(leftSignal) == normalizeSentence(rightSignal)
+	}
+	if tokenJaccard(leftTokens, rightTokens) >= 0.82 {
+		return true
+	}
+	intersection := 0
+	for token := range leftTokens {
+		if rightTokens[token] {
+			intersection++
+		}
+	}
+	smaller := len(leftTokens)
+	if len(rightTokens) < smaller {
+		smaller = len(rightTokens)
+	}
+	return smaller > 0 && float64(intersection)/float64(smaller) >= 0.86
+}
+
+func memoryPreferred(candidate, existing memory) bool {
+	candidateRank := memoryQualityRank(candidate.Quality)
+	existingRank := memoryQualityRank(existing.Quality)
+	if candidateRank != existingRank {
+		return candidateRank > existingRank
+	}
+	if candidate.Confidence > existing.Confidence+0.01 {
+		return true
+	}
+	if existing.Confidence > candidate.Confidence+0.01 {
+		return false
+	}
+	return len(memorySignal(candidate.Text)) < len(memorySignal(existing.Text))
+}
+
+func memoryQualityRank(quality string) int {
+	switch strings.ToLower(strings.TrimSpace(quality)) {
+	case "durable":
+		return 3
+	case "weak":
+		return 2
+	case "one_off":
+		return 1
+	case "passive":
+		return 0
+	default:
+		return 1
+	}
 }

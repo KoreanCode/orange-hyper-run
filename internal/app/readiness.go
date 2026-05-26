@@ -476,7 +476,7 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage", "json", ".json", ".txt", "file", "disk", "filesystem"),
 			"MySQL, SQLite, DB, file, JSON, reload, restart, storage, or database evidence"
 	case "error_handling":
-		return hasAny(normalized, "empty", "error", "loading", "fallback", "failure", "edge") &&
+		return hasAny(normalized, "empty", "error", "loading", "fallback", "failure", "edge", "missing argument", "missing input", "invalid input", "invalid command", "unknown command", "required field", "required input") &&
 				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works", "rejected", "proves", "proved", "passed"),
 			"empty, loading, error, failure, fallback, or edge-state evidence"
 	case "validation_coverage":

@@ -192,7 +192,7 @@ func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 		kind := strings.ToLower(strings.TrimSpace(record.Kind))
 		pressureType, effect := growthClassification(kind, signal)
 		canonical := canonicalPressureSignal(signal)
-		acc := findPressureAccumulator(accs, pressureType, canonical)
+		acc := findPressureAccumulator(accs, pressureType, canonical, signal)
 		if acc == nil {
 			acc = &pressureAccumulator{
 				kind:            kind,
@@ -203,6 +203,9 @@ func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 				goals:           map[string]bool{},
 			}
 			accs = append(accs, acc)
+		} else if growthSignalPreferred(signal, acc.signal) {
+			acc.signal = signal
+			acc.canonicalSignal = canonical
 		}
 		acc.memoryCount++
 		acc.goals[memoryGoalID(record.Text)] = true
@@ -276,16 +279,58 @@ func readinessEvidenceContributesToGrowth(text string) bool {
 	return strings.HasPrefix(rest, "validation coverage:")
 }
 
-func findPressureAccumulator(accs []*pressureAccumulator, pressureType, canonical string) *pressureAccumulator {
+func findPressureAccumulator(accs []*pressureAccumulator, pressureType, canonical, signal string) *pressureAccumulator {
+	command := ""
+	if pressureType == "repeated_validation" || pressureType == "surface_validation" {
+		command = normalizeSentence(inferredCommandForSignal(signal))
+	}
 	for _, acc := range accs {
 		if acc.pressureType != pressureType {
 			continue
+		}
+		if command != "" && command == normalizeSentence(inferredCommandForSignal(acc.signal)) {
+			return acc
 		}
 		if tokenJaccardString(acc.canonicalSignal, canonical) >= 0.72 {
 			return acc
 		}
 	}
 	return nil
+}
+
+func growthSignalPreferred(candidate, existing string) bool {
+	candidate = strings.TrimSpace(candidate)
+	existing = strings.TrimSpace(existing)
+	if candidate == "" {
+		return false
+	}
+	if existing == "" {
+		return true
+	}
+	candidateNormalized := normalizeSentence(candidate)
+	existingNormalized := normalizeSentence(existing)
+	candidateCoverage := strings.HasPrefix(candidateNormalized, "validation coverage:")
+	existingCoverage := strings.HasPrefix(existingNormalized, "validation coverage:")
+	if existingCoverage != candidateCoverage {
+		return existingCoverage && !candidateCoverage
+	}
+	candidateActionable := actionableGrowthSignal(candidateNormalized)
+	existingActionable := actionableGrowthSignal(existingNormalized)
+	if candidateActionable != existingActionable {
+		return candidateActionable
+	}
+	return len(candidate) < len(existing)
+}
+
+func actionableGrowthSignal(normalized string) bool {
+	return hasAny(normalized,
+		"before every",
+		"before each",
+		"repeated validation path",
+		"smoke command",
+		"run ",
+		"use ",
+	)
 }
 
 func growthScore(goalCount, memoryCount int) float64 {
@@ -559,6 +604,7 @@ func growthBehaviorFromPressures(pressures []growthPressure) growthBehavior {
 		ValidationSignals: []string{},
 		StopConditions:    []string{},
 	}
+	seenValidation := map[string]bool{}
 	for _, pressure := range pressures {
 		switch pressure.Effect {
 		case "work_boundary":
@@ -572,8 +618,15 @@ func growthBehaviorFromPressures(pressures []growthPressure) growthBehavior {
 				behavior.WorkBoundary = append(behavior.WorkBoundary, growthLine("Respect", pressure, "learned constraint"))
 			}
 		case "validation":
+			key := growthBehaviorValidationKey(pressure)
+			if key != "" && seenValidation[key] {
+				continue
+			}
 			if len(behavior.ValidationSignals) < 3 {
 				behavior.ValidationSignals = append(behavior.ValidationSignals, growthLine("Reuse", pressure, "validation pattern"))
+				if key != "" {
+					seenValidation[key] = true
+				}
 			}
 		case "stop_condition":
 			if len(behavior.StopConditions) < 3 {
@@ -582,6 +635,13 @@ func growthBehaviorFromPressures(pressures []growthPressure) growthBehavior {
 		}
 	}
 	return behavior
+}
+
+func growthBehaviorValidationKey(pressure growthPressure) string {
+	if command := normalizeSentence(inferredCommandForSignal(pressure.Signal)); command != "" {
+		return "command:" + command
+	}
+	return "signal:" + pressure.CanonicalSignal
 }
 
 func growthBehaviorWithActiveCapabilities(root string, pressures []growthPressure) (growthBehavior, *hyperError) {

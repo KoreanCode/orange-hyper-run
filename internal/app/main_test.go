@@ -1508,6 +1508,29 @@ func TestGrowthTreatsKnownGapFailureAsImplementationPressure(t *testing.T) {
 	}
 }
 
+func TestGrowthGroupsRepeatedValidationByCommand(t *testing.T) {
+	pressures := deriveGrowthPressures([]memoryRecord{
+		{Kind: "pattern", Text: "GOAL-0001 reusable patterns: Use `./check.sh` as the narrow local smoke command for the add/list flow.", Confidence: 0.75, Quality: "durable"},
+		{Kind: "pattern", Text: "GOAL-0002 reusable patterns: Use `./check.sh` as the repeated validation path for add/list plus CLI edge states.", Confidence: 0.75, Quality: "durable"},
+	})
+	if len(pressures) != 1 {
+		t.Fatalf("expected same-command validation pressure to merge, got %+v", pressures)
+	}
+	if pressures[0].State != "repeated" || pressures[0].GoalCount != 2 {
+		t.Fatalf("expected repeated validation pressure across two goals, got %+v", pressures[0])
+	}
+	if pressures[0].PressureType != "repeated_validation" {
+		t.Fatalf("expected repeated validation pressure, got %+v", pressures[0])
+	}
+}
+
+func TestErrorHandlingEvidenceAcceptsCLIInvalidCommandStates(t *testing.T) {
+	covered, _ := readinessEvidenceQuality("error_handling", "Missing argument and unknown command states are handled and verified.")
+	if !covered {
+		t.Fatal("CLI missing-argument and unknown-command evidence should cover error handling")
+	}
+}
+
 func TestSimilarContextIgnoresProtocolNoiseMemories(t *testing.T) {
 	root := t.TempDir()
 	if err := ensureProjectLayout(root); err != nil {
@@ -1639,6 +1662,25 @@ func TestHarnessCandidateNeedsImplementationAndBoundaryPressure(t *testing.T) {
 	if harnessPressureReady(pressures) {
 		t.Fatal("repeated decisions plus validation must not create a harness without implementation pressure")
 	}
+}
+
+func TestGrowthBehaviorDedupesValidationSignalsByCommand(t *testing.T) {
+	behavior := growthBehaviorFromPressures([]growthPressure{
+		{
+			Effect:          "validation",
+			Signal:          "Use `./check.sh` as the narrow local smoke command for the add/list flow.",
+			CanonicalSignal: "add check command flow list local narrow sh smoke use",
+		},
+		{
+			Effect:          "validation",
+			Signal:          "Validation coverage: `./check.sh` passed and covers add, list, read-back, and `go test ./...`.",
+			CanonicalSignal: "add back check coverage covers go list passed read sh test validation",
+		},
+	})
+	if len(behavior.ValidationSignals) != 1 {
+		t.Fatalf("expected same-command validation signals to dedupe, got %+v", behavior.ValidationSignals)
+	}
+	assertContains(t, behavior.ValidationSignals[0], "./check.sh")
 }
 
 func TestDuplicateCommandCandidatesKeepStrongestLifecycle(t *testing.T) {
@@ -2717,6 +2759,22 @@ func TestLearnExtractsDurableSignals(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "constraints.md")), "external services")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "failures.md")), "WebSocket path failed")
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "decisions.md")), "Changed Files")
+}
+
+func TestLearnDedupesOverlappingSectionAndLearnSignals(t *testing.T) {
+	evidence := "# GOAL-0001 Evidence\n\n## Validation\n\n`./check.sh` passed.\n\n## Decisions\n\nKeep the first slice as a local CLI with file-backed persistence; avoid generated harnesses until repeated need appears.\n\n## Blocker\n\nNone blocking.\n"
+	next := "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nHandle empty state.\n\n## Learn Notes\n\n- Decision: Keep the first slice as a local CLI with file-backed persistence.\n- Constraint: Do not create harnesses until repeated evidence shows the project needs one.\n"
+	memories := memoriesForDerivedState(goalState{State: "completed", Reason: "done"}, "GOAL-0001", evidence, next)
+
+	overlappingDecisions := 0
+	for _, memory := range memories {
+		if memory.Kind == "decision" && strings.Contains(memory.Text, "first slice") {
+			overlappingDecisions++
+		}
+	}
+	if overlappingDecisions != 1 {
+		t.Fatalf("expected one deduped overlapping decision, got %d in %+v", overlappingDecisions, memories)
+	}
 }
 
 func TestLearnIgnoresHyperRunMetaProgress(t *testing.T) {
