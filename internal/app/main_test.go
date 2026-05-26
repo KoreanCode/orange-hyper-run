@@ -801,6 +801,73 @@ func TestRunAutoUntilReachedBeforeFirstPacketKeepsHandoffConsistent(t *testing.T
 	assertContains(t, doctor.Stdout, "[OK] Next packet plan: .hyper/next-packet.md matches current state")
 }
 
+func TestRunAutoUntilSustainedQualityPromotesActiveValidator(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nService Quality Chain\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nAdd one release note and list it back.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nLocal CLI\n\n## Success Criteria\n\nReach sustained quality only after repeated validation becomes active required behavior.\n")
+	mustRun(t, root, "init")
+	if _, err := runCLI(args("run", "--auto", "--until", "sustained-service-quality", "Drive to sustained quality"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("initial auto run failed: %v", err)
+	}
+	validation := "`./check.sh` passed with output: `release-note add/list/error smoke passed`."
+	writeEvidence := func(goalID, readiness string) {
+		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "evidence.md"), "# "+goalID+" Evidence\n\n## Validation\n\n"+validation+"\n\n## Readiness Evidence\n\n"+readiness+"\n\n## Active Capability Evidence\n\nNo active project capability required yet.\n\n## Changed Files\n\nfixture\n\n## Decisions\n\nKeep the local CLI boundary.\n\n## Reusable Patterns\n\nUse `./check.sh` as the repeated validation path.\n\n## Blockers\n\nNone blocking.\n")
+		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "next.md"), "# "+goalID+" Next\n\n## Recommended Next Goal\n\nContinue toward sustained quality.\n\n## Learn Notes\n\n- pattern: Use `./check.sh` as the repeated validation path.\n")
+	}
+	complete := func(goalID string) string {
+		out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+		if err != nil {
+			t.Fatalf("complete %s failed: %v", goalID, err)
+		}
+		assertContains(t, out.Stdout, "Finish gate: passed")
+		return out.Stdout
+	}
+	advance := func() {
+		if _, err := runCLI(args("advance"), testRoot(root), fakeUpdater{}); err != nil {
+			t.Fatalf("advance failed: %v", err)
+		}
+	}
+	nextRun := func(focus string) {
+		if _, err := runCLI(args("run", "--auto", "--until", "sustained-service-quality", focus), testRoot(root), fakeUpdater{}); err != nil {
+			t.Fatalf("auto run failed: %v", err)
+		}
+	}
+
+	writeEvidence("GOAL-0001", "Product completeness: Service Quality Chain has a measurable add/list CLI slice.\nCore UX: CLI smoke passed for add and list behavior from the command surface.\nValidation coverage: "+validation)
+	complete("GOAL-0001")
+	advance()
+	nextRun("Prove persistence and error handling")
+
+	writeEvidence("GOAL-0002", "Data persistence: Text file storage saved a release note and a separate list command re-read it from disk.\nError handling: Missing argument and unknown command states are handled and verified.\nValidation coverage: "+validation)
+	complete("GOAL-0002")
+	advance()
+	nextRun("Prove beta service quality axes")
+
+	writeEvidence("GOAL-0003", strings.Join([]string{
+		"Validation coverage: " + validation,
+		"Security baseline: Local-only security and privacy boundary is documented and verified: no cloud sync, no telemetry, no secrets, no tokens, and no sessions.",
+		"Deployment readiness: Release artifacts are created in `dist/` and the packaged smoke command passed outside the source command path.",
+		"Operations and docs: README documents setup, run command, smoke command, rollback, recovery, and stop condition.",
+		"Reference benchmark: Category: Local CLI release-note tracker; References: git-chglog, standard-version, release-it; Baseline expectations: A useful local release-note CLI should add entries, list entries, keep data local, expose a repeatable smoke command, and document rollback or recovery; Current comparison: Service Quality Chain meets baseline for local add/list, file-backed persistence, repeatable smoke validation, local-only security boundary, and rollback docs; Below baseline gaps: none critical for the local-only CLI category; Above baseline strength: Hyper Run evidence ties validation, security, release artifact, docs, and benchmark proof to stage advancement; Decision: Service Quality advancement is acceptable because no core category-baseline gap remains.",
+	}, "\n"))
+	complete("GOAL-0003")
+	advance()
+	nextRun("Promote repeated validation to active required behavior")
+
+	writeEvidence("GOAL-0004", "Maintainability: Documented validation helper coverage in `DEVELOPMENT.md`; the maintained `./check.sh` helper keeps command validation repeatable without hidden local context and reduces future operator handoff friction.\nValidation coverage: "+validation+"\nOperations and docs: DEVELOPMENT and README documents setup, validation, rollback, recovery, and handoff constraints for the next operator.")
+	out := complete("GOAL-0004")
+	assertContains(t, out, "1 active structure")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-check-sh.md")), "Status: active")
+	advance()
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Stage: Sustained Service Quality")
+	assertContains(t, status.Stdout, "Next: hyper status --short")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: stop")
+}
+
 func TestStatusAutoTargetReachedDoesNotHideActivePacket(t *testing.T) {
 	state := projectState{
 		Project:         "Local Clip Shelf",
