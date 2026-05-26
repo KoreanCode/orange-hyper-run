@@ -729,7 +729,7 @@ func TestCompleteAcceptsValidationOutputForActiveValidator(t *testing.T) {
 	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
 	mustRun(t, root, "run")
 	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCommand: `go test ./...`\n\nOutput:\n\n```text\nok ./...\n```\n\ngo test ./... passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` passed and primary CLI smoke is repeatable.\n\n## Active Capability Evidence\n\nvalidator-go-test: Pending. Required behavior: Run go test ./... before completing packets.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCommand: `go test ./...`\n\nOutput:\n\n```text\nok ./...\n```\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` passed and primary CLI smoke is repeatable.\n\n## Active Capability Evidence\n\nvalidator-go-test: Pending. Required behavior: Run go test ./... before completing packets.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
 
 	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
@@ -737,6 +737,21 @@ func TestCompleteAcceptsValidationOutputForActiveValidator(t *testing.T) {
 		t.Fatalf("validation output should satisfy active validator proof: %v", err)
 	}
 	assertContains(t, out.Stdout, "Finish gate: passed")
+}
+
+func TestCompleteRejectsFailedValidationOutputForActiveValidator(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCommand: `go test ./...`\n\nOutput:\n\n```text\nFAIL ./...\n```\n\ngo test ./... failed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` failed and needs repair.\n\n## Active Capability Evidence\n\nvalidator-go-test: Pending. Required behavior: Run go test ./... before completing packets.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRepair the failing validation.\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("failed validator output must not satisfy active validator proof")
+	}
+	assertContains(t, err.Message, "Record active capability evidence for: validator-go-test")
 }
 
 func TestCompleteAcceptsExplicitActiveCapabilityBlocker(t *testing.T) {
@@ -1597,6 +1612,62 @@ func TestHarnessCandidateNeedsMultipleNonValidationStructures(t *testing.T) {
 	}
 	if harnessPressureReady(pressures) {
 		t.Fatal("single repeated decision plus repeated validation must not create a harness candidate")
+	}
+}
+
+func TestHarnessCandidateNeedsImplementationAndBoundaryPressure(t *testing.T) {
+	pressures := []growthPressure{
+		{Effect: "validation", GoalCount: 4, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004"}},
+		{Effect: "work_boundary", GoalCount: 4, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004"}},
+		{Effect: "work_boundary", GoalCount: 4, Sources: []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004"}},
+	}
+	if harnessPressureReady(pressures) {
+		t.Fatal("repeated decisions plus validation must not create a harness without implementation pressure")
+	}
+}
+
+func TestDuplicateCommandCandidatesKeepStrongestLifecycle(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	pressures := []growthPressure{
+		{
+			Kind:         "pattern",
+			PressureType: "repeated_validation",
+			Signal:       "validation pattern: `./check.sh` passed.",
+			Effect:       "validation",
+			State:        "repeated",
+			GoalCount:    4,
+			MemoryCount:  4,
+			Sources:      []string{"GOAL-0001", "GOAL-0002", "GOAL-0003", "GOAL-0004"},
+		},
+		{
+			Kind:         "pattern",
+			PressureType: "repeated_validation",
+			Signal:       "`./check.sh` passed as active validator smoke.",
+			Effect:       "validation",
+			State:        "repeated",
+			GoalCount:    2,
+			MemoryCount:  2,
+			Sources:      []string{"GOAL-0005", "GOAL-0006"},
+		},
+	}
+	candidates, hyperErr := materializeGrowthCandidates(root, pressures, growthState{})
+	if hyperErr != nil {
+		t.Fatalf("materialize candidates failed: %v", hyperErr)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("expected one deduped validator candidate, got %+v", candidates)
+	}
+	if candidates[0].Status != "active" {
+		t.Fatalf("expected strongest active validator to win, got %+v", candidates[0])
+	}
+	if !exists(filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-check-sh.md")) {
+		t.Fatal("active validator file should exist")
+	}
+	if exists(filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-check-sh.md")) {
+		t.Fatal("weaker duplicate validator candidate should not overwrite active validator")
 	}
 }
 

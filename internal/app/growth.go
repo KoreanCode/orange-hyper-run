@@ -756,7 +756,7 @@ func growthLine(verb string, pressure growthPressure, label string) string {
 
 func materializeGrowthCandidates(root string, pressures []growthPressure, previous growthState) ([]growthCandidate, *hyperError) {
 	candidates := []growthCandidate{}
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	for _, pressure := range pressures {
 		if pressure.GoalCount < growthRepeatedSignalGoals {
 			continue
@@ -768,43 +768,23 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 			if pressure.PressureType == "surface_validation" {
 				reason = "Repeated surface proof pressure crossed the validator threshold."
 			}
-			candidate := growthCandidateForPressure("validator", prefix, "validators", reason, pressure)
-			if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			if err := addGrowthCandidate(root, &candidates, seen, growthCandidateForPressure("validator", prefix, "validators", reason, pressure), pressure); err != nil {
 				return nil, err
-			}
-			if !seen[candidate.LifecyclePath] {
-				candidates = append(candidates, candidate)
-				seen[candidate.LifecyclePath] = true
 			}
 		case "implementation":
-			candidate := growthCandidateForPressure("skill", "skill", "skills", "Repeated implementation pressure crossed the skill threshold.", pressure)
-			if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			if err := addGrowthCandidate(root, &candidates, seen, growthCandidateForPressure("skill", "skill", "skills", "Repeated implementation pressure crossed the skill threshold.", pressure), pressure); err != nil {
 				return nil, err
-			}
-			if !seen[candidate.LifecyclePath] {
-				candidates = append(candidates, candidate)
-				seen[candidate.LifecyclePath] = true
 			}
 		case "stop_condition":
-			candidate := growthCandidateForPressure("validator", "preflight", "validators", "Repeated failure pressure crossed the preflight threshold.", pressure)
-			if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			if err := addGrowthCandidate(root, &candidates, seen, growthCandidateForPressure("validator", "preflight", "validators", "Repeated failure pressure crossed the preflight threshold.", pressure), pressure); err != nil {
 				return nil, err
-			}
-			if !seen[candidate.LifecyclePath] {
-				candidates = append(candidates, candidate)
-				seen[candidate.LifecyclePath] = true
 			}
 		}
 	}
 	if harnessPressureReady(pressures) {
 		pressure := aggregateHarnessPressure(pressures)
-		candidate := harnessCandidateForPressure(pressure)
-		if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+		if err := addGrowthCandidate(root, &candidates, seen, harnessCandidateForPressure(pressure), pressure); err != nil {
 			return nil, err
-		}
-		if !seen[candidate.LifecyclePath] {
-			candidates = append(candidates, candidate)
-			seen[candidate.LifecyclePath] = true
 		}
 	}
 	active, activeErr := activeCapabilities(root)
@@ -818,6 +798,51 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 	}
 	candidates = append(candidates, retired...)
 	return candidates, nil
+}
+
+func addGrowthCandidate(root string, candidates *[]growthCandidate, seen map[string]int, candidate growthCandidate, pressure growthPressure) *hyperError {
+	key := growthCandidateIdentity(candidate)
+	if index, ok := seen[key]; ok {
+		existing := (*candidates)[index]
+		if strongerOrEqualGrowthCandidate(existing, candidate) {
+			return nil
+		}
+		if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			return err
+		}
+		(*candidates)[index] = candidate
+		return nil
+	}
+	if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+		return err
+	}
+	seen[key] = len(*candidates)
+	*candidates = append(*candidates, candidate)
+	return nil
+}
+
+func strongerOrEqualGrowthCandidate(existing, candidate growthCandidate) bool {
+	existingRank := growthCandidateStatusRank(existing.Status)
+	candidateRank := growthCandidateStatusRank(candidate.Status)
+	if existingRank != candidateRank {
+		return existingRank > candidateRank
+	}
+	return existing.EvidenceCount >= candidate.EvidenceCount
+}
+
+func growthCandidateStatusRank(status string) int {
+	switch status {
+	case "active":
+		return 4
+	case "promotable":
+		return 3
+	case "repeated":
+		return 2
+	case "observed", "candidate":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func validatorCandidatePrefix(pressure growthPressure) string {
@@ -998,7 +1023,8 @@ func retiredGrowthCandidates(root string, previous growthState, current []growth
 func harnessPressureReady(pressures []growthPressure) bool {
 	stable := 0
 	hasValidation := false
-	nonValidationStructures := 0
+	hasImplementation := false
+	hasWorkBoundary := false
 	for _, pressure := range pressures {
 		if pressure.GoalCount < growthRepeatedSignalGoals {
 			continue
@@ -1006,14 +1032,17 @@ func harnessPressureReady(pressures []growthPressure) bool {
 		if pressure.Effect == "validation" {
 			hasValidation = true
 		}
-		if pressure.Effect == "implementation" || pressure.Effect == "work_boundary" {
-			nonValidationStructures++
+		if pressure.Effect == "implementation" {
+			hasImplementation = true
+		}
+		if pressure.Effect == "work_boundary" {
+			hasWorkBoundary = true
 		}
 		if pressure.Effect == "validation" || pressure.Effect == "implementation" || pressure.Effect == "work_boundary" {
 			stable++
 		}
 	}
-	return hasValidation && nonValidationStructures >= 2 && stable >= growthHarnessStablePressures
+	return hasValidation && hasImplementation && hasWorkBoundary && stable >= growthHarnessStablePressures
 }
 
 func aggregateHarnessPressure(pressures []growthPressure) growthPressure {

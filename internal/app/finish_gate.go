@@ -135,11 +135,27 @@ func activeValidatorValidationCovers(capability activeCapability, evidenceText s
 	if command == "" {
 		return false
 	}
-	validation := normalizeSentence(firstUsefulValidationMemory(sectionBody(evidenceText, "Validation")))
-	if !credibleActiveCapabilityEvidence(validation) {
+	validation := normalizeSentence(sectionBody(evidenceText, "Validation"))
+	if !strings.Contains(validation, command) || !credibleActiveCapabilityEvidence(validation) {
 		return false
 	}
-	return strings.Contains(validation, command)
+	return successfulValidationEvidence(validation)
+}
+
+func successfulValidationEvidence(normalized string) bool {
+	return hasAny(normalized,
+		"passed",
+		"success",
+		"succeeded",
+		"verified",
+		"checked",
+		"covered",
+		"proved",
+		"proven",
+		"built",
+		" ok ",
+		"ok ./",
+	)
 }
 
 func credibleActiveCapabilityEvidence(normalized string) bool {
@@ -148,6 +164,10 @@ func credibleActiveCapabilityEvidence(normalized string) bool {
 	}
 	if explicitActiveCapabilityBlocker(normalized) {
 		return true
+	}
+	if hasAny(normalized, "failed", "failure", "blocked", "warning", "warn") &&
+		!hasAny(normalized, "passed", "success", "succeeded", "verified", "checked", "covered", "handled", "proved", "proven", "recovered") {
+		return false
 	}
 	if hasAny(normalized,
 		"pending",
