@@ -235,6 +235,7 @@ func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 			Sources:         sources,
 		})
 	}
+	pressures = suppressResolvedFailurePressures(pressures, records)
 	sort.Slice(pressures, func(i, j int) bool {
 		if pressures[i].Score == pressures[j].Score {
 			if pressures[i].Kind == pressures[j].Kind {
@@ -262,10 +263,78 @@ func growthRecordAllowed(record memoryRecord) bool {
 	if signal == "" || isNoisyGrowthSignal(signal) {
 		return false
 	}
+	if activeCapabilityExecutionSignal(signal) {
+		return false
+	}
 	if quality == "weak" {
 		return usefulValidationSignal(signal) || hasAny(normalizeSentence(signal), "before every", "before each", "repeatable")
 	}
 	return true
+}
+
+func activeCapabilityExecutionSignal(signal string) bool {
+	normalized := normalizeSentence(signal)
+	return hasAny(normalized, "active validator", "active harness", "active capability") &&
+		hasAny(normalized, "passed before packet handoff", "passed for goal", "ran for goal", "blocked because", "record active capability")
+}
+
+func suppressResolvedFailurePressures(pressures []growthPressure, records []memoryRecord) []growthPressure {
+	filtered := make([]growthPressure, 0, len(pressures))
+	for _, pressure := range pressures {
+		if pressureOpenFailure(pressure) && pressureResolvedByLaterMemory(pressure, records) {
+			continue
+		}
+		filtered = append(filtered, pressure)
+	}
+	return filtered
+}
+
+func pressureResolvedByLaterMemory(pressure growthPressure, records []memoryRecord) bool {
+	latest := latestSourceGoal(pressure.Sources)
+	if latest == "" {
+		return false
+	}
+	for _, record := range records {
+		goalID := memoryGoalID(record.Text)
+		if compareGoalID(goalID, latest) <= 0 {
+			continue
+		}
+		signal := memorySignal(record.Text)
+		if failureClosureSignal(signal) && failureClosureOverlaps(pressure.Signal, signal) {
+			return true
+		}
+	}
+	return false
+}
+
+func latestSourceGoal(sources []string) string {
+	latest := ""
+	for _, source := range sources {
+		if compareGoalID(source, latest) > 0 {
+			latest = source
+		}
+	}
+	return latest
+}
+
+func failureClosureSignal(signal string) bool {
+	normalized := normalizeSentence(signal)
+	if hasAny(normalized, "not fixed", "not resolved", "not closed", "still open") {
+		return false
+	}
+	return hasAny(normalized, "closed by", "is closed", "now closed", "resolved", "fixed", "no longer", "now handled", "now configurable")
+}
+
+func failureClosureOverlaps(failure, closure string) bool {
+	failureTokens := tokenSet(pressureTokens(failure))
+	closureTokens := tokenSet(pressureTokens(closure))
+	overlap := 0
+	for token := range failureTokens {
+		if closureTokens[token] {
+			overlap++
+		}
+	}
+	return overlap >= 2 || tokenJaccard(failureTokens, closureTokens) >= 0.35
 }
 
 func readinessEvidenceContributesToGrowth(text string) bool {

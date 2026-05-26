@@ -1626,6 +1626,30 @@ func TestGrowthTreatsRemainingGapFailureAsImplementationPressure(t *testing.T) {
 	}
 }
 
+func TestGrowthIgnoresActiveValidatorPassAsNewValidationPressure(t *testing.T) {
+	pressures := deriveGrowthPressures([]memoryRecord{
+		{Kind: "pattern", Text: "GOAL-0005 pressure signals: Active validator `validator-go-test` passed before packet handoff.", Confidence: 0.7, Quality: "weak"},
+		{Kind: "pattern", Text: "GOAL-0006 pressure signals: Active validator `validator-go-test` passed before packet handoff.", Confidence: 0.7, Quality: "weak"},
+		{Kind: "pattern", Text: "GOAL-0007 pressure signals: Active validator `validator-go-test` passed before packet handoff.", Confidence: 0.7, Quality: "weak"},
+	})
+	if len(pressures) != 0 {
+		t.Fatalf("active validator execution evidence should not create a new validator pressure, got %+v", pressures)
+	}
+}
+
+func TestGrowthSuppressesFailurePressureClosedByLaterEvidence(t *testing.T) {
+	pressures := deriveGrowthPressures([]memoryRecord{
+		{Kind: "failure", Text: "GOAL-0005 learn failure: Fixed port `:8080` is a deployment friction for future operations.", Confidence: 0.8, Quality: "durable"},
+		{Kind: "failure", Text: "GOAL-0006 learn failure: Fixed port `:8080` remains deployment/operations friction.", Confidence: 0.8, Quality: "durable"},
+		{Kind: "pattern", Text: "GOAL-0007 pressure signals: Fixed port deployment friction is closed by `MINIAPI_ADDR`.", Confidence: 0.75, Quality: "durable"},
+	})
+	for _, pressure := range pressures {
+		if pressureOpenFailure(pressure) && strings.Contains(pressure.Signal, "Fixed port") {
+			t.Fatalf("resolved fixed-port failure should not remain as open pressure, got %+v", pressures)
+		}
+	}
+}
+
 func TestGrowthGroupsRepeatedValidationByCommand(t *testing.T) {
 	pressures := deriveGrowthPressures([]memoryRecord{
 		{Kind: "pattern", Text: "GOAL-0001 reusable patterns: Use `./check.sh` as the narrow local smoke command for the add/list flow.", Confidence: 0.75, Quality: "durable"},
