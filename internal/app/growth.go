@@ -487,10 +487,27 @@ func isValidationPattern(signal string) bool {
 	if strings.Contains(normalized, "readiness evidence:") && !strings.Contains(normalized, "validation coverage:") {
 		return false
 	}
-	if command := firstBacktickCommand(signal); command != "" && hasAny(normalized, "run", "check", "smoke", "validation", "handoff", "before every", "before each", "passed", "repeatable") {
+	if command := firstBacktickCommand(signal); looksLikeRuntimeCommand(command) && hasAny(normalized, "run", "check", "smoke", "validation", "handoff", "before every", "before each", "passed", "repeatable") {
 		return true
 	}
 	return hasAny(normalized, "test", "build", "smoke", "validate", "validation", "playwright", "browser", "go test", "npm run", "pytest")
+}
+
+func looksLikeRuntimeCommand(command string) bool {
+	fields := strings.Fields(strings.TrimSpace(command))
+	if len(fields) == 0 {
+		return false
+	}
+	executable := fields[0]
+	if strings.HasPrefix(executable, "./") || strings.HasPrefix(executable, "../") || strings.HasPrefix(executable, "/") {
+		return true
+	}
+	switch executable {
+	case "bun", "cargo", "deno", "docker", "go", "just", "make", "node", "npm", "pnpm", "python", "python3", "pytest", "uv", "yarn":
+		return true
+	default:
+		return false
+	}
 }
 
 func isSurfaceValidationPattern(signal string) bool {

@@ -1614,6 +1614,13 @@ func TestCommandHandoffPatternClassifiesAsValidation(t *testing.T) {
 	}
 }
 
+func TestBacktickCodeSymbolDoesNotClassifyAsValidationCommand(t *testing.T) {
+	pressureType, effect := growthClassification("pattern", "Pattern: Check `loadState()` fallback before rendering.")
+	if pressureType != "implementation_pattern" || effect != "implementation" {
+		t.Fatalf("expected code-symbol pattern to remain implementation pressure, got %s/%s", pressureType, effect)
+	}
+}
+
 func TestActiveValidatorBecomesRequiredValidationSignal(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
