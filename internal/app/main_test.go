@@ -1482,6 +1482,8 @@ func TestGrowthIgnoresStageAdvancementProtocolNoise(t *testing.T) {
 		{Kind: "decision", Text: "GOAL-0001 learn decision: Preserve current stage in `plan.md`; stage advancement remains a recommendation pending user acceptance.", Confidence: 0.75, Quality: "durable"},
 		{Kind: "constraint", Text: "GOAL-0002 learn constraint: Do not edit `plan.md Current Stage` until the user accepts stage advancement.", Confidence: 0.75, Quality: "durable"},
 		{Kind: "decision", Text: "GOAL-0003 decisions: Do not edit `plan.md Current Stage` in this packet; stage advancement is a recommendation pending user acceptance.", Confidence: 0.75, Quality: "durable"},
+		{Kind: "decision", Text: "GOAL-0004 learn decision: Service Quality advancement is allowed because no core category-baseline gap remains.", Confidence: 0.75, Quality: "durable"},
+		{Kind: "decision", Text: "GOAL-0005 learn decision: Allow Service Quality advancement only because the local CLI has no critical category-baseline gap.", Confidence: 0.75, Quality: "durable"},
 	})
 	if len(pressures) != 0 {
 		t.Fatalf("expected stage advancement protocol notes to stay out of growth pressure, got %+v", pressures)
@@ -1489,6 +1491,14 @@ func TestGrowthIgnoresStageAdvancementProtocolNoise(t *testing.T) {
 	memories := appendMemoryIfUseful(nil, "decision", "GOAL-0001 decisions: Preserve current stage in `plan.md`; stage advancement remains a recommendation pending user acceptance.", 0.75)
 	if len(memories) != 0 {
 		t.Fatalf("expected protocol note to stay out of memory, got %+v", memories)
+	}
+	memories = appendMemoryIfUseful(nil, "decision", "GOAL-0004 learn decision: Service Quality advancement is allowed because no core category-baseline gap remains.", 0.75)
+	if len(memories) != 0 {
+		t.Fatalf("expected stage advancement allowed note to stay out of memory, got %+v", memories)
+	}
+	memories = appendMemoryIfUseful(nil, "decision", "GOAL-0005 learn decision: Allow Service Quality advancement only because the local CLI has no critical category-baseline gap.", 0.75)
+	if len(memories) != 0 {
+		t.Fatalf("expected allow stage advancement note to stay out of memory, got %+v", memories)
 	}
 }
 
@@ -1710,6 +1720,17 @@ func TestGrowthBehaviorDedupesNoHarnessBoundaryPressure(t *testing.T) {
 		t.Fatalf("expected overlapping no-harness constraints to dedupe, got %+v", behavior.WorkBoundary)
 	}
 	assertContains(t, behavior.WorkBoundary[0], "harness")
+}
+
+func TestGrowthBehaviorDedupesActiveValidatorBoundaryPressure(t *testing.T) {
+	behavior := growthBehaviorFromPressures([]growthPressure{
+		{Kind: "constraint", Effect: "work_boundary", Signal: "Keep `./check.sh` as the active validator until a broader release check is repeatedly proven.", CanonicalSignal: "active broader check keep proven release repeatedly sh until validator"},
+		{Kind: "decision", Effect: "work_boundary", Signal: "Keep `./check.sh` as the only active validator until a broader release check is repeatedly proven.", CanonicalSignal: "active broader check keep only proven release repeatedly sh until validator"},
+	})
+	if len(behavior.WorkBoundary) != 1 {
+		t.Fatalf("expected overlapping active-validator boundaries to dedupe, got %+v", behavior.WorkBoundary)
+	}
+	assertContains(t, behavior.WorkBoundary[0], "active validator")
 }
 
 func TestActiveValidatorReplacesSameCommandValidationSignal(t *testing.T) {
@@ -3006,6 +3027,10 @@ func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
 	}
 	assertContains(t, sustained.NextPressure.RecommendedGoal, "Run active quality checks")
 	assertNotContains(t, sustained.NextPressure.RecommendedGoal, "until active validation")
+	stageBehavior := stageRuntimeBehaviorDoc("Sustained Service Quality", "Go CLI", sustained)
+	assertNotContains(t, stageBehavior, "only recommend stage advancement")
+	executionContract := executionContractDoc("Sustained Service Quality", sustained, growthState{})
+	assertNotContains(t, executionContract, "hyper advance")
 }
 
 func TestReferenceBenchmarkPressureShapesRuntimePacket(t *testing.T) {

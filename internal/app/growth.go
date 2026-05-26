@@ -678,6 +678,12 @@ func growthBehaviorBoundaryKey(pressure growthPressure) string {
 	if hasAny(normalized, "harness") && hasAny(normalized, "do not", "not create", "not add", "avoid", "without", "until repeated", "while one", "instead of adding") {
 		return "no-harness"
 	}
+	if hasAny(normalized, "active validator", "validator") && hasAny(normalized, "keep", "until", "broader", "release check", "repeatedly proven") {
+		if command := normalizeSentence(inferredCommandForSignal(pressure.Signal)); command != "" {
+			return "active-validator:" + command
+		}
+		return "active-validator"
+	}
 	return pressure.Kind + ":" + pressure.CanonicalSignal
 }
 

@@ -420,6 +420,12 @@ func isHyperProtocolNoiseText(normalized string) bool {
 		"do not run `hyper advance` unless the user accepts the stage advancement",
 		"recommend updating plan.md current stage",
 		"review readiness evidence, then run `hyper advance`",
+		"stage advancement is acceptable",
+		"stage advancement is allowed",
+		"allow stage advancement",
+		"service quality advancement is acceptable",
+		"service quality advancement is allowed",
+		"allow service quality advancement",
 	)
 }
 

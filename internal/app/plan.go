@@ -933,7 +933,7 @@ func executionContractDoc(stage string, readiness readinessState, growth growthS
 		"- If validation fails twice for the same reason, stop and record the failure instead of broadening scope.",
 		"- Close the packet with evidence.md, next.md, and `hyper complete`; do not create the next packet first.",
 	}
-	if readiness.StageGate.Status == "ready" {
+	if readiness.StageGate.Advancement.Candidate {
 		lines = append(lines, "- Gate-ready packets may recommend `hyper advance`, but must not silently change plan.md stage.")
 	}
 	if activeStructureCount(growth.Candidates) > 0 {
@@ -1008,7 +1008,7 @@ func stageRuntimeBehaviorDoc(stage, buildStyle string, readiness readinessState)
 	if readiness.NextPressure.AxisName != "" {
 		lines = append(lines, "- This packet should move readiness pressure: "+readiness.NextPressure.AxisName)
 	}
-	if readiness.StageGate.Status == "ready" {
+	if readiness.StageGate.Advancement.Candidate {
 		lines = append(lines, "- Gate is ready; only recommend stage advancement, do not silently edit plan.md.")
 	}
 	return strings.Join(lines, "\n")
