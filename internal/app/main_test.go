@@ -754,6 +754,21 @@ func TestCompleteRejectsFailedValidationOutputForActiveValidator(t *testing.T) {
 	assertContains(t, err.Message, "Record active capability evidence for: validator-go-test")
 }
 
+func TestCompleteRejectsFailedActiveValidatorWhenAnotherValidationPassed(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCommand: `go test ./...`\n\nOutput:\n\n```text\nFAIL ./...\n```\n\ngo test ./... failed.\n\nCommand: `npm run build`\n\nOutput:\n\n```text\nbuilt in 120ms\n```\n\nnpm run build passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `npm run build` passed, but `go test ./...` failed.\n\n## Active Capability Evidence\n\nvalidator-go-test: Pending. Required behavior: Run go test ./... before completing packets.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRepair the failing active validator.\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("a different passing validation command must not satisfy a failed active validator")
+	}
+	assertContains(t, err.Message, "Record active capability evidence for: validator-go-test")
+}
+
 func TestCompleteAcceptsExplicitActiveCapabilityBlocker(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")

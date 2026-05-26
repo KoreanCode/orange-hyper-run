@@ -135,11 +135,62 @@ func activeValidatorValidationCovers(capability activeCapability, evidenceText s
 	if command == "" {
 		return false
 	}
-	validation := normalizeSentence(sectionBody(evidenceText, "Validation"))
-	if !strings.Contains(validation, command) || !credibleActiveCapabilityEvidence(validation) {
-		return false
+	for _, fragment := range validationCommandEvidenceFragments(sectionBody(evidenceText, "Validation"), command) {
+		validation := normalizeSentence(fragment)
+		if !strings.Contains(validation, command) || !credibleActiveCapabilityEvidence(validation) {
+			continue
+		}
+		if successfulValidationEvidence(validation) {
+			return true
+		}
 	}
-	return successfulValidationEvidence(validation)
+	return false
+}
+
+func validationCommandEvidenceFragments(body, command string) []string {
+	lines := strings.Split(body, "\n")
+	fragments := []string{}
+	current := []string{}
+	sawCommandBoundary := false
+	for _, line := range lines {
+		if validationCommandBoundary(line) && len(current) > 0 {
+			fragments = append(fragments, strings.Join(current, "\n"))
+			current = nil
+		}
+		if strings.TrimSpace(line) != "" || len(current) > 0 {
+			current = append(current, line)
+		}
+		if validationCommandBoundary(line) {
+			sawCommandBoundary = true
+		}
+	}
+	if len(current) > 0 {
+		fragments = append(fragments, strings.Join(current, "\n"))
+	}
+	if sawCommandBoundary {
+		return fragments
+	}
+	lineFragments := []string{}
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
+		if trimmed == "" || isPlaceholder(trimmed) {
+			continue
+		}
+		if strings.Contains(normalizeSentence(trimmed), command) {
+			lineFragments = append(lineFragments, trimmed)
+		}
+	}
+	return lineFragments
+}
+
+func validationCommandBoundary(line string) bool {
+	trimmed := strings.TrimSpace(strings.TrimLeft(line, "-*0123456789. "))
+	normalized := strings.ToLower(trimmed)
+	return strings.HasPrefix(normalized, "command:") ||
+		strings.HasPrefix(normalized, "$ ") ||
+		strings.HasPrefix(normalized, "> ") ||
+		strings.HasPrefix(normalized, "run:") ||
+		strings.HasPrefix(normalized, "check:")
 }
 
 func successfulValidationEvidence(normalized string) bool {
