@@ -99,6 +99,8 @@ func canonicalPlanKey(heading string) string {
 	normalized := compactPlanHeading(heading)
 	aliases := map[string]string{
 		"product":           "Product",
+		"productbrief":      "Product",
+		"brief":             "Product",
 		"productdefinition": "Product",
 		"service":           "Product",
 		"servicedefinition": "Product",
@@ -150,6 +152,8 @@ func canonicalPlanKey(heading string) string {
 		"법적운영리스크":           "Constraints",
 		"successcriteria":   "Success Criteria",
 		"successmetrics":    "Success Criteria",
+		"successsignals":    "Success Criteria",
+		"successsignal":     "Success Criteria",
 		"성공지표":              "Success Criteria",
 		"성공기준":              "Success Criteria",
 		"완료기준":              "Success Criteria",

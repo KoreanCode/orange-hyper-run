@@ -1558,6 +1558,20 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongUX.Status != "covered" {
 		t.Fatalf("expected strong UX evidence to be covered, got %+v", strongUX)
 	}
+	apiUX, ok := parseReadinessEvidenceLine("GOAL-0001", "Core UX: HTTP API test passed for create and list endpoints.", defs)
+	if !ok {
+		t.Fatal("expected API UX evidence to parse")
+	}
+	if apiUX.Status != "covered" {
+		t.Fatalf("expected API UX evidence to be covered, got %+v", apiUX)
+	}
+	apiProduct, ok := parseReadinessEvidenceLine("GOAL-0001", "Product completeness: A tiny notes API now has a measurable create-and-list flow: `POST /notes` creates one note and `GET /notes` returns it.", defs)
+	if !ok {
+		t.Fatal("expected API product evidence to parse")
+	}
+	if apiProduct.Status != "covered" {
+		t.Fatalf("expected API product evidence to be covered, got %+v", apiProduct)
+	}
 	inferred := inferReadinessEvidenceFromValidationLine("GOAL-0001", "`npm run check` passed.")
 	if len(inferred) != 1 || inferred[0].Axis != "validation_coverage" || inferred[0].Status != "covered" {
 		t.Fatalf("expected validation command to infer covered validation evidence, got %+v", inferred)
@@ -1775,6 +1789,47 @@ func TestReadinessEvidenceDoesNotDowngradeCompletePlan(t *testing.T) {
 	dim := readinessDimensionMap(state.Dimensions)["product_completeness"]
 	if dim.Status != "covered" {
 		t.Fatalf("complete plan should stay covered despite weak runtime evidence, got %+v", dim)
+	}
+}
+
+func TestPlanAliasesAcceptBriefAndSuccessSignals(t *testing.T) {
+	plan := parsePlan("# Service Probe\n\n## Product Brief\n\nA tiny notes API.\n\n## Success Signals\n\nCreate and list one note.\n")
+	if got := plan["Product"]; got != "A tiny notes API." {
+		t.Fatalf("Product alias = %q", got)
+	}
+	if got := plan["Success Criteria"]; got != "Create and list one note." {
+		t.Fatalf("Success Criteria alias = %q", got)
+	}
+}
+
+func TestReadinessIgnoresDeferredStructureSignals(t *testing.T) {
+	plan := map[string]string{"Current Stage": "Tiny MVP"}
+	growth := growthState{Pressures: []growthPressure{
+		{
+			PressureType: "repeated_validation",
+			Signal:       "For tiny API MVPs, prove the primary flow with `httptest` before adding persistence or UI.",
+			Effect:       "validation",
+			State:        "observed",
+			GoalCount:    1,
+		},
+		{
+			PressureType: "stable_decision",
+			Signal:       "Keep the Tiny MVP local and in-memory.",
+			Effect:       "work_boundary",
+			State:        "observed",
+			GoalCount:    1,
+		},
+	}}
+	state := deriveReadinessState(plan, growth, nil)
+	dims := readinessDimensionMap(state.Dimensions)
+	if got := dims["persistence"].Status; got != "missing" {
+		t.Fatalf("deferred persistence should stay missing, got %+v", dims["persistence"])
+	}
+	if got := dims["core_ux"].Status; got != "missing" {
+		t.Fatalf("deferred UI should not create Core UX pressure, got %+v", dims["core_ux"])
+	}
+	if got := dims["deployment_readiness"].Status; got != "missing" {
+		t.Fatalf("local in-memory decision should not create deployment pressure, got %+v", dims["deployment_readiness"])
 	}
 }
 

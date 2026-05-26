@@ -115,7 +115,7 @@ func readinessDimensionDefs() []readinessDimensionDef {
 		{ID: "error_handling", Name: "Error handling", Keywords: []string{"error", "empty", "loading", "failure", "fallback", "blocked", "edge case"}, Gap: "Failure, empty, or edge states are not yet handled."},
 		{ID: "validation_coverage", Name: "Validation coverage", Keywords: []string{"test", "smoke", "validation", "validate", "playwright", "go test", "npm run", "pytest"}, Gap: "The primary behavior does not have repeatable validation evidence."},
 		{ID: "security_baseline", Name: "Security baseline", Keywords: []string{"security", "privacy", "permission", "rate limit", "secret", "session", "token", "telemetry", "misuse", "data handling"}, Gap: "Basic security, privacy, and misuse boundaries are not yet explicit."},
-		{ID: "deployment_readiness", Name: "Deployment readiness", Keywords: []string{"deploy", "release", "production", "server", "docker", "ci", "hosted"}, Gap: "The project is not yet proven runnable outside the local development path."},
+		{ID: "deployment_readiness", Name: "Deployment readiness", Keywords: []string{"deploy", "release", "production", "server", "docker", "github actions", "continuous integration", "hosted"}, Gap: "The project is not yet proven runnable outside the local development path."},
 		{ID: "operations_docs", Name: "Operations and docs", Keywords: []string{"readme", "docs", "runbook", "rollback", "logs", "monitor", "environment"}, Gap: "Operational notes, setup, rollback, or handoff docs are not sufficient."},
 		{ID: "maintainability", Name: "Maintainability", Keywords: []string{"refactor", "cleanup", "component", "module", "architecture", "helper", "table-driven"}, Gap: "The codebase has not accumulated enough maintainability evidence."},
 		{ID: "reference_benchmark", Name: "Reference benchmark", Keywords: []string{"reference", "benchmark", "baseline", "category", "comparison", "comparable", "above baseline", "below baseline"}, Gap: "Reference comparison has not proven category baseline and differentiating strength."},
@@ -136,7 +136,7 @@ func readinessDimensionStatus(def readinessDimensionDef, plan map[string]string,
 		if emerging {
 			return "emerging", 1, evidence
 		}
-		if hasAny(corpus, def.Keywords...) {
+		if corpusMentionsReadinessAxis(corpus, def) {
 			return "emerging", 1, "plan.md or learned context mentions this readiness axis."
 		}
 		return "missing", 0, def.Gap
@@ -170,7 +170,7 @@ func readinessDimensionStatus(def readinessDimensionDef, plan map[string]string,
 	if emerging {
 		return "emerging", 1, evidence
 	}
-	if hasAny(corpus, def.Keywords...) {
+	if corpusMentionsReadinessAxis(corpus, def) {
 		return "emerging", 1, "plan.md or learned context mentions this readiness axis."
 	}
 	return "missing", 0, def.Gap
@@ -314,6 +314,31 @@ func readinessEvidenceRecordForAxis(goalID, axis, text string) readinessEvidence
 	return readinessEvidenceRecord{Axis: axis, GoalID: goalID, Text: text, Status: status, Quality: quality}
 }
 
+func productCompletenessEvidenceCovered(normalized string) bool {
+	productSurface := hasAny(normalized,
+		"product", "mvp", "slice", "flow", "api", "endpoint", "command", "feature", "behavior", "primary", "user can",
+	)
+	measurableProof := hasAny(normalized,
+		"success", "criteria", "target", "measurable", "defined", "proved", "proven", "verified", "works", "creates", "returns", "lists",
+	)
+	concreteBehavior := hasAny(normalized,
+		"create", "list", "send", "open", "read", "write", "complete", "delete", "login", "sign up", "note", "chat", "pin", "task",
+	)
+	return productSurface && measurableProof && concreteBehavior
+}
+
+func coreUXEvidenceCovered(normalized string) bool {
+	screenProof := hasAny(normalized, "smoke", "screenshot", "browser", "verified", "passed") &&
+		hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload", "primary action", "surface", "screen", "route", "state")
+	if screenProof {
+		return true
+	}
+	apiOrCLIProof := hasAny(normalized, "api", "endpoint", "cli", "command", "http", "route") &&
+		hasAny(normalized, "create", "list", "send", "complete", "read", "write", "post", "get", "primary flow") &&
+		hasAny(normalized, "verified", "passed", "proved", "proven", "works", "test", "httptest", "smoke")
+	return apiOrCLIProof
+}
+
 func usefulReadinessEvidence(text string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(text))
 	if normalized == "" || isPlaceholder(normalized) {
@@ -441,12 +466,10 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 	normalized := strings.ToLower(text)
 	switch axis {
 	case "product_completeness":
-		return hasAny(normalized, "product", "mvp", "slice") &&
-				hasAny(normalized, "success", "criteria", "target", "measurable", "defined"),
+		return productCompletenessEvidenceCovered(normalized),
 			"measurable product, MVP, target, or success criteria"
 	case "core_ux":
-		return hasAny(normalized, "smoke", "screenshot", "browser", "verified", "passed") &&
-				hasAny(normalized, "flow", "click", "create", "add", "edit", "complete", "delete", "send", "navigate", "reload", "primary action", "surface", "screen", "route", "state"),
+		return coreUXEvidenceCovered(normalized),
 			"browser, screenshot, smoke, or verified primary-flow evidence"
 	case "persistence":
 		return hasAny(normalized, "persist", "reload", "restart", "saved", "survive", "stored", "created", "re-read", "reread", "confirmed", "row") &&
@@ -747,7 +770,8 @@ func sustainedQualityGrowthEvidence(growth growthState) (bool, bool, string) {
 
 func deploymentEvidenceCovered(normalized string) bool {
 	deploymentTarget := hasAny(normalized,
-		"deploy", "deployed", "deployment", "url", "https://", "http://", "build", "release", "hosted", "docker", "ci",
+		"deploy", "deployed", "deployment", "url", "https://", "http://", "build", "release", "hosted", "docker",
+		"github actions", "continuous integration", "ci pipeline", "ci check", "ci passed",
 		"artifact", "zip", "dist/", "file://", "static server", "server check", "packaged", "package", "parity",
 		"binary", "executable", "outside the development", "outside development", "smoke command",
 	)
@@ -784,7 +808,8 @@ func growthEvidenceForDimension(growth growthState, def readinessDimensionDef) (
 		return false, true, evidence
 	}
 	for _, signal := range growth.RuntimeBehavior.ValidationSignals {
-		if hasAny(strings.ToLower(signal), def.Keywords...) {
+		normalized := strings.ToLower(signal)
+		if !readinessSignalDefersAxis(normalized, def.ID) && hasAny(normalized, def.Keywords...) {
 			return true, true, "Active runtime behavior references this readiness axis."
 		}
 	}
@@ -793,6 +818,9 @@ func growthEvidenceForDimension(growth growthState, def readinessDimensionDef) (
 
 func pressureMatchesReadiness(pressure growthPressure, def readinessDimensionDef) bool {
 	signal := strings.ToLower(pressure.Signal + " " + pressure.PressureType + " " + pressure.Effect)
+	if readinessSignalDefersAxis(signal, def.ID) {
+		return false
+	}
 	switch def.ID {
 	case "validation_coverage":
 		return pressure.Effect == "validation" || hasAny(signal, def.Keywords...)
@@ -804,6 +832,43 @@ func pressureMatchesReadiness(pressure growthPressure, def readinessDimensionDef
 		return pressure.GoalCount >= growthRepeatedSignalGoals && (pressure.Effect == "validation" || pressure.Effect == "harness")
 	default:
 		return hasAny(signal, def.Keywords...)
+	}
+}
+
+func corpusMentionsReadinessAxis(corpus string, def readinessDimensionDef) bool {
+	if readinessSignalDefersAxis(corpus, def.ID) {
+		return false
+	}
+	return hasAny(corpus, def.Keywords...)
+}
+
+func readinessSignalDefersAxis(normalized, axis string) bool {
+	switch axis {
+	case "core_ux":
+		return hasAny(normalized, "before adding ui", "before adding persistence or ui", "without ui", "no ui", "not adding ui")
+	case "persistence":
+		return hasAny(normalized,
+			"before adding persistence",
+			"without persistence",
+			"no persistence",
+			"not persisted",
+			"not persistent",
+			"in-memory",
+			"in memory",
+		)
+	case "deployment_readiness":
+		return hasAny(normalized,
+			"local only",
+			"local-only",
+			"local and in-memory",
+			"local and in memory",
+			"outside deployment scope",
+			"not deployed",
+			"no deployment",
+			"without deployment",
+		)
+	default:
+		return false
 	}
 }
 
