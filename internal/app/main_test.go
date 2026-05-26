@@ -1177,6 +1177,31 @@ func TestActiveValidatorBecomesRequiredValidationSignal(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), "Required active validator validator-run-go-test")
 }
 
+func TestActiveCapabilityFilesBecomeGrowthCandidates(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "harness", "harness-growth-candidate.md"), "# harness-growth-candidate\n\nStatus: active\nKind: harness\n\n## Required Behavior\n\nRun the project-specific handoff harness before completing packets.\n")
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+
+	state, hyperErr := updateGrowthState(root, db)
+	if hyperErr != nil {
+		t.Fatalf("growth failed: %v", hyperErr)
+	}
+	if activeStructureCount(state.Candidates) != 2 {
+		t.Fatalf("expected two active structures from active capability files, got %+v", state.Candidates)
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"name": "validator-go-test"`)
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"name": "harness-growth-candidate"`)
+}
+
 func TestReadinessPressureSelectsStageGateGap(t *testing.T) {
 	root := t.TempDir()
 	mustRun(t, root, "init")
@@ -2052,6 +2077,16 @@ func TestServiceQualityGateRequiresSustainedGrowthEvidence(t *testing.T) {
 	}
 	assertContains(t, strings.Join(state.StageGate.BlockingGaps, "\n"), "Sustained quality")
 
+	fakeActiveEvidence := append([]readinessEvidenceRecord{}, evidence...)
+	fakeActiveEvidence = append(fakeActiveEvidence, readinessEvidenceRecordForAxis("GOAL-0002", "sustained_quality", "Sustained quality: Active validator validator-go-test is required and verified before every packet handoff."))
+	state = deriveReadinessState(plan, growthState{}, fakeActiveEvidence)
+	if state.StageGate.Status != "not_ready" {
+		t.Fatalf("text-only active validator evidence must not unlock sustained quality, got %+v", state.StageGate)
+	}
+	if state.NextPressure.Axis != "sustained_quality" {
+		t.Fatalf("expected sustained quality pressure without actual active capability, got %+v", state.NextPressure)
+	}
+
 	growth := growthState{Candidates: []growthCandidate{{Kind: "validator", Name: "validator-go-test", Status: "active"}}}
 	state = deriveReadinessState(plan, growth, evidence)
 	if state.StageGate.Status != "ready" {
@@ -2077,6 +2112,50 @@ func TestServiceQualityPressureFollowsGateOrderOverPlanMentions(t *testing.T) {
 	}
 	if state.NextPressure.Status != "emerging" {
 		t.Fatalf("expected mentioned validation to remain emerging until evidence exists, got %+v", state.NextPressure)
+	}
+}
+
+func TestServiceQualityPressureWalksRequiredAxesInOrder(t *testing.T) {
+	plan := map[string]string{
+		"Product":       "Axis Walk CLI",
+		"Current Stage": "Service Quality",
+		"MVP":           "Create one handoff entry, validate it, and show the latest handoff state.",
+		"Constraints":   "No secrets, no telemetry, no network dependency during normal use.",
+	}
+	evidence := []readinessEvidenceRecord{}
+	assertNext := func(want string, growth growthState) {
+		t.Helper()
+		state := deriveReadinessState(plan, growth, evidence)
+		if state.NextPressure.Axis != want {
+			t.Fatalf("expected next pressure %s, got %+v", want, state.NextPressure)
+		}
+	}
+
+	assertNext("validation_coverage", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0001", "validation_coverage", "Validation coverage: `go test ./...` passed and the handoff smoke command is repeatable."))
+	assertNext("security_baseline", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0002", "security_baseline", "Security baseline: Privacy boundary verified, no cloud sync, no telemetry, no token storage, no secrets, and local-only data handling is explicit."))
+	assertNext("deployment_readiness", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0003", "deployment_readiness", "Deployment readiness: Built the CLI binary and ran the smoke command outside the development command."))
+	assertNext("operations_docs", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0004", "operations_docs", "Operations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command."))
+	assertNext("maintainability", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0005", "maintainability", "Maintainability: Table-driven validation helper keeps command checks repeatable without hidden local context."))
+	assertNext("reference_benchmark", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0006", "reference_benchmark", strings.Join([]string{
+		"Category: Local developer handoff CLI.",
+		"References: GitHub CLI, Taskfile, Make.",
+		"Baseline expectations: documented command, repeatable output, rollback notes, no hidden credentials.",
+		"Current comparison: below baseline = none; meets baseline = command/test/docs/rollback; above baseline = packet evidence loop.",
+		"Below-baseline gaps: No critical below-baseline gap.",
+		"Above-baseline strength: packet evidence loop.",
+		"Decision: Service Quality proof can continue.",
+	}, "; ")))
+	assertNext("sustained_quality", growthState{})
+
+	state := deriveReadinessState(plan, growthState{Candidates: []growthCandidate{{Kind: "validator", Name: "validator-go-test", Status: "active"}}}, evidence)
+	if state.NextPressure.Axis != "stage_advancement" || state.StageGate.Status != "ready" {
+		t.Fatalf("expected ready stage advancement after active capability, got %+v / %+v", state.NextPressure, state.StageGate)
 	}
 }
 

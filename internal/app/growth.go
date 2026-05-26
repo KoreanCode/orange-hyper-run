@@ -450,9 +450,11 @@ func growthBehaviorWithActiveCapabilities(root string, pressures []growthPressur
 }
 
 type activeCapability struct {
-	Kind   string
-	Name   string
-	Signal string
+	Kind    string
+	Name    string
+	Signal  string
+	Path    string
+	Managed bool
 }
 
 func activeValidatorCapabilities(root string) ([]activeCapability, *hyperError) {
@@ -476,6 +478,8 @@ func activeValidatorCapabilities(root string) ([]activeCapability, *hyperError) 
 		}
 		validator, ok := parseActiveValidatorCapability(entry.Name(), string(body))
 		if ok {
+			validator.Path = path
+			validator.Managed = managedCapabilityFile(string(body))
 			validators = append(validators, validator)
 		}
 	}
@@ -518,6 +522,8 @@ func activeCapabilities(root string) ([]activeCapability, *hyperError) {
 			}
 			capability, ok := parseActiveCapability(kind, entry.Name(), string(body))
 			if ok {
+				capability.Path = path
+				capability.Managed = managedCapabilityFile(string(body))
 				capabilities = append(capabilities, capability)
 			}
 		}
@@ -553,6 +559,10 @@ func parseActiveCapability(kind, filename, body string) (activeCapability, bool)
 		return activeCapability{}, false
 	}
 	return activeCapability{Kind: kind, Name: name, Signal: oneLine(signal)}, true
+}
+
+func managedCapabilityFile(body string) bool {
+	return capabilityField(body, "Pressure type") != "" || capabilityField(body, "Evidence count") != ""
 }
 
 func markdownTitle(body string) string {
@@ -638,6 +648,21 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 		if !seen[candidate.LifecyclePath] {
 			candidates = append(candidates, candidate)
 			seen[candidate.LifecyclePath] = true
+		}
+	}
+	active, activeErr := activeCapabilities(root)
+	if activeErr != nil {
+		return nil, activeErr
+	}
+	for _, capability := range active {
+		if capability.Managed {
+			continue
+		}
+		candidate := growthCandidateForActiveCapability(capability)
+		seenKey := firstNonBlank(candidate.LifecyclePath, candidate.Kind+"\x00"+candidate.Name)
+		if !seen[seenKey] {
+			candidates = append(candidates, candidate)
+			seen[seenKey] = true
 		}
 	}
 	retired, err := retiredGrowthCandidates(root, previous, candidates)
@@ -735,6 +760,22 @@ func harnessCandidateForPressure(pressure growthPressure) growthCandidate {
 		RepeatedThreshold:   growthHarnessStablePressures,
 		PromotionThreshold:  growthHarnessPromotableSignals,
 		ActivationThreshold: growthHarnessActiveSignals,
+	}
+}
+
+func growthCandidateForActiveCapability(capability activeCapability) growthCandidate {
+	return growthCandidate{
+		Kind:                capability.Kind,
+		Name:                capability.Name,
+		Status:              "active",
+		LifecyclePath:       capability.Path,
+		Reason:              "Active capability file is installed in the project.",
+		Signal:              capability.Signal,
+		PressureType:        "active_capability",
+		EvidenceCount:       growthActiveSignalGoals,
+		RepeatedThreshold:   growthRepeatedSignalGoals,
+		PromotionThreshold:  growthPromotableSignalGoals,
+		ActivationThreshold: growthActiveSignalGoals,
 	}
 }
 

@@ -125,6 +125,22 @@ func readinessDimensionDefs() []readinessDimensionDef {
 
 func readinessDimensionStatus(def readinessDimensionDef, plan map[string]string, growth growthState, evidenceRecords []readinessEvidenceRecord, corpus string) (string, int, string) {
 	record, hasRecord := readinessEvidenceForAxis(evidenceRecords, def.ID)
+	if def.ID == "sustained_quality" {
+		covered, emerging, evidence := sustainedQualityGrowthEvidence(growth)
+		if covered {
+			return "covered", 2, evidence
+		}
+		if hasRecord {
+			return "emerging", 1, fmt.Sprintf("%s readiness evidence needs an actual active validator, active harness, or equivalent active capability: %s", record.GoalID, record.Text)
+		}
+		if emerging {
+			return "emerging", 1, evidence
+		}
+		if hasAny(corpus, def.Keywords...) {
+			return "emerging", 1, "plan.md or learned context mentions this readiness axis."
+		}
+		return "missing", 0, def.Gap
+	}
 	if hasRecord {
 		if record.Status == "covered" {
 			return "covered", 2, fmt.Sprintf("%s readiness evidence: %s", record.GoalID, record.Text)
