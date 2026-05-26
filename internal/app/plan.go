@@ -583,6 +583,8 @@ func isNoIssueText(normalized string) bool {
 		normalized == "no failures in this run" ||
 		normalized == "no failure this run" ||
 		normalized == "no failures this run" ||
+		normalized == "no new failure" ||
+		normalized == "no new failures" ||
 		normalized == "clear: implementation and validation completed for this packet" ||
 		normalized == "clear implementation and validation completed for this packet" ||
 		normalized == "implementation and validation completed for this packet" {
@@ -608,10 +610,17 @@ func isNoIssueText(normalized string) bool {
 		strings.HasPrefix(normalized, "no remaining blockers for this packet") ||
 		strings.HasPrefix(normalized, "no blocker remains for this packet") ||
 		strings.HasPrefix(normalized, "no blockers remain for this packet") ||
+		strings.HasPrefix(normalized, "none for this episode") ||
+		strings.HasPrefix(normalized, "none for this packet") ||
+		strings.HasPrefix(normalized, "none for this run") ||
 		strings.HasPrefix(normalized, "no failure for this episode") ||
+		strings.HasPrefix(normalized, "no failure for this packet") ||
 		strings.HasPrefix(normalized, "no failures for this episode") ||
+		strings.HasPrefix(normalized, "no failures for this packet") ||
 		strings.HasPrefix(normalized, "no failure in this run") ||
 		strings.HasPrefix(normalized, "no failures in this run") ||
+		strings.HasPrefix(normalized, "no new failure") ||
+		strings.HasPrefix(normalized, "no new failures") ||
 		strings.HasPrefix(normalized, "none critical for") ||
 		strings.HasPrefix(normalized, "no critical gap for") ||
 		strings.HasPrefix(normalized, "no critical gaps for") ||

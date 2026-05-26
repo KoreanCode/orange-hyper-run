@@ -1540,6 +1540,48 @@ func TestMigrateRefreshesLegacyMemoryQualityFixture(t *testing.T) {
 	}
 }
 
+func TestMigrateStalesNoOpMemoriesAndRewritesMarkdown(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny Ledger", "Build a tiny ledger CLI")
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+	insertRawTestMemory(t, db, "failure", "GOAL-0001 learn failure: No new failure; previous distribution pressure is closed by the wrapper.", "durable")
+	insertRawTestMemory(t, db, "failure", "GOAL-0002 blocked: None for this packet. The command-style wrapper closes the previous distribution pressure inside the current MVP boundary.", "durable")
+	insertRawTestMemory(t, db, "failure", "GOAL-0003 learn failure: Missing API key blocks release smoke.", "durable")
+	writeFile(t, filepath.Join(root, ".hyper", "memories", "failures.md"), strings.Join([]string{
+		"# Failures",
+		"",
+		"- [durable] GOAL-0001 learn failure: No new failure; previous distribution pressure is closed by the wrapper.",
+		"- [durable] GOAL-0002 blocked: None for this packet. The command-style wrapper closes the previous distribution pressure inside the current MVP boundary.",
+		"- [durable] GOAL-0003 learn failure: Missing API key blocks release smoke.",
+		"",
+	}, "\n"))
+
+	out, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Learn quality gate: staled 2 noisy memory record(s)")
+	failures := readFile(t, filepath.Join(root, ".hyper", "memories", "failures.md"))
+	assertNotContains(t, failures, "No new failure")
+	assertNotContains(t, failures, "None for this packet")
+	assertContains(t, failures, "Missing API key blocks release smoke")
+
+	var activeNoop int
+	if err := db.QueryRow(`select count(*) from memories where stale_at is null and (text like '%No new failure%' or text like '%None for this packet%')`).Scan(&activeNoop); err != nil {
+		t.Fatalf("count active no-op memories failed: %v", err)
+	}
+	if activeNoop != 0 {
+		t.Fatalf("expected no active no-op memory records, got %d", activeNoop)
+	}
+}
+
 func TestGrowthIgnoresPassiveReadinessProofAsSkillCandidate(t *testing.T) {
 	root := t.TempDir()
 	if err := ensureProjectLayout(root); err != nil {
@@ -3303,6 +3345,10 @@ func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
 	if completed.State != "completed" {
 		t.Fatalf("expected user-deferred stage note with evidence to complete, got %+v", completed)
 	}
+	completed = deriveGoalState("## Validation\n\nWrapper smoke passed.\n\n## Blocker\n\nNone for this packet. The command-style wrapper closes the previous distribution pressure inside the current MVP boundary.\n", "## Recommended Next Goal\n\nReview stage advancement.\n")
+	if completed.State != "completed" {
+		t.Fatalf("expected none-for-this-packet blocker text to complete, got %+v", completed)
+	}
 	waiting := deriveGoalState("## Blocker\n\nWaiting for user approval before stage advancement.\n", "")
 	if waiting.State != "waiting_user" {
 		t.Fatalf("expected user decision blocker to wait for user, got %+v", waiting)
@@ -3318,6 +3364,10 @@ func TestGoalStateIgnoresNoIssueBlockerAndFailureNotes(t *testing.T) {
 	kind, value = parseLearnNote("- Failure: None critical for the local-only CLI category.")
 	if kind != "" || value != "" {
 		t.Fatalf("expected no-critical failure learn note to be ignored, got %q %q", kind, value)
+	}
+	kind, value = parseLearnNote("- Failure: No new failure; previous distribution pressure is closed by the wrapper.")
+	if kind != "" || value != "" {
+		t.Fatalf("expected no-new-failure learn note to be ignored, got %q %q", kind, value)
 	}
 }
 
