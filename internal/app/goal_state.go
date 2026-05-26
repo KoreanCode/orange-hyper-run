@@ -375,11 +375,25 @@ func noisyMemoryText(text string) bool {
 	if normalized == "" {
 		return true
 	}
+	if isHyperProtocolNoiseText(normalized) {
+		return true
+	}
 	return hasAny(normalized,
 		"hyper run created", "`hyper run` created", "created goal-", "created `goal-", "runtime packet created",
 		"created runtime packet", "screenshot saved", "screenshot path", "pending.", "no learnable signal",
 		"only documentation changed", "no code changed", "status only", "summary only",
 	) || isNoIssueText(normalized) || isPassiveNoChangeText(normalized)
+}
+
+func isHyperProtocolNoiseText(normalized string) bool {
+	return hasAny(normalized,
+		"stage advancement remains a recommendation pending user acceptance",
+		"do not edit `plan.md current stage` until the user accepts stage advancement",
+		"do not edit plan.md current stage until the user accepts stage advancement",
+		"do not run `hyper advance` unless the user accepts the stage advancement",
+		"recommend updating plan.md current stage",
+		"review readiness evidence, then run `hyper advance`",
+	)
 }
 
 func isPassiveNoChangeText(normalized string) bool {

@@ -302,7 +302,7 @@ func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	state = refreshStateFromPlanForStatus(root, state)
 	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
 	runs, goals := statusDBCounts(root)
-	growth := readGrowthStateIfExists(root)
+	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
 	if short {
 		return stdout(strings.Join(statusShortLines(state, derived, readiness, growth), "\n")), nil
@@ -351,7 +351,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	readinessForGate := readReadinessStateIfExists(root)
 	if readinessForGate.Version == 0 {
-		readinessForGate = readinessStateForStatus(root, readGrowthStateIfExists(root))
+		readinessForGate = readinessStateForStatus(root, growthStateForStatus(root))
 	}
 	finishGate, finishErr := runFinishGate(root, state, derived, readinessForGate)
 	if finishErr != nil {

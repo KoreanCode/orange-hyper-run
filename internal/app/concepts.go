@@ -95,10 +95,16 @@ func activeStructureCount(candidates []growthCandidate) int {
 func growthLoopStateSummary(growth growthState) string {
 	pressureCount := visibleGrowthPressureCount(growth.Pressures)
 	candidateCount := visibleGrowthCandidateCount(growth.Candidates)
+	activeCount := activeStructureCount(growth.Candidates)
 	if pressureCount == 0 {
+		if activeCount > 0 {
+			return fmt.Sprintf("0 pressure(s), %d candidate(s), %d active structure(s).", candidateCount, activeCount)
+		}
+		if candidateCount > 0 {
+			return fmt.Sprintf("0 pressure(s), %d candidate(s); structure stays candidate until repeated evidence proves it.", candidateCount)
+		}
 		return "Pressure Ledger is empty; the next run starts from plan.md and repository state."
 	}
-	activeCount := activeStructureCount(growth.Candidates)
 	if activeCount > 0 {
 		return fmt.Sprintf("%d pressure(s), %d candidate(s), %d active structure(s).", pressureCount, candidateCount, activeCount)
 	}

@@ -136,6 +136,9 @@ func doctorGrowthMigrationCheck(root string) doctorCheck {
 	if growth.Version == 0 {
 		return doctorCheck{"Growth migration", "OK", "no growth state yet"}
 	}
+	if growthHasUnstoredManualActiveCapability(root, growth) {
+		return doctorCheck{"Growth migration", "WARN", "active capability files are not reflected in stored growth state; run `hyper migrate`"}
+	}
 	if growthMigrationNeeded(growth) {
 		return doctorCheck{"Growth migration", "WARN", "legacy or noisy growth entries found; run `hyper migrate`"}
 	}
@@ -150,7 +153,7 @@ func doctorReadinessStateCheck(root string) doctorCheck {
 	if !exists(filepath.Join(root, planFile)) {
 		return doctorCheck{"Readiness state", "WARN", "plan.md missing; cannot refresh readiness"}
 	}
-	current := readinessStateForStatus(root, readGrowthStateIfExists(root))
+	current := readinessStateForStatus(root, growthStateForStatus(root))
 	if current.Version == 0 {
 		return doctorCheck{"Readiness state", "OK", "readiness state is present"}
 	}

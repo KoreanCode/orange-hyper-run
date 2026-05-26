@@ -1119,6 +1119,44 @@ func TestGrowthIgnoresPassiveReadinessProofAsSkillCandidate(t *testing.T) {
 	}
 }
 
+func TestGrowthIgnoresStageAdvancementProtocolNoise(t *testing.T) {
+	pressures := deriveGrowthPressures([]memoryRecord{
+		{Kind: "decision", Text: "GOAL-0001 learn decision: Preserve current stage in `plan.md`; stage advancement remains a recommendation pending user acceptance.", Confidence: 0.75, Quality: "durable"},
+		{Kind: "constraint", Text: "GOAL-0002 learn constraint: Do not edit `plan.md Current Stage` until the user accepts stage advancement.", Confidence: 0.75, Quality: "durable"},
+	})
+	if len(pressures) != 0 {
+		t.Fatalf("expected stage advancement protocol notes to stay out of growth pressure, got %+v", pressures)
+	}
+	memories := appendMemoryIfUseful(nil, "decision", "GOAL-0001 decisions: Preserve current stage in `plan.md`; stage advancement remains a recommendation pending user acceptance.", 0.75)
+	if len(memories) != 0 {
+		t.Fatalf("expected protocol note to stay out of memory, got %+v", memories)
+	}
+}
+
+func TestSimilarContextIgnoresProtocolNoiseMemories(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	db, err := openDB(root)
+	if err != nil {
+		t.Fatalf("db open failed: %v", err)
+	}
+	defer db.Close()
+	if err := ensureSchema(db); err != nil {
+		t.Fatalf("schema failed: %v", err)
+	}
+	insertRawTestMemory(t, db, "decision", "GOAL-0001 learn decision: Preserve current stage in `plan.md`; stage advancement remains a recommendation pending user acceptance.", "durable")
+
+	similar, hyperErr := findSimilarContext(db, "stage advancement plan current stage", 5)
+	if hyperErr != nil {
+		t.Fatalf("similar context failed: %v", hyperErr)
+	}
+	if len(similar) != 0 {
+		t.Fatalf("expected protocol noise memory to stay out of similar context, got %+v", similar)
+	}
+}
+
 func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	root := t.TempDir()
 	if err := ensureProjectLayout(root); err != nil {
@@ -1233,6 +1271,123 @@ func TestActiveCapabilityFilesBecomeGrowthCandidates(t *testing.T) {
 	}
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"name": "validator-go-test"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"name": "harness-growth-candidate"`)
+}
+
+func TestGrowthStatusOverlayPromotesManualActiveCapabilityWithoutDuplicate(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureProjectLayout(root); err != nil {
+		t.Fatalf("layout failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+	growth := growthState{
+		Pressures: []growthPressure{{State: "repeated", PressureType: "repeated_validation", Effect: "validation", Signal: "Run go test before handoff.", GoalCount: 2}},
+		Candidates: []growthCandidate{
+			{Kind: "validator", Name: "validator-go-test", Status: "repeated", Signal: "Run go test before handoff.", LifecyclePath: filepath.Join(hyperDir, "capabilities", "candidates", "validator", "validator-go-test.md")},
+		},
+	}
+
+	overlaid := growthStateWithActiveCapabilityOverlay(root, growth)
+	if len(overlaid.Candidates) != 1 {
+		t.Fatalf("expected one candidate after overlay, got %+v", overlaid.Candidates)
+	}
+	if overlaid.Candidates[0].Status != "active" {
+		t.Fatalf("expected active candidate after overlay, got %+v", overlaid.Candidates[0])
+	}
+	if activeStructureCount(overlaid.Candidates) != 1 || overlaid.PressureLedger.ActiveStructures != 1 {
+		t.Fatalf("expected active counts to refresh, got %+v", overlaid.PressureLedger)
+	}
+}
+
+func TestStatusReflectsManualActiveCapabilityBeforeMigrate(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
+		"# Product Plan",
+		"",
+		"## Product",
+		"",
+		"Local Build Relay",
+		"",
+		"## Target Users",
+		"",
+		"Developers",
+		"",
+		"## MVP",
+		"",
+		"Run one repeatable handoff command.",
+		"",
+		"## Current Stage",
+		"",
+		"Service Quality",
+		"",
+		"## Build Style",
+		"",
+		"Go CLI",
+		"",
+		"## Success Criteria",
+		"",
+		"Every packet proves validation, release, docs, maintainability, and benchmark baseline.",
+	}, "\n"))
+	if _, err := runCLI(args("run", "Prepare sustained quality"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), strings.Join([]string{
+		"# GOAL-0001 Evidence",
+		"",
+		"## Validation",
+		"",
+		"`go test ./...` passed and the CLI smoke command is repeatable.",
+		"",
+		"## Readiness Evidence",
+		"",
+		"Validation coverage: `go test ./...` passed and the CLI smoke command is repeatable.",
+		"Security baseline: Privacy boundary verified, no cloud sync, no telemetry, no token storage, no secrets, and local-only data handling is explicit.",
+		"Deployment readiness: Built the CLI binary and ran the smoke command outside the development command.",
+		"Operations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command.",
+		"Maintainability: Table-driven validation helper keeps command checks repeatable without hidden local context.",
+		"",
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Local developer handoff CLI.",
+		"- References: GitHub CLI, Taskfile, Make.",
+		"- Baseline expectations: documented command, repeatable output, rollback notes, no hidden credentials.",
+		"- Current comparison: below baseline = none; meets baseline = command/test/docs/rollback; above baseline = packet evidence loop.",
+		"- Below-baseline gaps: No critical below-baseline gap.",
+		"- Above-baseline strength: packet evidence loop.",
+		"- Decision: Service Quality proof can continue.",
+		"",
+		"## Blocker",
+		"",
+		"None blocking.",
+	}, "\n"))
+	if activeStructureCount(readGrowthStateIfExists(root).Candidates) != 0 {
+		t.Fatal("stored growth should not know about the manual active capability yet")
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+
+	short, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, short.Stdout, "Gate: Service Quality -> Sustained Service Quality (ready)")
+	assertContains(t, short.Stdout, "Next: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
+
+	full, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, full.Stdout, "Pressure ledger: 0 pressure(s), 1 candidate(s), 1 active structure(s).")
+	assertContains(t, full.Stdout, "Covered axes: Product completeness, Validation coverage, Security baseline, Deployment readiness, Operations and docs, Maintainability, Reference benchmark, Sustained quality")
+	if activeStructureCount(readGrowthStateIfExists(root).Candidates) != 0 {
+		t.Fatal("status overlay should not mutate stored growth state")
+	}
+
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[WARN] Growth migration: active capability files are not reflected in stored growth state; run `hyper migrate`")
+	assertContains(t, doctor.Stdout, "[WARN] Readiness state:")
+	assertContains(t, doctor.Stdout, "Run `hyper migrate`.")
 }
 
 func TestReadinessPressureSelectsStageGateGap(t *testing.T) {

@@ -85,6 +85,80 @@ func readGrowthStateIfExists(root string) growthState {
 	return state
 }
 
+func growthStateForStatus(root string) growthState {
+	return growthStateWithActiveCapabilityOverlay(root, readGrowthStateIfExists(root))
+}
+
+func growthStateWithActiveCapabilityOverlay(root string, growth growthState) growthState {
+	active, err := activeCapabilities(root)
+	if err != nil {
+		return growth
+	}
+	return mergeActiveCapabilityCandidates(growth, active)
+}
+
+func growthHasUnstoredManualActiveCapability(root string, growth growthState) bool {
+	active, err := activeCapabilities(root)
+	if err != nil {
+		return false
+	}
+	if len(active) == 0 {
+		return false
+	}
+	seen := map[string]growthCandidate{}
+	for _, candidate := range growth.Candidates {
+		seen[growthCandidateIdentity(candidate)] = candidate
+	}
+	for _, capability := range active {
+		if capability.Managed {
+			continue
+		}
+		candidate, ok := seen[growthCandidateIdentity(growthCandidateForActiveCapability(capability))]
+		if !ok || candidate.Status != "active" {
+			return true
+		}
+	}
+	return false
+}
+
+func mergeActiveCapabilityCandidates(growth growthState, active []activeCapability) growthState {
+	if len(active) == 0 {
+		return growth
+	}
+	candidates := append([]growthCandidate{}, growth.Candidates...)
+	seen := map[string]int{}
+	for index, candidate := range candidates {
+		seen[growthCandidateIdentity(candidate)] = index
+	}
+	for _, capability := range active {
+		if capability.Managed {
+			continue
+		}
+		candidate := growthCandidateForActiveCapability(capability)
+		key := growthCandidateIdentity(candidate)
+		if index, ok := seen[key]; ok {
+			if candidates[index].Status != "active" {
+				candidates[index] = candidate
+			}
+			continue
+		}
+		seen[key] = len(candidates)
+		candidates = append(candidates, candidate)
+	}
+	growth.Candidates = candidates
+	growth.PressureLedger = pressureLedgerFor(growth.Pressures, growth.Candidates)
+	return growth
+}
+
+func growthCandidateIdentity(candidate growthCandidate) string {
+	kind := strings.ToLower(strings.TrimSpace(candidate.Kind))
+	name := strings.ToLower(strings.TrimSpace(candidate.Name))
+	if kind != "" || name != "" {
+		return kind + "\x00" + name
+	}
+	return strings.TrimSpace(candidate.LifecyclePath)
+}
+
 func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
 	rows, err := db.Query(`select id, kind, text, coalesce(confidence, 0), coalesce(quality, '') from memories where stale_at is null order by created_at asc, id asc`)
 	if err != nil {
@@ -267,6 +341,9 @@ func isNoisyGrowthSignal(signal string) bool {
 		return true
 	}
 	if isNoIssueText(normalized) || isPassiveNoChangeText(normalized) {
+		return true
+	}
+	if isHyperProtocolNoiseText(normalized) {
 		return true
 	}
 	tokens := pressureTokens(signal)
@@ -654,17 +731,7 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 	if activeErr != nil {
 		return nil, activeErr
 	}
-	for _, capability := range active {
-		if capability.Managed {
-			continue
-		}
-		candidate := growthCandidateForActiveCapability(capability)
-		seenKey := firstNonBlank(candidate.LifecyclePath, candidate.Kind+"\x00"+candidate.Name)
-		if !seen[seenKey] {
-			candidates = append(candidates, candidate)
-			seen[seenKey] = true
-		}
-	}
+	candidates = mergeActiveCapabilityCandidates(growthState{Candidates: candidates}, active).Candidates
 	retired, err := retiredGrowthCandidates(root, previous, candidates)
 	if err != nil {
 		return nil, err
