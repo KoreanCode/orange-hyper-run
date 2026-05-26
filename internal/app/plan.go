@@ -301,7 +301,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	docs := episodeDocs{
 		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
 		Tasks:    buildTasksDoc(goalID, buildStyle, stage, readiness, growth),
-		Evidence: buildEvidenceDoc(goalID, stage, readiness),
+		Evidence: buildEvidenceDoc(goalID, stage, readiness, growth),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
 		Next:     buildNextDoc(goalID, readiness),
 	}
@@ -935,8 +935,28 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, readinessTask, activeTask)
 }
 
-func buildEvidenceDoc(goalID, stage string, readiness readinessState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness))
+func buildEvidenceDoc(goalID, stage string, readiness readinessState, growth growthState) string {
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
+}
+
+func activeCapabilityEvidenceTemplate(growth growthState) string {
+	lines := []string{}
+	for _, candidate := range visibleGrowthCandidates(growth.Candidates) {
+		if candidate.Status != "active" {
+			continue
+		}
+		name := displayGrowthCandidateName(candidate)
+		signal := compactText(firstNonBlank(candidate.Signal, candidate.Reason), 160)
+		if signal == "" {
+			lines = append(lines, "- "+name+": Pending. Run or explicitly block this active "+candidate.Kind+".")
+			continue
+		}
+		lines = append(lines, "- "+name+": Pending. Required behavior: "+signal)
+	}
+	if len(lines) == 0 {
+		return "Pending."
+	}
+	return strings.Join(lines, "\n")
 }
 
 func referenceBenchmarkEvidenceTemplate(stage string, readiness readinessState) string {

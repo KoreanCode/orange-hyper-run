@@ -2697,16 +2697,16 @@ func TestServiceQualityPressureWalksRequiredAxesInOrder(t *testing.T) {
 }
 
 func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T) {
-	betaEvidence := buildEvidenceDoc("GOAL-0001", "Beta", readinessState{})
+	betaEvidence := buildEvidenceDoc("GOAL-0001", "Beta", readinessState{}, growthState{})
 	assertContains(t, betaEvidence, "## Reference Benchmark Evidence")
 	assertContains(t, betaEvidence, "References: Pending")
 	assertContains(t, betaEvidence, "Below-baseline gaps")
 	assertContains(t, betaEvidence, "Above-baseline strength")
 
-	serviceEvidence := buildEvidenceDoc("GOAL-0001", "Service Quality", readinessState{})
+	serviceEvidence := buildEvidenceDoc("GOAL-0001", "Service Quality", readinessState{}, growthState{})
 	assertContains(t, serviceEvidence, "## Reference Benchmark Evidence")
 
-	tinyEvidence := buildEvidenceDoc("GOAL-0001", "Tiny MVP", readinessState{})
+	tinyEvidence := buildEvidenceDoc("GOAL-0001", "Tiny MVP", readinessState{}, growthState{})
 	assertNotContains(t, tinyEvidence, "## Reference Benchmark Evidence")
 
 	tasks := buildTasksDoc("GOAL-0001", "Web app", "Service Quality", readinessState{}, growthState{})
@@ -2730,12 +2730,29 @@ func TestReferenceBenchmarkEvidenceNotRepeatedAfterCovered(t *testing.T) {
 		NextPressure: readinessPressure{Axis: "sustained_quality", AxisName: "Sustained quality", Status: "ongoing"},
 	}
 
-	evidence := buildEvidenceDoc("GOAL-0009", "Sustained Service Quality", readiness)
+	evidence := buildEvidenceDoc("GOAL-0009", "Sustained Service Quality", readiness, growthState{})
 	assertNotContains(t, evidence, "## Reference Benchmark Evidence")
 	tasks := buildTasksDoc("GOAL-0009", "Go CLI", "Sustained Service Quality", readiness, growthState{})
 	assertNotContains(t, tasks, "Fill Reference Benchmark Evidence")
 	checklist := doneChecklistDoc("Sustained Service Quality", readiness, growthState{})
 	assertNotContains(t, checklist, "Reference Benchmark Evidence lists")
+}
+
+func TestEvidenceTemplateNamesActiveCapabilities(t *testing.T) {
+	growth := growthState{
+		Candidates: []growthCandidate{
+			{
+				Kind:   "validator",
+				Name:   "validator-check-sh",
+				Status: "active",
+				Signal: "validation pattern: `./check.sh` passed with output: `release-note add/list/error smoke passed`.",
+			},
+		},
+	}
+	evidence := buildEvidenceDoc("GOAL-0010", "Sustained Service Quality", readinessState{}, growth)
+	assertContains(t, evidence, "## Active Capability Evidence")
+	assertContains(t, evidence, "- validator-check-sh: Pending. Required behavior: validation pattern: `./check.sh` passed")
+	assertNotContains(t, evidence, "## Active Capability Evidence\n\nPending.")
 }
 
 func TestReferenceBenchmarkEvidenceSectionFeedsReadiness(t *testing.T) {
