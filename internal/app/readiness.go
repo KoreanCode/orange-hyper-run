@@ -733,10 +733,11 @@ func deploymentEvidenceCovered(normalized string) bool {
 	deploymentTarget := hasAny(normalized,
 		"deploy", "deployed", "deployment", "url", "https://", "http://", "build", "release", "hosted", "docker", "ci",
 		"artifact", "zip", "dist/", "file://", "static server", "server check", "packaged", "package", "parity",
+		"binary", "executable", "outside the development", "outside development", "smoke command",
 	)
 	deploymentProof := hasAny(normalized,
 		"passed", "available", "hosted", "deployed", "built", "released", "verified", "validated", "proved", "proven",
-		"created", "served", "extracted", "smoke", "parity",
+		"created", "served", "extracted", "smoke", "parity", "ran",
 	)
 	return deploymentTarget && deploymentProof
 }
@@ -747,7 +748,7 @@ func operationsDocsEvidenceCovered(normalized string) bool {
 		"handoff", "tester", "smoke path", "run command", "package command", "stop condition", "stop conditions",
 	)
 	docsProof := hasAny(normalized,
-		"documented", "documents", "updated", "verified", "covered", "written", "records", "defines", "includes",
+		"documented", "documents", "updated", "verified", "covered", "cover", "covers", "written", "records", "defines", "includes",
 	)
 	return docsTarget && docsProof
 }

@@ -417,6 +417,32 @@ func TestStatusHighlightsReferenceBenchmarkWhenRequired(t *testing.T) {
 	assertContains(t, short, "Gap: Reference benchmark: Reference comparison has not proven category baseline")
 }
 
+func TestStatusDoesNotReportSurfaceGapWhenCoreUXIsNotRequired(t *testing.T) {
+	state := projectState{Project: "Local Build Relay", Stage: "Sustained Service Quality", Status: "completed", ActiveRunID: "RUN-0001", CurrentGoalID: "GOAL-0001", CurrentGoalPath: ".hyper/goals/GOAL-0001/goal.md", AutoContinue: true, RunUntil: "Sustained Service Quality"}
+	derived := goalState{State: "completed", Reason: "done"}
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Sustained Service Quality",
+		Dimensions: []readinessDimension{
+			{ID: "core_ux", Name: "Core UX", Status: "emerging", Evidence: "CLI command surface exists."},
+			{ID: "validation_coverage", Name: "Validation coverage", Status: "covered", Evidence: "`go test ./...` passed."},
+			{ID: "sustained_quality", Name: "Sustained quality", Status: "covered", Evidence: "Active validator is required."},
+		},
+		StageGate: readinessStageGate{
+			CurrentStage: "Sustained Service Quality",
+			NextStage:    "Sustained Service Quality",
+			Status:       "ready",
+			RequiredAxes: []string{"validation_coverage", "operations_docs", "maintainability", "sustained_quality"},
+		},
+		NextPressure: readinessPressure{Axis: "sustained_quality", AxisName: "Sustained quality", Status: "ongoing", Reason: "Continue focused quality work."},
+	}
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Proof: functional covered, operational covered")
+	assertNotContains(t, short, "surface emerging")
+	assertNotContains(t, short, "surface proof for the primary user flow")
+}
+
 func TestStatusDoesNotShowFutureReferenceBenchmarkBeforeRequired(t *testing.T) {
 	state := projectState{Project: "Tiny Pet", Stage: "Tiny MVP", Status: "completed", ActiveRunID: "RUN-0013", CurrentGoalID: "GOAL-0013", CurrentGoalPath: ".hyper/goals/GOAL-0013/goal.md", UpdatedAt: "now"}
 	derived := goalState{State: "completed", Reason: "done"}
@@ -1255,6 +1281,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongDeploy.Status != "covered" {
 		t.Fatalf("expected strong deployment evidence to be covered, got %+v", strongDeploy)
 	}
+	cliDeploy, ok := parseReadinessEvidenceLine("GOAL-0001", "Deployment readiness: Built the CLI binary and ran the smoke command outside the development command.", defs)
+	if !ok {
+		t.Fatal("expected CLI deployment evidence to parse")
+	}
+	if cliDeploy.Status != "covered" {
+		t.Fatalf("expected CLI deployment evidence to be covered, got %+v", cliDeploy)
+	}
 	weakReference, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Compared against three comparable project-growth CLIs; category baseline is fine and above-baseline strength exists.", defs)
 	if !ok {
 		t.Fatal("expected weak reference benchmark evidence to parse")
@@ -1275,6 +1308,13 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	}
 	if opsDocs.Status != "covered" {
 		t.Fatalf("expected operations docs evidence to be covered, got %+v", opsDocs)
+	}
+	opsNotes, ok := parseReadinessEvidenceLine("GOAL-0001", "Operations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command.", defs)
+	if !ok {
+		t.Fatal("expected operations notes evidence to parse")
+	}
+	if opsNotes.Status != "covered" {
+		t.Fatalf("expected operations notes evidence to be covered, got %+v", opsNotes)
 	}
 	referenceBenchmark, ok := parseReadinessEvidenceLine("GOAL-0001", "Reference benchmark: Category: Developer CLI; References: namba-ai, pi.dev, Claude Code; Baseline expectations: install is clear and one command creates useful work context; Current comparison: setup meets baseline and evidence loop is above baseline; Below-baseline gaps: None; no critical user or operator baseline gap remains; Above-baseline strength: project-local evidence pressure; Decision: Service Quality is allowed from the benchmark perspective.", defs)
 	if !ok {

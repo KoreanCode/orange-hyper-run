@@ -178,15 +178,32 @@ func proofStatusSummary(derived goalState, readiness readinessState) string {
 	} else if derived.State == "blocked" {
 		functional = "blocked"
 	}
-	summary := fmt.Sprintf("functional %s, surface %s, operational %s",
-		functional,
-		proofAxisStatus(readiness, "core_ux"),
-		proofAxisStatus(readiness, "validation_coverage"),
-	)
+	parts := []string{"functional " + functional}
+	if proofAxisVisible(readiness, "core_ux") {
+		parts = append(parts, "surface "+proofAxisStatus(readiness, "core_ux"))
+	}
+	if proofAxisVisible(readiness, "validation_coverage") {
+		parts = append(parts, "operational "+proofAxisStatus(readiness, "validation_coverage"))
+	}
+	summary := strings.Join(parts, ", ")
 	if referenceBenchmarkRelevant(readiness) {
 		summary += ", benchmark " + proofAxisStatus(readiness, "reference_benchmark")
 	}
 	return summary
+}
+
+func proofAxisVisible(readiness readinessState, axis string) bool {
+	status := proofAxisStatus(readiness, axis)
+	return readinessAxisRequired(readiness, axis) || status == "covered" || readiness.NextPressure.Axis == axis
+}
+
+func readinessAxisRequired(readiness readinessState, axis string) bool {
+	for _, required := range readiness.StageGate.RequiredAxes {
+		if required == axis {
+			return true
+		}
+	}
+	return false
 }
 
 func proofAxisStatus(readiness readinessState, axis string) string {
@@ -203,9 +220,9 @@ func nextProofGap(readiness readinessState) string {
 		return "not selected"
 	}
 	switch {
-	case proofAxisStatus(readiness, "core_ux") != "covered":
+	case readinessAxisRequired(readiness, "core_ux") && proofAxisStatus(readiness, "core_ux") != "covered":
 		return "surface proof for the primary user flow"
-	case proofAxisStatus(readiness, "validation_coverage") != "covered":
+	case readinessAxisRequired(readiness, "validation_coverage") && proofAxisStatus(readiness, "validation_coverage") != "covered":
 		return "repeatable validation proof"
 	case readiness.NextPressure.AxisName != "":
 		return readiness.NextPressure.AxisName
