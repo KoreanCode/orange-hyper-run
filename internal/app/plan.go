@@ -428,7 +428,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	product := readinessProductName(plan)
 	objective := runtimeObjective(focus, plan, stage, product, readiness)
 	validation := applyReadinessValidation(applyGrowthValidation(applyStageValidation(validationForBuildStyle(buildStyle), stage), growth), readiness)
-	stopCondition := applyReadinessStopConditions(applyGrowthStopConditions(firstRuntimeValue(plan["Success Criteria"], stageDoneCondition(stage)), growth), readiness)
+	stopCondition := runtimeStopCondition(plan, stage, growth, readiness)
 	scope := runtimeWorkBoundary(objective, stage, plan, growth, readiness)
 	nonGoals := firstRuntimeValue(plan["Non-goals"], "No explicit non-goals recorded in plan.md.")
 	docs := episodeDocs{
@@ -710,6 +710,20 @@ func applyReadinessStopConditions(base string, readiness readinessState) string 
 		return base + "\n- Do not advance from " + readiness.StageGate.CurrentStage + " to " + readiness.StageGate.NextStage + " until stage gate evidence is captured."
 	}
 	return base
+}
+
+func runtimeStopCondition(plan map[string]string, stage string, growth growthState, readiness readinessState) string {
+	base := stageDoneCondition(stage)
+	if criteria := firstRuntimeValue(plan["Success Criteria"]); criteria != "" && !sameStopCondition(criteria, base) {
+		base = "- Plan success criteria: " + compactText(criteria, 240) + "\n" + base
+	}
+	return applyReadinessStopConditions(applyGrowthStopConditions(base, growth), readiness)
+}
+
+func sameStopCondition(criteria, base string) bool {
+	criteria = normalizeSentence(criteria)
+	base = normalizeSentence(base)
+	return criteria == "" || criteria == base || strings.Contains(base, criteria)
 }
 
 func stageDoneCondition(stage string) string {

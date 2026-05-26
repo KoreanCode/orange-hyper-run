@@ -2097,6 +2097,35 @@ func TestUpdatePlanCurrentStageUpdatesInlineField(t *testing.T) {
 	}
 }
 
+func TestRuntimePacketCombinesPlanAndStageStopConditions(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
+		"# Plan",
+		"",
+		"Project: Inline Stage Probe",
+		"Current Stage: Usable MVP",
+		"Build Style: Local CLI",
+		"",
+		"Product brief:",
+		"A developer can add one item and list it back locally.",
+		"",
+		"Validation:",
+		"A smoke command proves add/list works.",
+		"",
+	}, "\n"))
+	if _, err := runCLI(args("init"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+	if _, err := runCLI(args("run", "Make the flow persistent"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
+	assertContains(t, goal, "## Stop When")
+	assertContains(t, goal, "- Plan success criteria: A smoke command proves add/list works.")
+	assertContains(t, goal, "- Core flow is usable without manual data edits.")
+	assertContains(t, goal, "- Empty, loading, and error states are handled for the primary path.")
+}
+
 func TestReadinessIgnoresDeferredStructureSignals(t *testing.T) {
 	plan := map[string]string{"Current Stage": "Tiny MVP"}
 	growth := growthState{Pressures: []growthPressure{
