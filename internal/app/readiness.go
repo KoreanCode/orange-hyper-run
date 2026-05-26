@@ -747,13 +747,18 @@ func sustainedQualityEvidenceCovered(normalized string) bool {
 }
 
 func sustainedQualityGrowthEvidence(growth growthState) (bool, bool, string) {
+	active := []string{}
 	for _, candidate := range growth.Candidates {
 		if candidate.Status != "active" {
 			continue
 		}
 		if candidate.Kind == "validator" || candidate.Kind == "harness" {
-			return true, true, "Active " + candidate.Kind + " " + candidate.Name + " proves repeated quality pressure became required behavior."
+			active = append(active, candidate.Kind+" "+candidate.Name)
 		}
+	}
+	if len(active) > 0 {
+		sort.Strings(active)
+		return true, true, "Active quality structures prove repeated quality pressure became required behavior: " + strings.Join(active, ", ") + "."
 	}
 	for _, candidate := range growth.Candidates {
 		if candidate.Status == "promotable" || candidate.Status == "repeated" {

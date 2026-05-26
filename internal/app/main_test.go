@@ -3380,6 +3380,16 @@ func TestServiceQualityGateRequiresSustainedGrowthEvidence(t *testing.T) {
 	if state.StageGate.Status != "ready" {
 		t.Fatalf("active validator should unlock sustained quality gate, got %+v", state.StageGate)
 	}
+	assertContains(t, readinessDimensionMap(state.Dimensions)["sustained_quality"].Evidence, "validator-go-test")
+
+	growth = growthState{Candidates: []growthCandidate{
+		{Kind: "validator", Name: "validator-npm-test", Status: "active"},
+		{Kind: "validator", Name: "validator-npm-run-build", Status: "active"},
+	}}
+	state = deriveReadinessState(plan, growth, evidence)
+	sustainedEvidence := readinessDimensionMap(state.Dimensions)["sustained_quality"].Evidence
+	assertContains(t, sustainedEvidence, "validator-npm-test")
+	assertContains(t, sustainedEvidence, "validator-npm-run-build")
 }
 
 func TestServiceQualityPressureFollowsGateOrderOverPlanMentions(t *testing.T) {
