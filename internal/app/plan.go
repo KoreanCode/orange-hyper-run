@@ -284,9 +284,9 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	docs := episodeDocs{
 		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
 		Tasks:    buildTasksDoc(goalID, buildStyle, stage, readiness, growth),
-		Evidence: buildEvidenceDoc(goalID, readiness),
+		Evidence: buildEvidenceDoc(goalID, stage, readiness),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
-		Next:     buildNextDoc(goalID),
+		Next:     buildNextDoc(goalID, readiness),
 	}
 	return episode{
 		Plan:          plan,
@@ -301,7 +301,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	}
 }
 
-func buildNextDoc(goalID string) string {
+func buildNextDoc(goalID string, readiness readinessState) string {
 	return fmt.Sprintf(`# %s Next
 
 ## Recommended Next Goal
@@ -310,13 +310,20 @@ Pending.
 
 ## Learn Notes
 
-Write only durable signals that should change a future runtime packet. Leave a line as Pending. or remove it when there is no reusable signal.
+%s
 
 - Decision: Pending.
 - Pattern: Pending.
 - Constraint: Pending.
 - Failure: Pending.
-`, goalID)
+`, goalID, nextLearnNotesGuidance(readiness))
+}
+
+func nextLearnNotesGuidance(readiness readinessState) string {
+	if readiness.NextPressure.Axis == "reference_benchmark" || readinessGateHasAxis(readiness, "reference_benchmark") {
+		return "Write only durable reference signals that should change future packets: category baseline, benchmark rule, accepted tradeoff, repeated below-baseline gap, or comparison-driven constraint. Do not record one-off reference names unless they change future work boundaries, validation, stop conditions, readiness, or capability candidates. Leave a line as Pending. or remove it when there is no reusable signal."
+	}
+	return "Write only durable signals that should change a future runtime packet. Leave a line as Pending. or remove it when there is no reusable signal."
 }
 
 func runtimeObjective(focus string, plan map[string]string, stage, product string, readiness readinessState) string {
@@ -486,6 +493,14 @@ func runtimeWorkBoundary(objective, stage string, plan map[string]string, growth
 	if readiness.NextPressure.WorkBoundary != "" {
 		lines = append(lines, "- "+readiness.NextPressure.WorkBoundary)
 	}
+	if readiness.NextPressure.Axis == "reference_benchmark" {
+		lines = append(lines,
+			"- Do not add broad feature work until Reference Benchmark Evidence proves the category baseline.",
+			"- Select 3-5 named references, define baseline expectations, compare below/meets/above baseline, and identify the strongest core gap.",
+			"- If a critical below-baseline gap exists, implement only the smallest fix for that gap or leave a blocked decision; do not advance the stage.",
+			"- If no critical gap exists, record the above-baseline strength and recommend stage advancement or the next sustained-service pressure.",
+		)
+	}
 	if readiness.NextPressure.Axis == "product_completeness" || readinessGateHasAxis(readiness, "product_completeness") {
 		lines = append(lines, "- If the product brief is incomplete, inspect the current project and choose the smallest reversible step.")
 	}
@@ -568,7 +583,13 @@ func stageDoneCondition(stage string) string {
 		return "- Primary flows are validated against realistic data.\n- Known blockers are documented with owner or next action.\n- Release or demo readiness evidence is captured."
 	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
-		return "- Required production checks pass.\n- Operational risks and rollback notes are documented.\n- Deployment or release evidence is captured."
+		return strings.Join([]string{
+			"- Required validation, security, deployment, operations, and maintainability evidence is captured.",
+			"- Setup, release, rollback, and recovery paths are repeatable from documented commands or artifacts.",
+			"- Reference benchmark evidence shows no critical category-baseline gap and at least one above-baseline strength.",
+			"- No critical blocker remains without an owner, next action, or explicit stop condition.",
+			"- next.md identifies the highest-value sustained-service improvement instead of broad feature work.",
+		}, "\n")
 	}
 	return "- The current stage objective is advanced.\n- Validation has passed or blockers are documented.\n- evidence.md and next.md are updated."
 }
@@ -585,7 +606,7 @@ func stageRuntimeBoundary(stage string) string {
 		return "Prioritize realistic data, reliability, security, deployment, and documentation gaps over new feature breadth."
 	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
-		return "Treat operations, security, rollback, required validation, and maintainability evidence as part of the implementation."
+		return "Close operational and reference acceptance criteria first: repeatable validation, security/privacy boundaries, release and rollback proof, operator docs, maintainability evidence, and category-baseline comparison before feature breadth."
 	}
 	return ""
 }
@@ -602,7 +623,7 @@ func stageValidationSignal(stage string) string {
 		return "Beta validation should use realistic data and capture security, deployment, or docs evidence when those axes are touched."
 	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
-		return "Service Quality validation should run required validators when active, or record why each required check is blocked."
+		return "Service Quality validation should prove the service can be set up, checked, released or run, rolled back, handed off, and compared against category references from documented commands, artifacts, or benchmark notes; run active validators or record why each required check is blocked."
 	}
 	return ""
 }
@@ -733,7 +754,7 @@ func executionContractDoc(stage string, readiness readinessState, growth growthS
 		lines = append(lines, "- Active capabilities are required behavior for this packet unless explicitly blocked with a reason.")
 	}
 	if strings.Contains(normalizeLabel(stage), "service") || strings.Contains(normalizeLabel(stage), "production") {
-		lines = append(lines, "- Service Quality packets require deployment, security, docs, or operational evidence when those surfaces are touched.")
+		lines = append(lines, "- Service Quality packets require deployment, security, docs, operational, or reference benchmark evidence when those surfaces are touched.")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -753,6 +774,9 @@ func doneChecklistDoc(stage string, readiness readinessState, growth growthState
 	}
 	if strings.Contains(normalizeLabel(stage), "beta") || strings.Contains(normalizeLabel(stage), "service") {
 		lines = append(lines, "- Stop conditions cover failure, regression, and missing credential cases found during this packet.")
+	}
+	if serviceQualityStage(stage) {
+		lines = append(lines, "- Reference Benchmark Evidence lists 3-5 references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and the next pressure.")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -778,6 +802,7 @@ func proofContractDoc(stage, buildStyle string, readiness readinessState) string
 		lines = append(lines, "- Beta surface proof may create visual smoke, accessibility, or responsive-check candidates only after repeated evidence.")
 	} else if strings.Contains(normalizedStage, "service") || strings.Contains(normalizedStage, "production") {
 		lines = append(lines, "- Service Quality surface proof should run active visual or accessibility validators when promoted, or document why they are blocked.")
+		lines = append(lines, "- Service Quality reference proof should compare the current result with 3-5 category references and block advancement when a core user or operator expectation is below baseline.")
 	}
 	if readiness.NextPressure.Axis == "core_ux" {
 		lines = append(lines, "- Current readiness pressure is Core UX, so surface proof should directly support that axis.")
@@ -863,6 +888,10 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if hasAny(normalizeLabel(buildStyle), "web", "local app", "game") {
 		browserTask = "- [ ] Capture browser screenshot and console evidence when UI changes are made\n"
 	}
+	referenceTask := ""
+	if referenceBenchmarkRequired(stage, readiness) {
+		referenceTask = "- [ ] Fill Reference Benchmark Evidence with category references, baseline expectations, current comparison, and blocking gaps\n"
+	}
 	readinessTask := ""
 	if readiness.NextPressure.AxisName != "" {
 		readinessTask = "- [ ] Fill the `" + readiness.NextPressure.AxisName + ":` readiness evidence slot with concrete proof\n"
@@ -871,11 +900,47 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if activeStructureCount(growth.Candidates) > 0 {
 		activeTask = "- [ ] Run or explicitly block every active capability listed in goal.md\n"
 	}
-	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, readinessTask, activeTask)
+	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, readinessTask, activeTask)
 }
 
-func buildEvidenceDoc(goalID string, readiness readinessState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness))
+func buildEvidenceDoc(goalID, stage string, readiness readinessState) string {
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness))
+}
+
+func referenceBenchmarkEvidenceTemplate(stage string, readiness readinessState) string {
+	if !referenceBenchmarkRequired(stage, readiness) {
+		return ""
+	}
+	return strings.Join([]string{
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Pending.",
+		"- References: Pending. List 3-5 comparable products, tools, apps, or workflows.",
+		"- Baseline expectations: Pending. Name the category expectations a real user or operator would assume.",
+		"- Current comparison: Pending. Mark each important area as below baseline, meets baseline, or above baseline.",
+		"- Below-baseline gaps: Pending. Block Service Quality if any core user or operator expectation is below baseline.",
+		"- Above-baseline strength: Pending. Name at least one concrete strength versus the references.",
+		"- Decision: Pending. State whether Service Quality is allowed or blocked, and what the next pressure should be.",
+		"",
+	}, "\n")
+}
+
+func serviceQualityStage(stage string) bool {
+	normalized := normalizeLabel(stage)
+	return strings.Contains(normalized, "service") || strings.Contains(normalized, "production")
+}
+
+func referenceBenchmarkRequired(stage string, readiness readinessState) bool {
+	normalized := normalizeLabel(stage)
+	if strings.Contains(normalized, "beta") || serviceQualityStage(stage) {
+		return true
+	}
+	for _, axis := range readiness.StageGate.RequiredAxes {
+		if axis == "reference_benchmark" {
+			return true
+		}
+	}
+	return false
 }
 
 func readinessEvidenceTemplate(readiness readinessState) string {

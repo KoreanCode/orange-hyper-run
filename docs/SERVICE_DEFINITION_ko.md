@@ -98,7 +98,7 @@ Hyper Run은 `.hyper/readiness/state.json`에 readiness axis, current stage gate
 
 Readiness evidence는 누적 진행도로 반영됩니다. 새 evidence 파일에는 모든 readiness axis 슬롯이 들어갑니다. `evidence.md`에 `Data persistence: Customer records survive reload` 같은 axis-labeled line이 있으면, `hyper complete`와 `hyper status`는 해당 axis를 `covered`로 올리고, 관련 gate gap을 제거하고, 해결된 pressure를 반복하지 않고 다음으로 약한 pressure를 선택합니다.
 
-Readiness evidence에는 기본 품질 기준도 있습니다. `Validation coverage: tested`처럼 모호한 label은 covered가 아니라 emerging evidence로 봅니다. Covered evidence는 axis에 맞는 proof shape이 있어야 합니다. Validation은 command 또는 smoke test, UX는 browser 또는 screenshot proof, persistence는 reload/restart/storage proof, deployment는 hosted/build/release proof, operations는 docs/runbook/rollback proof가 필요합니다.
+Readiness evidence에는 기본 품질 기준도 있습니다. `Validation coverage: tested`처럼 모호한 label은 covered가 아니라 emerging evidence로 봅니다. Covered evidence는 axis에 맞는 proof shape이 있어야 합니다. Validation은 command 또는 smoke test, UX는 browser 또는 screenshot proof, persistence는 reload/restart/storage proof, deployment는 hosted/build/release/artifact proof, operations는 docs/runbook/rollback proof가 필요합니다.
 
 Runtime packet에는 Functional Proof, Surface Proof, Operational Proof로 나뉜 Proof Contract가 들어갑니다. Surface Proof는 사용자-facing 화면이나 flow가 바뀐 경우에만 필요합니다. screenshot이나 browser smoke evidence는 affected surface, primary user action, checked states, viewport, remaining surface gap과 연결되어야 합니다.
 
@@ -113,6 +113,54 @@ Beta와 Service Quality stage에서는 repeatable smoke, security, deployment, o
 ```text
 Tiny MVP -> Usable MVP -> Beta -> Service Quality
 ```
+
+## Service Quality 기준
+
+Service Quality는 "완벽한 production"을 뜻하지 않습니다. 현재 agent session의 숨은 맥락에 기대지 않고도 실제 운영자나 tester가 서비스를 실행하고, 검증하고, 복구하고, 비교하고, 이어서 개선할 수 있다는 증거가 충분한 상태를 뜻합니다.
+
+Hyper Run에서 Service Quality는 운영 준비만 뜻하지 않습니다. 레퍼런스 벤치마크 증거도 필요합니다. 결과물이 해당 category의 기본 기대치를 충족해야 하고, 비슷한 제품, 도구, 앱, workflow와 비교했을 때 적어도 하나의 구체적인 강점이 있어야 합니다.
+
+Hyper Run은 아래 기준이 covered일 때만 프로젝트를 Service Quality로 봐야 합니다.
+
+| 영역 | 필요한 증거 |
+| --- | --- |
+| 제품 경계 | 핵심 value loop가 테스트 가능할 만큼 완성되어 있고, non-goal 또는 deferred surface가 명확합니다. |
+| 검증 | 필요한 command, smoke check, manual check가 문서화된 절차로 반복 가능합니다. |
+| UX와 surface | 중요한 사용자-facing flow가 현재 browser, screenshot, 또는 equivalent surface proof로 검증되었습니다. |
+| 데이터와 persistence | 현재 구조에서 데이터 생성, readback, 삭제, fallback, migration 동작이 증명되었습니다. |
+| 보안과 개인정보 | secret, permission, local/remote data handling, content boundary, misuse risk가 문서화되고 확인되었습니다. |
+| 배포 또는 릴리즈 | hosted URL, packaged artifact, native build, CLI binary, container 등 development path 밖에서 실행되는 release path가 증명되었습니다. |
+| 운영 | setup, environment, smoke path, rollback, recovery, stop condition, handoff note가 문서화되었습니다. |
+| 유지보수성 | 다음 operator가 주요 code path, known risk, active validator, 가장 큰 follow-up friction을 파악할 수 있습니다. |
+| 레퍼런스 벤치마크 | 3-5개의 comparable reference로 category baseline을 정하고, core expectation의 below-baseline gap이 없으며, 적어도 하나의 above-baseline strength가 명확합니다. |
+
+Reference Benchmark Evidence는 일반 점수표가 아닙니다. 외부 비교를 다음 실행 pressure로 바꾸는 증거여야 합니다.
+
+```md
+## Reference Benchmark Evidence
+
+- Category: Developer CLI / project-growth runtime
+- References: Tool A, Tool B, Tool C
+- Baseline expectations: install is clear; one command creates useful work context; status and recovery are understandable
+- Current comparison: setup meets baseline; evidence loop is above baseline; auto continuation is below baseline
+- Below-baseline gaps: auto continuation and stage advance clarity
+- Above-baseline strength: project-local evidence and readiness pressure
+- Decision: Service Quality is blocked until auto continuation and stage advance reach the category baseline
+```
+
+Hyper Run은 category, 3-5개의 named reference, baseline expectation, 현재 below/meets/above-baseline 비교, critical below-baseline gap 없음, 하나 이상의 above-baseline strength, decision이 모두 있을 때만 이 evidence를 covered로 봅니다. 현재 gate에서 필요하면 `hyper status`에 benchmark line이 직접 표시됩니다.
+
+다음 중 하나라도 해당하면 Service Quality는 blocked입니다.
+
+- 증거가 command, artifact, URL, screenshot, smoke output 없이 "내 컴퓨터에서 됨" 수준에 머뭅니다.
+- 중요한 credential, data, security, deployment, rollback step이 불명확합니다.
+- 문서화된 경로로 restart, install, package, serve, run이 되지 않습니다.
+- 다음 operator가 `plan.md`, `.hyper/`, docs, code에 없는 agent decision을 추측해야 합니다.
+- validation, security, deployment, operations, maintainability gap이 남았는데 다음 packet이 broad feature work로 향합니다.
+- Reference Benchmark Evidence에 core user 또는 operator expectation의 below-baseline gap이 남아 있습니다.
+- 레퍼런스 대비 구체적인 above-baseline strength가 없습니다.
+
+Service Quality에 도달한 뒤 다음 단계는 "모든 기능 추가"가 아닙니다. Sustained Service Quality는 반복 failure를 관찰하고, 검증된 validator를 승격하고, 운영 friction을 줄인 뒤 제품 breadth를 넓히는 단계입니다.
 
 Readiness는 Learn이나 Growth를 대체하지 않습니다. Learn은 durable signal을 추출합니다. Growth는 repeated signal을 behavior와 capability로 바꿉니다. Readiness는 프로젝트가 실제 service에 가까워지고 있는지 묻고, 가장 약한 missing axis를 다음 run의 압력으로 선택합니다.
 

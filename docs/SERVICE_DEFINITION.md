@@ -98,7 +98,7 @@ Hyper Run writes `.hyper/readiness/state.json` with readiness axes, the current 
 
 Readiness evidence is progressive. New evidence files include slots for every readiness axis. When `evidence.md` contains axis-labeled lines such as `Data persistence: Customer records survive reload`, `hyper complete` and `hyper status` mark that axis as `covered`, remove the matching gate gap, and select the next weakest pressure instead of repeating the solved one.
 
-Readiness evidence also has a basic quality bar. A vague label such as `Validation coverage: tested` is treated as emerging evidence, not covered evidence. Covered evidence should include the proof shape expected by the axis: commands or smoke tests for validation, browser or screenshot proof for UX, reload/restart/storage proof for persistence, hosted/build/release proof for deployment, and docs/runbook/rollback proof for operations.
+Readiness evidence also has a basic quality bar. A vague label such as `Validation coverage: tested` is treated as emerging evidence, not covered evidence. Covered evidence should include the proof shape expected by the axis: commands or smoke tests for validation, browser or screenshot proof for UX, reload/restart/storage proof for persistence, hosted/build/release/artifact proof for deployment, and docs/runbook/rollback proof for operations.
 
 Runtime packets include a Proof Contract with three evidence boundaries: Functional Proof, Surface Proof, and Operational Proof. Surface Proof is required only when the packet changes a user-facing screen or flow. It should connect screenshots or browser smoke evidence to the affected surface, primary user action, checked states, viewport, and remaining surface gaps.
 
@@ -113,6 +113,54 @@ The default readiness path is:
 ```text
 Tiny MVP -> Usable MVP -> Beta -> Service Quality
 ```
+
+## Service Quality Standard
+
+Service Quality does not mean "perfect production." It means the project has enough evidence that a real operator or tester can run, validate, recover, compare, and continue the service without relying on hidden context from the current agent session.
+
+In Hyper Run, Service Quality is not only operational readiness. It also requires reference benchmark evidence: the result should meet the basic expectations of its category and have at least one concrete strength compared with similar products, tools, apps, or workflows.
+
+Hyper Run should treat a project as Service Quality only when these criteria are covered:
+
+| Area | Required Proof |
+| --- | --- |
+| Product boundary | The primary value loop is complete enough to test, and non-goals or deferred surfaces are explicit. |
+| Validation | Required commands, smoke checks, or manual checks are repeatable from documented steps. |
+| UX and surface | Critical user-facing flows have current browser, screenshot, or equivalent surface proof for the touched states. |
+| Data and persistence | Data creation, readback, deletion, fallback, or migration behavior is proven for the current architecture. |
+| Security and privacy | Secrets, permissions, local or remote data handling, content boundaries, and misuse risks are documented and checked. |
+| Deployment or release | A hosted URL, packaged artifact, native build, CLI binary, container, or equivalent release path runs outside the development path. |
+| Operations | Setup, environment, smoke path, rollback, recovery, stop conditions, and handoff notes are documented. |
+| Maintainability | The next operator can identify the main code paths, known risks, active validators, and highest-friction follow-up. |
+| Reference benchmark | 3-5 comparable references define the category baseline; no core expectation is below baseline, and at least one strength is above baseline. |
+
+Reference Benchmark Evidence should not be a generic scorecard. It should turn outside comparison into the next execution pressure:
+
+```md
+## Reference Benchmark Evidence
+
+- Category: Developer CLI / project-growth runtime
+- References: Tool A, Tool B, Tool C
+- Baseline expectations: install is clear; one command creates useful work context; status and recovery are understandable
+- Current comparison: setup meets baseline; evidence loop is above baseline; auto continuation is below baseline
+- Below-baseline gaps: auto continuation and stage advance clarity
+- Above-baseline strength: project-local evidence and readiness pressure
+- Decision: Service Quality is blocked until auto continuation and stage advance reach the category baseline
+```
+
+Hyper Run treats this evidence as covered only when the benchmark has a category, 3-5 named references, baseline expectations, a current below/meets/above-baseline comparison, no critical below-baseline gap, one above-baseline strength, and a decision. `hyper status` shows the benchmark line whenever it is required by the current gate.
+
+Service Quality is blocked when any of these are true:
+
+- The only proof is "it works on my machine" without commands, artifact, URL, screenshot, or smoke output.
+- A critical credential, data, security, deployment, or rollback step is unknown.
+- The project cannot be restarted, installed, packaged, served, or run from the documented path.
+- The next operator must infer hidden agent decisions that are not in `plan.md`, `.hyper/`, docs, or code.
+- The next recommended packet is broad feature work while validation, security, deployment, operations, or maintainability gaps remain.
+- Reference Benchmark Evidence has a below-baseline gap in a core user or operator expectation.
+- The project has no concrete above-baseline strength compared with its references.
+
+Once Service Quality is reached, the next stage is not "add everything." It is Sustained Service Quality: monitoring repeated failures, promoting proven validators, reducing operational friction, and only then expanding product breadth.
 
 Readiness does not replace Learn or Growth. Learn extracts durable signals. Growth turns repeated signals into behavior and capabilities. Readiness asks whether the project is becoming a usable service and selects the weakest missing axis for the next run.
 

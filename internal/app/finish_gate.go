@@ -113,6 +113,7 @@ func readinessEvidenceRecordsFromGoalText(goalID, evidenceText string) []readine
 		}
 		records = append(records, inferReadinessEvidenceFromSurfaceLine(goalID, line)...)
 	}
+	records = append(records, inferReadinessEvidenceFromReferenceBenchmark(goalID, usefulSectionLines(evidenceText, "Reference Benchmark Evidence"))...)
 	return records
 }
 

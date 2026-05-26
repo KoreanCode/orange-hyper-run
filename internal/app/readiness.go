@@ -26,6 +26,17 @@ type readinessEvidenceRecord struct {
 	Quality string
 }
 
+type referenceBenchmarkEvidence struct {
+	Category              string
+	References            string
+	BaselineExpectations  string
+	CurrentComparison     string
+	BelowBaselineGaps     string
+	AboveBaselineStrength string
+	Decision              string
+	ReferenceCount        int
+}
+
 func updateReadinessState(root, planBody string, growth growthState) (readinessState, *hyperError) {
 	evidence, err := loadReadinessEvidence(root, readinessDimensionDefs())
 	if err != nil {
@@ -107,6 +118,7 @@ func readinessDimensionDefs() []readinessDimensionDef {
 		{ID: "deployment_readiness", Name: "Deployment readiness", Keywords: []string{"deploy", "release", "production", "server", "docker", "ci", "hosted"}, Gap: "The project is not yet proven runnable outside the local development path."},
 		{ID: "operations_docs", Name: "Operations and docs", Keywords: []string{"readme", "docs", "runbook", "rollback", "logs", "monitor", "environment"}, Gap: "Operational notes, setup, rollback, or handoff docs are not sufficient."},
 		{ID: "maintainability", Name: "Maintainability", Keywords: []string{"refactor", "cleanup", "component", "module", "architecture", "helper", "table-driven"}, Gap: "The codebase has not accumulated enough maintainability evidence."},
+		{ID: "reference_benchmark", Name: "Reference benchmark", Keywords: []string{"reference", "benchmark", "baseline", "category", "comparison", "comparable", "above baseline", "below baseline"}, Gap: "Reference comparison has not proven category baseline and differentiating strength."},
 	}
 }
 
@@ -201,6 +213,7 @@ func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readine
 			}
 			records = append(records, inferReadinessEvidenceFromSurfaceLine(goalID, line)...)
 		}
+		records = append(records, inferReadinessEvidenceFromReferenceBenchmark(goalID, usefulSectionLines(body, "Reference Benchmark Evidence"))...)
 	}
 	return records, nil
 }
@@ -355,6 +368,12 @@ func readinessAxisForLabel(label string, defs []readinessDimensionDef) string {
 		"maintainability":     "maintainability",
 		"maintenance":         "maintainability",
 		"codequality":         "maintainability",
+		"reference":           "reference_benchmark",
+		"references":          "reference_benchmark",
+		"benchmark":           "reference_benchmark",
+		"referencebenchmark":  "reference_benchmark",
+		"baseline":            "reference_benchmark",
+		"comparison":          "reference_benchmark",
 	}
 	if axis := aliases[compact]; axis != "" {
 		return axis
@@ -419,19 +438,181 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 				hasAny(normalized, "documented", "verified", "implemented", "checked", "covered"),
 			"security, permission, token, session, rate-limit, or abuse-boundary evidence"
 	case "deployment_readiness":
-		return hasAny(normalized, "deploy", "deployed", "url", "https://", "http://", "build", "release", "hosted", "docker", "ci") &&
-				hasAny(normalized, "passed", "available", "hosted", "deployed", "built", "released", "verified"),
-			"deploy, hosted URL, release, build, Docker, or CI evidence"
+		return deploymentEvidenceCovered(normalized),
+			"deploy, hosted URL, release, build, artifact, zip, file smoke, Docker, or CI evidence"
 	case "operations_docs":
-		return hasAny(normalized, "readme", "docs", "setup", "runbook", "rollback", "logs", "monitor", "environment") &&
-				hasAny(normalized, "documented", "updated", "verified", "covered", "written"),
-			"README, docs, setup, runbook, rollback, logs, or environment evidence"
+		return operationsDocsEvidenceCovered(normalized),
+			"README, docs, setup, runbook, rollback, smoke path, stop conditions, or environment evidence"
 	case "maintainability":
 		return hasAny(normalized, "refactor", "cleanup", "component", "module", "architecture", "helper", "table-driven", "test", "extracted", "reduced", "documented"),
 			"refactor, modularity, test, helper, cleanup, or architecture evidence"
+	case "reference_benchmark":
+		return referenceBenchmarkEvidenceQuality(normalized)
 	default:
 		return len(strings.Fields(normalized)) >= 4, "specific evidence for this readiness axis"
 	}
+}
+
+func inferReadinessEvidenceFromReferenceBenchmark(goalID string, lines []string) []readinessEvidenceRecord {
+	if len(lines) == 0 {
+		return nil
+	}
+	text := oneLine(strings.Join(lines, "; "))
+	if !usefulReadinessEvidence(text) {
+		return nil
+	}
+	if !hasAny(strings.ToLower(text), "reference", "benchmark", "baseline", "category", "comparison") {
+		return nil
+	}
+	return []readinessEvidenceRecord{readinessEvidenceRecordForAxis(goalID, "reference_benchmark", text)}
+}
+
+func referenceBenchmarkEvidenceQuality(text string) (bool, string) {
+	fields := parseReferenceBenchmarkEvidence(text)
+	missing := referenceBenchmarkMissingRequirements(fields)
+	if len(missing) > 0 {
+		return false, "reference benchmark needs " + strings.Join(missing, ", ")
+	}
+	return true, "3-5 references, category baseline, current comparison, no critical below-baseline gap, above-baseline strength, and decision"
+}
+
+func parseReferenceBenchmarkEvidence(text string) referenceBenchmarkEvidence {
+	fields := referenceBenchmarkEvidence{}
+	for _, chunk := range referenceBenchmarkChunks(text) {
+		label, value, ok := strings.Cut(chunk, ":")
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		compactLabel := compactReadinessLabel(label)
+		if value == "" || (isPlaceholder(value) && compactLabel != "belowbaselinegaps" && compactLabel != "belowbaselinegap" && compactLabel != "gaps") {
+			continue
+		}
+		switch compactLabel {
+		case "category":
+			fields.Category = value
+		case "reference", "references":
+			fields.References = value
+		case "baseline", "baselineexpectations", "expectations":
+			fields.BaselineExpectations = value
+		case "currentcomparison", "comparison":
+			fields.CurrentComparison = value
+		case "belowbaselinegaps", "belowbaselinegap", "gaps":
+			fields.BelowBaselineGaps = value
+		case "abovebaselinestrength", "abovebaselinestrengths", "strength":
+			fields.AboveBaselineStrength = value
+		case "decision":
+			fields.Decision = value
+		}
+	}
+	fields.ReferenceCount = countReferenceItems(fields.References)
+	return fields
+}
+
+func referenceBenchmarkChunks(text string) []string {
+	raw := strings.FieldsFunc(text, func(r rune) bool {
+		return r == '\n' || r == ';'
+	})
+	chunks := []string{}
+	for _, chunk := range raw {
+		trimmed := strings.TrimSpace(strings.TrimLeft(chunk, "-*0123456789. "))
+		if trimmed != "" {
+			chunks = append(chunks, trimmed)
+		}
+	}
+	return chunks
+}
+
+func referenceBenchmarkMissingRequirements(fields referenceBenchmarkEvidence) []string {
+	missing := []string{}
+	if strings.TrimSpace(fields.Category) == "" {
+		missing = append(missing, "category")
+	}
+	if fields.ReferenceCount < 3 || fields.ReferenceCount > 5 {
+		missing = append(missing, "3-5 named references")
+	}
+	if !specificBenchmarkField(fields.BaselineExpectations) {
+		missing = append(missing, "baseline expectations")
+	}
+	if !currentComparisonCovered(fields.CurrentComparison) {
+		missing = append(missing, "current comparison using below/meets/above baseline")
+	}
+	if !noCriticalBelowBaselineGap(fields.BelowBaselineGaps) {
+		missing = append(missing, "no critical below-baseline gap")
+	}
+	if !specificBenchmarkField(fields.AboveBaselineStrength) {
+		missing = append(missing, "above-baseline strength")
+	}
+	if !specificBenchmarkField(fields.Decision) {
+		missing = append(missing, "decision")
+	}
+	return missing
+}
+
+func countReferenceItems(value string) int {
+	count := 0
+	for _, item := range splitReferenceItems(value) {
+		normalized := normalizeSentence(item)
+		if normalized == "" || isPlaceholder(normalized) {
+			continue
+		}
+		if hasAny(normalized, "3-5", "three to five", "comparable products", "comparable tools", "comparable apps", "tool a", "tool b", "tool c") {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+func splitReferenceItems(value string) []string {
+	replacer := strings.NewReplacer("\n", ",", "|", ",", " / ", ",", " and ", ",")
+	normalized := replacer.Replace(value)
+	return strings.Split(normalized, ",")
+}
+
+func specificBenchmarkField(value string) bool {
+	normalized := normalizeSentence(value)
+	return normalized != "" && !isPlaceholder(normalized) && !hasAny(normalized, "pending", "todo") && len(strings.Fields(normalized)) >= 3
+}
+
+func currentComparisonCovered(value string) bool {
+	normalized := normalizeSentence(value)
+	return specificBenchmarkField(value) &&
+		hasAny(normalized, "below baseline", "below-baseline", "meets baseline", "meet baseline", "above baseline", "above-baseline")
+}
+
+func noCriticalBelowBaselineGap(value string) bool {
+	normalized := normalizeSentence(value)
+	if normalized == "none" {
+		return true
+	}
+	if normalized == "" || isPlaceholder(normalized) {
+		return false
+	}
+	return hasAny(normalized, "none", "no critical", "no core", "no below baseline", "no below-baseline", "not blocked", "none blocking")
+}
+
+func deploymentEvidenceCovered(normalized string) bool {
+	deploymentTarget := hasAny(normalized,
+		"deploy", "deployed", "deployment", "url", "https://", "http://", "build", "release", "hosted", "docker", "ci",
+		"artifact", "zip", "dist/", "file://", "static server", "server check", "packaged", "package", "parity",
+	)
+	deploymentProof := hasAny(normalized,
+		"passed", "available", "hosted", "deployed", "built", "released", "verified", "validated", "proved", "proven",
+		"created", "served", "extracted", "smoke", "parity",
+	)
+	return deploymentTarget && deploymentProof
+}
+
+func operationsDocsEvidenceCovered(normalized string) bool {
+	docsTarget := hasAny(normalized,
+		"readme", "docs", "document", "demo-release", "setup", "runbook", "rollback", "logs", "monitor", "environment",
+		"handoff", "tester", "smoke path", "run command", "package command", "stop condition", "stop conditions",
+	)
+	docsProof := hasAny(normalized,
+		"documented", "documents", "updated", "verified", "covered", "written", "records", "defines", "includes",
+	)
+	return docsTarget && docsProof
 }
 
 func growthEvidenceForDimension(growth growthState, def readinessDimensionDef) (bool, bool, string) {
@@ -529,13 +710,19 @@ func readinessGateDefinition(stage string) (string, string, []string, []string) 
 	normalized := normalizeLabel(stage)
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Service Quality", "Sustained Service Quality",
-			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability"},
-			[]string{"Required validation passes.", "Security and misuse boundaries are explicit.", "Deployment, rollback, and operational handoff are documented."}
+			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark"},
+			[]string{
+				"Required validation or documented manual checks are repeatable.",
+				"Security, privacy, and misuse boundaries are explicit and verified.",
+				"Setup, release or run, rollback, and recovery paths are documented and checked.",
+				"Maintainability evidence shows the next operator can continue without hidden context.",
+				"Reference benchmark evidence shows no core category-baseline gap and at least one above-baseline strength.",
+			}
 	}
 	if strings.Contains(normalized, "beta") {
 		return "Beta", "Service Quality",
-			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs"},
-			[]string{"Primary flows are validated with realistic data.", "Basic security and failure boundaries are handled.", "Demo or deployment path is documented."}
+			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark"},
+			[]string{"Primary flows are validated with realistic data.", "Basic security and failure boundaries are handled.", "Demo or deployment path is documented.", "Reference benchmark evidence proves category baseline and one concrete strength."}
 	}
 	if strings.Contains(normalized, "usable") {
 		return "Usable MVP", "Beta",
@@ -585,14 +772,20 @@ func readinessPressureForDimension(plan map[string]string, stage string, dim rea
 		}
 	}
 	goal := readinessRecommendedGoal(plan, stage, dim.ID)
+	workBoundary := "Prioritize the smallest service-readiness step for " + dim.Name + ": " + dim.Gap
+	validationSignal := "Capture readiness evidence for " + dim.Name + " in evidence.md."
+	if dim.ID == "reference_benchmark" {
+		workBoundary = "Compare the current result against 3-5 named category references before adding feature breadth; close only the strongest critical below-baseline gap if one is found."
+		validationSignal = "Fill Reference Benchmark Evidence with named references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and decision."
+	}
 	return readinessPressure{
 		Axis:             dim.ID,
 		AxisName:         dim.Name,
 		Status:           dim.Status,
 		Reason:           fmt.Sprintf("%s is %s for the %s -> %s gate.", dim.Name, dim.Status, gate.CurrentStage, gate.NextStage),
 		RecommendedGoal:  goal,
-		WorkBoundary:     "Prioritize the smallest service-readiness step for " + dim.Name + ": " + dim.Gap,
-		ValidationSignal: "Capture readiness evidence for " + dim.Name + " in evidence.md.",
+		WorkBoundary:     workBoundary,
+		ValidationSignal: validationSignal,
 	}
 }
 
@@ -618,6 +811,8 @@ func readinessRecommendedGoal(plan map[string]string, stage, axis string) string
 		return fmt.Sprintf("Document setup, operation, and rollback notes for %s.", product)
 	case "maintainability":
 		return fmt.Sprintf("Reduce the highest-friction code path so %s can keep growing.", product)
+	case "reference_benchmark":
+		return fmt.Sprintf("Compare %s against 3-5 named category references, define the baseline, and close the strongest critical below-baseline gap if one exists.", product)
 	default:
 		return fmt.Sprintf("Advance %s toward %s readiness.", product, stage)
 	}

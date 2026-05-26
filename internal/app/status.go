@@ -107,6 +107,9 @@ func statusShortLines(state projectState, derived goalState, readiness readiness
 		"Next: " + next,
 		"Why: " + statusActionReason(state, derived, readiness, growth),
 	}
+	if benchmark := referenceBenchmarkShortStatus(readiness); benchmark != "" {
+		lines = append(lines, "Benchmark: "+benchmark)
+	}
 	if gap := statusShortGap(readiness); gap != "" {
 		lines = append(lines, "Gap: "+gap)
 	}
@@ -172,11 +175,15 @@ func proofStatusSummary(derived goalState, readiness readinessState) string {
 	} else if derived.State == "blocked" {
 		functional = "blocked"
 	}
-	return fmt.Sprintf("functional %s, surface %s, operational %s",
+	summary := fmt.Sprintf("functional %s, surface %s, operational %s",
 		functional,
 		proofAxisStatus(readiness, "core_ux"),
 		proofAxisStatus(readiness, "validation_coverage"),
 	)
+	if referenceBenchmarkRelevant(readiness) {
+		summary += ", benchmark " + proofAxisStatus(readiness, "reference_benchmark")
+	}
+	return summary
 }
 
 func proofAxisStatus(readiness readinessState, axis string) string {
@@ -348,7 +355,7 @@ func readinessDashboardLines(readiness readinessState) []string {
 	covered := []string{}
 	emerging := []string{}
 	missing := []string{}
-	for _, dim := range readiness.Dimensions {
+	for _, dim := range visibleReadinessDimensions(readiness) {
 		switch dim.Status {
 		case "covered":
 			covered = append(covered, dim.Name)
@@ -368,6 +375,9 @@ func readinessDashboardLines(readiness readinessState) []string {
 		"  Emerging axes: " + readinessListSummary(emerging),
 		"  Missing axes: " + readinessListSummary(missing),
 	}
+	if benchmark := referenceBenchmarkDashboardStatus(readiness); benchmark != "" {
+		lines = append(lines, "  "+benchmark)
+	}
 	if len(readiness.StageGate.BlockingGaps) > 0 {
 		lines = append(lines, "  Blocking gaps:")
 		for _, gap := range readiness.StageGate.BlockingGaps {
@@ -385,6 +395,58 @@ func readinessDashboardLines(readiness readinessState) []string {
 		lines = append(lines, "  Recommended run: hyper run \""+compactText(readiness.NextPressure.RecommendedGoal, 120)+"\"")
 	}
 	return lines
+}
+
+func visibleReadinessDimensions(readiness readinessState) []readinessDimension {
+	required := readinessRequiredAxisMap(readiness)
+	if len(required) == 0 {
+		return readiness.Dimensions
+	}
+	visible := []readinessDimension{}
+	for _, dim := range readiness.Dimensions {
+		if dim.Status != "missing" || required[dim.ID] || dim.ID == readiness.NextPressure.Axis {
+			visible = append(visible, dim)
+		}
+	}
+	return visible
+}
+
+func readinessRequiredAxisMap(readiness readinessState) map[string]bool {
+	required := map[string]bool{}
+	for _, axis := range readiness.StageGate.RequiredAxes {
+		required[axis] = true
+	}
+	return required
+}
+
+func referenceBenchmarkRelevant(readiness readinessState) bool {
+	dim, ok := readinessDimensionMap(readiness.Dimensions)["reference_benchmark"]
+	if ok && dim.Status != "" && dim.Status != "missing" {
+		return true
+	}
+	return readinessRequiredAxisMap(readiness)["reference_benchmark"] || readiness.NextPressure.Axis == "reference_benchmark"
+}
+
+func referenceBenchmarkShortStatus(readiness readinessState) string {
+	if !referenceBenchmarkRelevant(readiness) {
+		return ""
+	}
+	dim, ok := readinessDimensionMap(readiness.Dimensions)["reference_benchmark"]
+	if !ok {
+		return "missing"
+	}
+	return dim.Status + " - " + compactText(firstNonBlank(dim.Evidence, dim.Gap), 100)
+}
+
+func referenceBenchmarkDashboardStatus(readiness readinessState) string {
+	if !referenceBenchmarkRelevant(readiness) {
+		return ""
+	}
+	dim, ok := readinessDimensionMap(readiness.Dimensions)["reference_benchmark"]
+	if !ok {
+		return "Reference benchmark: missing"
+	}
+	return "Reference benchmark: " + dim.Status + " - " + compactText(firstNonBlank(dim.Evidence, dim.Gap), 140)
 }
 
 func statusNextCommand(state projectState, derived goalState, readiness readinessState) string {
