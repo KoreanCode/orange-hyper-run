@@ -111,6 +111,9 @@ func activeCapabilityEvidenceCovers(capability activeCapability, lines []string)
 	command := normalizeSentence(inferredCommandForSignal(capability.Signal))
 	for _, line := range lines {
 		normalized := normalizeSentence(line)
+		if !credibleActiveCapabilityEvidence(normalized) {
+			continue
+		}
 		if name != "" && strings.Contains(normalized, name) {
 			return true
 		}
@@ -119,6 +122,27 @@ func activeCapabilityEvidenceCovers(capability activeCapability, lines []string)
 		}
 	}
 	return false
+}
+
+func credibleActiveCapabilityEvidence(normalized string) bool {
+	if normalized == "" || isPlaceholder(normalized) {
+		return false
+	}
+	if hasAny(normalized,
+		"pending",
+		"todo",
+		"tbd",
+		"not run",
+		"not executed",
+		"not checked",
+		"not verified",
+		"not validated",
+		"not yet",
+		"missing",
+	) {
+		return false
+	}
+	return true
 }
 
 func readinessEvidenceRecordsFromGoalText(goalID, evidenceText string) []readinessEvidenceRecord {

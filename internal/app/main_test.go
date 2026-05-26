@@ -673,6 +673,21 @@ func TestCompleteRequiresSpecificActiveCapabilityEvidence(t *testing.T) {
 	}
 }
 
+func TestCompleteRejectsPendingActiveCapabilityTemplate(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` passed and primary CLI smoke is repeatable.\n\n## Active Capability Evidence\n\nvalidator-go-test: Pending. Required behavior: Run go test ./... before completing packets.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected pending active capability template to fail finish gate")
+	}
+	assertContains(t, err.Message, "Record active capability evidence for: validator-go-test")
+}
+
 func TestCompleteAllowsEmergingSustainedQualityEvidence(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nLocal Build Relay\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one handoff command.\n\n## Current Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nEvery packet proves the handoff command.\n")
