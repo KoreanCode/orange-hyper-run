@@ -128,6 +128,9 @@ func credibleActiveCapabilityEvidence(normalized string) bool {
 	if normalized == "" || isPlaceholder(normalized) {
 		return false
 	}
+	if explicitActiveCapabilityBlocker(normalized) {
+		return true
+	}
 	if hasAny(normalized,
 		"pending",
 		"todo",
@@ -143,6 +146,23 @@ func credibleActiveCapabilityEvidence(normalized string) bool {
 		return false
 	}
 	return true
+}
+
+func explicitActiveCapabilityBlocker(normalized string) bool {
+	return hasAny(normalized,
+		"blocked because",
+		"blocked by",
+		"cannot run because",
+		"could not run because",
+		"unable to run because",
+		"missing credential",
+		"missing credentials",
+		"missing token",
+		"missing secret",
+		"permission denied",
+		"network unavailable",
+		"command unavailable",
+	)
 }
 
 func readinessEvidenceRecordsFromGoalText(goalID, evidenceText string) []readinessEvidenceRecord {
