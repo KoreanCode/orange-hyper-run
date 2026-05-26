@@ -209,6 +209,29 @@ func TestDoctorReportsProjectState(t *testing.T) {
 	assertContains(t, out.Stdout, "Summary:")
 }
 
+func TestDoctorWarnsWhenStoredReadinessIsStale(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the create note flow.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and complete flow.\nValidation coverage: `npm run build` passed and primary flow smoke test passed.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	state, err := readState(filepath.Join(root, ".hyper", "state.json"))
+	if err != nil {
+		t.Fatalf("read state failed: %v", err)
+	}
+	state.Status = "completed"
+	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), state); err != nil {
+		t.Fatalf("write state failed: %v", err)
+	}
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Readiness state:")
+	assertContains(t, out.Stdout, "Run `hyper migrate`")
+}
+
 func TestRepairReconcilesStaleProjectState(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -237,6 +260,32 @@ func TestRepairReconcilesStaleProjectState(t *testing.T) {
 	assertContains(t, out.Stdout, "State: repaired")
 	assertContains(t, out.Stdout, "To: completed")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
+}
+
+func TestRepairRefreshesReadinessAndNextPacketPlan(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the create note flow.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and complete flow.\nValidation coverage: `npm run build` passed and primary flow smoke test passed.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	state, err := readState(filepath.Join(root, ".hyper", "state.json"))
+	if err != nil {
+		t.Fatalf("read state failed: %v", err)
+	}
+	state.Status = "blocked"
+	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), state); err != nil {
+		t.Fatalf("write stale state failed: %v", err)
+	}
+
+	out, err := runCLI(args("repair"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("repair failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "State: repaired")
+	assertContains(t, out.Stdout, "Readiness gate: Tiny MVP -> Usable MVP (ready)")
+	assertContains(t, out.Stdout, "Next action: hyper advance")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: advance")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Command: hyper advance")
 }
 
 func TestStatusShowsTopPressuresAndCandidateNames(t *testing.T) {
@@ -849,6 +898,9 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if exists(filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md")) {
 		t.Fatal("retired validator should no longer remain active")
 	}
+	if exists(filepath.Join(root, ".hyper", "validators", "generated", "validator-go-test.md")) {
+		t.Fatal("retired validator should no longer remain in generated validators")
+	}
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), "Required active validator validator-go-test")
 }
 
@@ -976,6 +1028,41 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if strongDeploy.Status != "covered" {
 		t.Fatalf("expected strong deployment evidence to be covered, got %+v", strongDeploy)
 	}
+	errorHandling, ok := parseReadinessEvidenceLine("GOAL-0001", "Error handling: Covered. Empty, loading, error, fallback, and recovery states are handled for the primary path: missing profile fields, future birth date, incomplete daily log, empty report, and storage-disabled browser fallback. Playwright verified each state at 390x844.", defs)
+	if !ok {
+		t.Fatal("expected error handling evidence with missing input text to parse")
+	}
+	if errorHandling.Status != "covered" {
+		t.Fatalf("expected error handling evidence with missing input text to be covered, got %+v", errorHandling)
+	}
+}
+
+func TestCompletePromotesErrorHandlingEvidenceWithMissingInputText(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nLLog / 엘로그\n\n## Target Users\n\nDaily diary users\n\n## MVP\n\nA user can create a profile, view fortune states, save a daily log, and revisit the report.\n\n## Current Stage\n\nUsable MVP\n\n## Build Style\n\nStatic prototype before Expo\n\n## Success Criteria\n\nPrimary flow works with persistence, edge states, and repeatable validation.\n")
+
+	if _, err := runCLI(args("run", "Handle empty, failure, and edge states"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nPlaywright smoke passed at mobile 390x844 and HTTP check passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified the primary LLog flow and state badges at mobile 390x844.\nData persistence: localStorage saved profile/log records and storage fallback was verified.\nError handling: Covered. Empty, loading, error, fallback, and recovery states are handled for the primary path: missing profile fields, future birth date, incomplete daily log, empty report, storage-disabled browser fallback, and two-step data deletion. Playwright verified each state at 390x844.\nValidation coverage: Playwright smoke passed and HTTP check passed; primary flow validation is repeatable.\n\n## Changed Files\n\nprototype/index.html\n\n## Decisions\n\nKeep sample fortune output labeled.\n\n## Reusable Patterns\n\nValidate every state and one stale-transition risk.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nCreate the first Expo app shell.\n\n## Learn Notes\n\n- Pattern: Validate both the state itself and a transition that could leave UI stale.\n")
+
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Finish gate: passed")
+	assertContains(t, out.Stdout, "Readiness gate: Usable MVP -> Beta (ready)")
+	assertContains(t, out.Stdout, "Next action: hyper advance")
+
+	readiness := readReadinessStateIfExists(root)
+	dims := readinessDimensionMap(readiness.Dimensions)
+	if dims["error_handling"].Status != "covered" {
+		t.Fatalf("expected error handling covered, got %+v", dims["error_handling"])
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: advance")
+	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Handle empty, failure, and edge states")
 }
 
 func TestSurfaceProofEvidenceProgressesReadiness(t *testing.T) {

@@ -64,6 +64,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 
 	checks = append(checks, doctorStateChecks(root)...)
 	checks = append(checks, doctorGrowthMigrationCheck(root))
+	checks = append(checks, doctorReadinessStateCheck(root))
 	checks = append(checks, doctorSignatureCheck())
 	checks = append(checks, doctorDBCheck(root))
 	checks = append(checks, doctorCodexChecks(root)...)
@@ -139,6 +140,49 @@ func doctorGrowthMigrationCheck(root string) doctorCheck {
 		return doctorCheck{"Growth migration", "WARN", "legacy or noisy growth entries found; run `hyper migrate`"}
 	}
 	return doctorCheck{"Growth migration", "OK", "growth state uses current rules"}
+}
+
+func doctorReadinessStateCheck(root string) doctorCheck {
+	stored := readReadinessStateIfExists(root)
+	if stored.Version == 0 {
+		return doctorCheck{"Readiness state", "OK", "no readiness state yet"}
+	}
+	if !exists(filepath.Join(root, planFile)) {
+		return doctorCheck{"Readiness state", "WARN", "plan.md missing; cannot refresh readiness"}
+	}
+	current := readinessStateForStatus(root, readGrowthStateIfExists(root))
+	if current.Version == 0 {
+		return doctorCheck{"Readiness state", "OK", "readiness state is present"}
+	}
+	if !sameReadinessForDoctor(stored, current) {
+		return doctorCheck{
+			Name:   "Readiness state",
+			Status: "WARN",
+			Detail: "stored " + readinessDoctorSummary(stored) + "; current evidence resolves " + readinessDoctorSummary(current) + ". Run `hyper migrate`.",
+		}
+	}
+	return doctorCheck{"Readiness state", "OK", "readiness state is current"}
+}
+
+func sameReadinessForDoctor(a, b readinessState) bool {
+	if a.Stage != b.Stage || a.StageGate.Status != b.StageGate.Status || a.NextPressure.Axis != b.NextPressure.Axis {
+		return false
+	}
+	aDims := readinessDimensionMap(a.Dimensions)
+	bDims := readinessDimensionMap(b.Dimensions)
+	if len(aDims) != len(bDims) {
+		return false
+	}
+	for id, aDim := range aDims {
+		if bDims[id].Status != aDim.Status {
+			return false
+		}
+	}
+	return true
+}
+
+func readinessDoctorSummary(readiness readinessState) string {
+	return readinessGateSummary(readiness) + " / pressure " + firstNonBlank(readiness.NextPressure.Axis, "none")
 }
 
 func doctorDBCheck(root string) doctorCheck {

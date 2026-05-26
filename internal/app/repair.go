@@ -110,6 +110,22 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			return commandOutput{}, err
 		}
 	}
+	growth, growthErr := updateGrowthState(root, db)
+	if growthErr != nil {
+		return commandOutput{}, growthErr
+	}
+	readiness := readReadinessStateIfExists(root)
+	if planBody := readIfExists(filepath.Join(root, planFile)); strings.TrimSpace(planBody) != "" {
+		var readinessErr *hyperError
+		readiness, readinessErr = updateReadinessState(root, planBody, growth)
+		if readinessErr != nil {
+			return commandOutput{}, readinessErr
+		}
+	}
+	nextPlan, nextErr := writeNextPacketPlan(root, state, consistency.Derived, readiness, growth)
+	if nextErr != nil {
+		return commandOutput{}, nextErr
+	}
 	return stdout(strings.Join([]string{
 		"Hyper Run Repair",
 		"",
@@ -118,9 +134,13 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"From: " + firstNonBlank(oldStatus, "unknown"),
 		"To: " + state.Status,
 		"Reason: " + consistency.Derived.Reason,
+		"Readiness gate: " + readinessGateSummary(readiness),
+		"Readiness pressure: " + readinessPressureSummary(readiness),
+		"Next action: " + nextPlan.Command,
 		"",
 		"Next:",
-		"  hyper status",
+		"  " + nextPlan.Command,
+		"  hyper status --short",
 		"",
 	}, "\n")), nil
 }
