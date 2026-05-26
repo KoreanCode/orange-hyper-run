@@ -294,7 +294,7 @@ func TestDoctorWarnsWhenNextPacketPlanIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doctor failed: %v", err)
 	}
-	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected `hyper run \"Implement the smallest usable A tiny notes API core flow: the primary user flow\"`, found `hyper advance`; run `hyper migrate`")
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected `hyper run 'Implement the smallest usable A tiny notes API core flow: the primary user flow'`, found `hyper advance`; run `hyper migrate`")
 }
 
 func TestDoctorDoesNotTrustNextPacketWhenRefreshIsNeeded(t *testing.T) {
@@ -899,11 +899,11 @@ func TestRunAutoUntilPlansNextPacketAfterComplete(t *testing.T) {
 		t.Fatalf("complete failed: %v", err)
 	}
 	assertContains(t, complete.Stdout, "Finish gate: passed")
-	assertContains(t, complete.Stdout, "Next action: hyper run --auto --until \"Service Quality\" \"Handle empty, failure, and edge states for the primary Tiny CRM flow.\"")
+	assertContains(t, complete.Stdout, "Next action: hyper run --auto --until 'Service Quality' 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
 	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPlan, "Mode: auto until Service Quality")
 	assertContains(t, nextPlan, "Action: run")
-	assertContains(t, nextPlan, "Command: hyper run --auto --until \"Service Quality\"")
+	assertContains(t, nextPlan, "Command: hyper run --auto --until 'Service Quality'")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: passed")
 }
 
@@ -1496,7 +1496,7 @@ func TestMigrateRefreshesNextPacketPlan(t *testing.T) {
 	assertContains(t, out.Stdout, "Next packet plan: .hyper/next-packet.md (run)")
 	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPacket, "Action: run")
-	assertContains(t, nextPacket, "Command: hyper run \"Implement the smallest usable A tiny notes API core flow: the primary user flow\"")
+	assertContains(t, nextPacket, "Command: hyper run 'Implement the smallest usable A tiny notes API core flow: the primary user flow'")
 	assertNotContains(t, nextPacket, "Command: hyper advance")
 }
 
@@ -2391,6 +2391,133 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	}
 	if errorHandling.Status != "covered" {
 		t.Fatalf("expected error handling evidence with missing input text to be covered, got %+v", errorHandling)
+	}
+}
+
+func TestLatestFailurePressureBlocksStageAdvancement(t *testing.T) {
+	plan := map[string]string{
+		"Product":       "Mini Notes API",
+		"MVP":           "Create and list notes through HTTP endpoints.",
+		"Current Stage": "Usable MVP",
+	}
+	evidence := []readinessEvidenceRecord{
+		readinessEvidenceRecordForAxis("GOAL-0001", "core_ux", "HTTP API test passed for create and list endpoints, proving the primary developer-facing request/response flow works."),
+		readinessEvidenceRecordForAxis("GOAL-0002", "persistence", "`notes.json` stores created notes and a fresh store re-read the note after reload."),
+		readinessEvidenceRecordForAxis("GOAL-0002", "error_handling", "Empty note input is rejected with HTTP 400 and verified by API smoke."),
+		readinessEvidenceRecordForAxis("GOAL-0002", "validation_coverage", "`go test ./...` passed and covers create/list, empty-note rejection, and file-backed reload."),
+	}
+	growth := growthState{Pressures: []growthPressure{
+		{
+			Kind:         "failure",
+			PressureType: "recurring_failure",
+			Signal:       "File write errors are currently swallowed in `Store.Add`; future error handling should return persistence failures.",
+			Effect:       "stop_condition",
+			State:        "observed",
+			Sources:      []string{"GOAL-0002"},
+		},
+	}}
+
+	state := deriveReadinessState(plan, growth, evidence)
+	if state.StageGate.Status != "not_ready" {
+		t.Fatalf("expected latest failure pressure to block stage advancement, got %+v", state.StageGate)
+	}
+	if state.StageGate.Advancement.Candidate {
+		t.Fatalf("stage advancement must not be candidate with latest failure pressure: %+v", state.StageGate.Advancement)
+	}
+	if state.NextPressure.Axis != "open_failure" {
+		t.Fatalf("expected open failure pressure, got %+v", state.NextPressure)
+	}
+	if !strings.Contains(state.NextPressure.RecommendedGoal, "File write errors") {
+		t.Fatalf("expected next goal to name the failure, got %+v", state.NextPressure)
+	}
+}
+
+func TestNextPacketRunCommandKeepsFullRecommendedGoal(t *testing.T) {
+	focus := "Fix or explicitly close the latest Mini Notes API failure: File write errors are currently swallowed in `Store.Add`; future error handling should return persistence failures."
+	state := projectState{
+		Status:       "completed",
+		Stage:        "Usable MVP",
+		AutoContinue: true,
+		RunUntil:     "Service Quality",
+	}
+	readiness := readinessState{
+		Stage: "Usable MVP",
+		StageGate: readinessStageGate{
+			CurrentStage: "Usable MVP",
+			NextStage:    "Beta",
+			Status:       "not_ready",
+		},
+		NextPressure: readinessPressure{
+			Axis:            "open_failure",
+			Reason:          "Latest evidence recorded an unresolved failure.",
+			RecommendedGoal: focus,
+		},
+	}
+
+	plan := buildNextPacketPlan(state, goalState{State: "completed"}, readiness, growthState{})
+	if plan.Action != "run" {
+		t.Fatalf("expected run action, got %+v", plan)
+	}
+	if strings.Contains(plan.Command, "...") {
+		t.Fatalf("next-packet command must be executable and not ellipsized, got %q", plan.Command)
+	}
+	if !strings.Contains(plan.Command, "'Fix or explicitly close") || strings.Contains(plan.Command, "\"Fix or explicitly close") {
+		t.Fatalf("next-packet command should shell-quote focus with single quotes, got %q", plan.Command)
+	}
+	assertContains(t, plan.Command, "`Store.Add`")
+	assertContains(t, plan.Command, "future error handling should return persistence failures")
+}
+
+func TestOpenFailureFinishGateAcceptsClosureEvidence(t *testing.T) {
+	evidence := "# GOAL-0003 Evidence\n\n## Validation\n\n`go test ./...` passed and covers file write failure handling.\n\n## Readiness Evidence\n\nError handling: File write failures are returned from `Store.Add`, failed writes are rolled back from memory, and API save failures return HTTP 500.\n\n## Blocker\n\nNone blocking.\n"
+	readiness := readinessState{NextPressure: readinessPressure{Axis: "open_failure", AxisName: "Open failure"}}
+	if finding := readinessFinishGateFinding(projectState{CurrentGoalID: "GOAL-0003"}, evidence, readiness); finding != "" {
+		t.Fatalf("expected open failure closure evidence to pass, got %q", finding)
+	}
+
+	weak := "# GOAL-0003 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: tests passed.\n\n## Blocker\n\nNone blocking.\n"
+	if finding := readinessFinishGateFinding(projectState{CurrentGoalID: "GOAL-0003"}, weak, readiness); finding == "" {
+		t.Fatal("expected weak open failure closure evidence to fail")
+	}
+}
+
+func TestStaleFailurePressureDoesNotBlockLaterCleanEvidence(t *testing.T) {
+	plan := map[string]string{
+		"Product":       "Mini Notes API",
+		"MVP":           "Create and list notes through HTTP endpoints.",
+		"Current Stage": "Usable MVP",
+	}
+	evidence := []readinessEvidenceRecord{
+		readinessEvidenceRecordForAxis("GOAL-0001", "core_ux", "HTTP API test passed for create and list endpoints, proving the primary developer-facing request/response flow works."),
+		readinessEvidenceRecordForAxis("GOAL-0002", "persistence", "`notes.json` stores created notes and a fresh store re-read the note after reload."),
+		readinessEvidenceRecordForAxis("GOAL-0003", "error_handling", "File write failures are returned as HTTP 500 and verified by API smoke."),
+		readinessEvidenceRecordForAxis("GOAL-0003", "validation_coverage", "`go test ./...` passed and covers create/list, persistence reload, and write failure handling."),
+	}
+	growth := growthState{Pressures: []growthPressure{
+		{
+			Kind:         "failure",
+			PressureType: "recurring_failure",
+			Signal:       "File write errors are currently swallowed in `Store.Add`; future error handling should return persistence failures.",
+			Effect:       "stop_condition",
+			State:        "observed",
+			Sources:      []string{"GOAL-0002"},
+		},
+		{
+			Kind:         "pattern",
+			PressureType: "repeated_validation",
+			Signal:       "Run `go test ./...` before every packet handoff.",
+			Effect:       "validation",
+			State:        "repeated",
+			Sources:      []string{"GOAL-0003"},
+		},
+	}}
+
+	state := deriveReadinessState(plan, growth, evidence)
+	if state.StageGate.Status != "ready" {
+		t.Fatalf("stale failure should not block after later clean evidence, got %+v", state.StageGate)
+	}
+	if !state.StageGate.Advancement.Candidate {
+		t.Fatalf("expected stage advancement candidate after later clean evidence, got %+v", state.StageGate.Advancement)
 	}
 }
 

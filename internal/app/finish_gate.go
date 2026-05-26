@@ -96,12 +96,28 @@ func readinessFinishGateFinding(state projectState, evidenceText string, readine
 		}
 		return "Add sustained quality evidence that records repeated runtime proof or a real blocker."
 	}
+	if axis == "open_failure" {
+		if openFailureFinishGateCovered(evidenceText) {
+			return ""
+		}
+		return "Record validation that closes the latest failure pressure, or record a real blocker."
+	}
 	for _, record := range records {
 		if record.Axis == axis && record.Status == "covered" {
 			return ""
 		}
 	}
 	return "Add covered readiness evidence for `" + axisName + "`" + readinessFinishGateHint(axis) + " or record a real blocker."
+}
+
+func openFailureFinishGateCovered(evidenceText string) bool {
+	normalized := strings.ToLower(evidenceText)
+	if !hasNonPendingSection(evidenceText, "Validation") {
+		return false
+	}
+	hasFailureContext := hasAny(normalized, "failure", "failures", "failed write", "write error", "error handling", "rollback", "rolled back")
+	hasClosureProof := hasAny(normalized, "fixed", "closed", "resolved", "returned", "returns", "handled", "verified", "passed", "covered")
+	return hasFailureContext && hasClosureProof
 }
 
 func readinessFinishGateHint(axis string) string {

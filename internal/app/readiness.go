@@ -80,13 +80,13 @@ func readinessStateForStatus(root string, growth growthState) readinessState {
 func deriveReadinessState(plan map[string]string, growth growthState, evidence []readinessEvidenceRecord) readinessState {
 	stage := normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
 	dimensions := readinessDimensions(plan, growth, evidence)
-	gate := readinessGateForStage(stage, dimensions)
+	gate := readinessGateForStage(stage, dimensions, growth)
 	return readinessState{
 		Version:      readinessStateVersion,
 		Stage:        stage,
 		Dimensions:   dimensions,
 		StageGate:    gate,
-		NextPressure: selectReadinessPressure(plan, stage, dimensions, gate),
+		NextPressure: selectReadinessPressure(plan, stage, dimensions, gate, growth),
 	}
 }
 
@@ -909,7 +909,7 @@ func readinessCorpus(plan map[string]string, growth growthState) string {
 	return strings.ToLower(strings.Join(parts, "\n"))
 }
 
-func readinessGateForStage(stage string, dimensions []readinessDimension) readinessStageGate {
+func readinessGateForStage(stage string, dimensions []readinessDimension, growth growthState) readinessStageGate {
 	current, next, axes, evidence := readinessGateDefinition(stage)
 	blocking := []string{}
 	dims := readinessDimensionMap(dimensions)
@@ -921,6 +921,9 @@ func readinessGateForStage(stage string, dimensions []readinessDimension) readin
 		if dim.Status != "covered" {
 			blocking = append(blocking, fmt.Sprintf("%s: %s", dim.Name, dim.Gap))
 		}
+	}
+	if pressure, ok := latestOpenFailurePressure(growth); ok {
+		blocking = append(blocking, "Open failure pressure: "+pressure.Signal)
 	}
 	status := "ready"
 	if len(blocking) > 0 {
@@ -1002,7 +1005,7 @@ func readinessGateDefinition(stage string) (string, string, []string, []string) 
 		[]string{"Product and MVP slice are measurable.", "One core user flow works locally.", "Minimal validation evidence exists."}
 }
 
-func selectReadinessPressure(plan map[string]string, stage string, dimensions []readinessDimension, gate readinessStageGate) readinessPressure {
+func selectReadinessPressure(plan map[string]string, stage string, dimensions []readinessDimension, gate readinessStageGate, growth growthState) readinessPressure {
 	dims := readinessDimensionMap(dimensions)
 	if readinessPressureShouldFollowGateOrder(gate) {
 		for _, axis := range gate.RequiredAxes {
@@ -1025,6 +1028,9 @@ func selectReadinessPressure(plan map[string]string, stage string, dimensions []
 			}
 		}
 	}
+	if pressure, ok := latestOpenFailurePressure(growth); ok {
+		return readinessPressureForOpenFailure(plan, pressure, gate)
+	}
 	if gate.CurrentStage == gate.NextStage {
 		return readinessPressure{
 			Axis:             "sustained_quality",
@@ -1046,6 +1052,75 @@ func selectReadinessPressure(plan map[string]string, stage string, dimensions []
 
 func readinessPressureShouldFollowGateOrder(gate readinessStageGate) bool {
 	return len(gate.RequiredAxes) > 0
+}
+
+func latestOpenFailurePressure(growth growthState) (growthPressure, bool) {
+	latest := latestGrowthSourceGoal(growth)
+	if latest == "" {
+		return growthPressure{}, false
+	}
+	for _, pressure := range growth.Pressures {
+		if pressureOpenFailure(pressure) && pressureHasSource(pressure, latest) {
+			return pressure, true
+		}
+	}
+	return growthPressure{}, false
+}
+
+func latestGrowthSourceGoal(growth growthState) string {
+	latest := ""
+	for _, pressure := range growth.Pressures {
+		for _, source := range pressure.Sources {
+			if compareGoalID(source, latest) > 0 {
+				latest = source
+			}
+		}
+	}
+	return latest
+}
+
+func compareGoalID(a, b string) int {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a == b {
+		return 0
+	}
+	if b == "" {
+		return 1
+	}
+	if a == "" {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return -1
+}
+
+func pressureOpenFailure(pressure growthPressure) bool {
+	return pressure.Kind == "failure" || pressure.Effect == "stop_condition" || pressure.PressureType == "recurring_failure"
+}
+
+func pressureHasSource(pressure growthPressure, source string) bool {
+	for _, candidate := range pressure.Sources {
+		if candidate == source {
+			return true
+		}
+	}
+	return false
+}
+
+func readinessPressureForOpenFailure(plan map[string]string, pressure growthPressure, gate readinessStageGate) readinessPressure {
+	product := readinessProductName(plan)
+	return readinessPressure{
+		Axis:             "open_failure",
+		AxisName:         "Open failure",
+		Status:           firstRuntimeValue(pressure.State, "observed"),
+		Reason:           "Latest evidence recorded an unresolved failure before the " + gate.CurrentStage + " -> " + gate.NextStage + " gate: " + pressure.Signal,
+		RecommendedGoal:  "Fix or explicitly close the latest " + product + " failure: " + pressure.Signal,
+		WorkBoundary:     "Do not advance stage while the latest packet left an unresolved failure pressure. Fix it, prove it, or record a real blocker.",
+		ValidationSignal: "Record validation that the failure is fixed, or record the blocker that prevents closure.",
+	}
 }
 
 func readinessPressureForDimension(plan map[string]string, stage string, dim readinessDimension, gate readinessStageGate) readinessPressure {

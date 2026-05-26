@@ -2,7 +2,6 @@ package app
 
 import (
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -37,7 +36,7 @@ func buildNextPacketPlan(state projectState, derived goalState, readiness readin
 		}
 	}
 	if readiness.NextPressure.RecommendedGoal != "" {
-		command := "hyper run " + quoteCommandArg(compactText(readiness.NextPressure.RecommendedGoal, 160))
+		command := "hyper run " + quoteCommandArg(readiness.NextPressure.RecommendedGoal)
 		if state.AutoContinue {
 			command = autoRunCommand(state, readiness.NextPressure.RecommendedGoal)
 		}
@@ -113,7 +112,7 @@ func autoRunCommand(state projectState, focus string) string {
 		parts = append(parts, "--until", quoteCommandArg(state.RunUntil))
 	}
 	if strings.TrimSpace(focus) != "" {
-		parts = append(parts, quoteCommandArg(compactText(focus, 160)))
+		parts = append(parts, quoteCommandArg(focus))
 	}
 	return strings.Join(parts, " ")
 }
@@ -145,5 +144,5 @@ func stageRank(stage string) int {
 }
 
 func quoteCommandArg(value string) string {
-	return strconv.Quote(value)
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
