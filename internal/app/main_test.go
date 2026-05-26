@@ -235,6 +235,29 @@ func TestDoctorWarnsWhenStoredReadinessIsStale(t *testing.T) {
 	assertContains(t, out.Stdout, "Run `hyper migrate`")
 }
 
+func TestDoctorReadinessComparisonIgnoresIrrelevantFutureAxes(t *testing.T) {
+	stored := readinessState{
+		Stage: "Tiny MVP",
+		StageGate: readinessStageGate{
+			CurrentStage: "Tiny MVP",
+			NextStage:    "Usable MVP",
+			Status:       "ready",
+			RequiredAxes: []string{"product_completeness", "core_ux", "validation_coverage"},
+		},
+		NextPressure: readinessPressure{Axis: "stage_advancement"},
+		Dimensions: []readinessDimension{
+			{ID: "product_completeness", Status: "covered"},
+			{ID: "core_ux", Status: "covered"},
+			{ID: "validation_coverage", Status: "covered"},
+		},
+	}
+	current := stored
+	current.Dimensions = append(current.Dimensions, readinessDimension{ID: "sustained_quality", Status: "missing"})
+	if !sameReadinessForDoctor(stored, current) {
+		t.Fatal("doctor should not warn when only an irrelevant future-stage axis was added")
+	}
+}
+
 func TestRepairReconcilesStaleProjectState(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -496,6 +519,40 @@ func TestCompleteRunsFinishGateBeforeLearning(t *testing.T) {
 	assertContains(t, review, "Status: failed")
 	assertContains(t, review, "Stay in the same runtime packet")
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
+}
+
+func TestCompleteRequiresSpecificActiveCapabilityEvidence(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` passed and primary CLI smoke is repeatable.\n\n## Active Capability Evidence\n\nNone active.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected active capability evidence to name or prove the validator")
+	}
+	assertContains(t, err.Message, "Record active capability evidence for: validator-go-test")
+
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` passed and primary CLI smoke is repeatable.\n\n## Active Capability Evidence\n\nvalidator-go-test: `go test ./...` passed.\n\n## Blocker\n\nNone blocking.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("complete should accept named active capability evidence: %v", err)
+	}
+}
+
+func TestCompleteAllowsEmergingSustainedQualityEvidence(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nLocal Build Relay\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one handoff command.\n\n## Current Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nEvery packet proves the handoff command.\n")
+	if _, err := runCLI(args("run", "Repeat handoff validation"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nSustained quality: Repeated runtime evidence exists for the same handoff validation pattern, but it is not active required behavior yet.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRepeat validation again.\n")
+
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("emerging sustained quality evidence should allow packet closure: %v", err)
+	}
 }
 
 func TestRunAutoUntilPlansNextPacketAfterComplete(t *testing.T) {
@@ -1019,6 +1076,9 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 		t.Fatalf("expected active candidate, got %+v", state.Candidates[0])
 	}
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md")), "Status: active")
+	if exists(filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")) {
+		t.Fatal("active validator should move out of candidates")
+	}
 
 	if _, err := db.Exec(`update memories set stale_at = ? where kind = ?`, nowISO(), "pattern"); err != nil {
 		t.Fatalf("stale update failed: %v", err)
@@ -1760,7 +1820,7 @@ func TestServiceQualityStageDefinesOperationalStandard(t *testing.T) {
 	}
 
 	_, _, axes, evidence := readinessGateDefinition("Service Quality")
-	for _, axis := range []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark"} {
+	for _, axis := range []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "sustained_quality"} {
 		found := false
 		for _, got := range axes {
 			if got == axis {
@@ -1777,6 +1837,46 @@ func TestServiceQualityStageDefinesOperationalStandard(t *testing.T) {
 	assertContains(t, joinedEvidence, "rollback")
 	assertContains(t, joinedEvidence, "hidden context")
 	assertContains(t, joinedEvidence, "Reference benchmark evidence")
+	assertContains(t, joinedEvidence, "Repeated runtime evidence")
+}
+
+func TestServiceQualityGateRequiresSustainedGrowthEvidence(t *testing.T) {
+	plan := map[string]string{
+		"Product":          "Local Build Relay",
+		"Current Stage":    "Service Quality",
+		"Success Criteria": "Every packet proves the handoff command.",
+	}
+	evidence := []readinessEvidenceRecord{
+		readinessEvidenceRecordForAxis("GOAL-0001", "validation_coverage", "`go test ./...` passed and is repeatable."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "security_baseline", "Security baseline: Privacy boundary verified, no cloud sync, no telemetry, and no secrets."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "deployment_readiness", "Deployment readiness: Packaged CLI smoke passed outside the development command."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "operations_docs", "Operations and docs: README documents setup, rollback, and smoke command."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "maintainability", "Maintainability: Test helper keeps command validation repeatable without hidden local context."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "reference_benchmark", strings.Join([]string{
+			"Category: Local developer handoff CLI.",
+			"References: GitHub CLI, Taskfile, Make.",
+			"Baseline expectations: documented command, repeatable output, rollback, no hidden credentials.",
+			"Current comparison: below baseline = none; meets baseline = command/test/docs/rollback; above baseline = packet evidence loop.",
+			"Below-baseline gaps: No critical below-baseline gap.",
+			"Above-baseline strength: packet evidence loop.",
+			"Decision: Service Quality proof can continue.",
+		}, "; ")),
+	}
+
+	state := deriveReadinessState(plan, growthState{}, evidence)
+	if state.StageGate.Status != "not_ready" {
+		t.Fatalf("single service-quality packet must not unlock sustained quality, got %+v", state.StageGate)
+	}
+	if state.NextPressure.Axis != "sustained_quality" {
+		t.Fatalf("expected sustained quality pressure, got %+v", state.NextPressure)
+	}
+	assertContains(t, strings.Join(state.StageGate.BlockingGaps, "\n"), "Sustained quality")
+
+	growth := growthState{Candidates: []growthCandidate{{Kind: "validator", Name: "validator-go-test", Status: "active"}}}
+	state = deriveReadinessState(plan, growth, evidence)
+	if state.StageGate.Status != "ready" {
+		t.Fatalf("active validator should unlock sustained quality gate, got %+v", state.StageGate)
+	}
 }
 
 func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T) {
@@ -1909,6 +2009,25 @@ func TestReadinessEvidenceCoversPrivacyBoundaryAsSecurityBaseline(t *testing.T) 
 	}
 	if record.Axis != "security_baseline" || record.Status != "covered" {
 		t.Fatalf("expected covered security baseline evidence from privacy boundary, got %+v", record)
+	}
+}
+
+func TestSustainedQualityEvidenceDoesNotTreatNotActiveAsCovered(t *testing.T) {
+	defs := readinessDimensionDefs()
+	record, ok := parseReadinessEvidenceLine("GOAL-0002", "Sustained quality: Repeated runtime evidence exists for the same handoff validation pattern, but it is not active required behavior yet.", defs)
+	if !ok {
+		t.Fatal("expected sustained quality evidence to parse")
+	}
+	if record.Axis != "sustained_quality" || record.Status != "emerging" {
+		t.Fatalf("expected emerging sustained quality evidence, got %+v", record)
+	}
+
+	covered, ok := parseReadinessEvidenceLine("GOAL-0004", "Sustained quality: Active validator validator-go-test is required and verified before every packet handoff.", defs)
+	if !ok {
+		t.Fatal("expected active sustained quality evidence to parse")
+	}
+	if covered.Axis != "sustained_quality" || covered.Status != "covered" {
+		t.Fatalf("expected covered sustained quality evidence, got %+v", covered)
 	}
 }
 

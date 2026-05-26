@@ -170,15 +170,37 @@ func sameReadinessForDoctor(a, b readinessState) bool {
 	}
 	aDims := readinessDimensionMap(a.Dimensions)
 	bDims := readinessDimensionMap(b.Dimensions)
-	if len(aDims) != len(bDims) {
-		return false
-	}
-	for id, aDim := range aDims {
-		if bDims[id].Status != aDim.Status {
+	for _, id := range doctorRelevantReadinessAxes(a, b) {
+		aDim := aDims[id]
+		bDim := bDims[id]
+		if aDim.ID == "" && bDim.ID == "" {
+			continue
+		}
+		if bDim.Status != aDim.Status {
 			return false
 		}
 	}
 	return true
+}
+
+func doctorRelevantReadinessAxes(states ...readinessState) []string {
+	seen := map[string]bool{}
+	axes := []string{}
+	add := func(axis string) {
+		axis = strings.TrimSpace(axis)
+		if axis == "" || seen[axis] {
+			return
+		}
+		seen[axis] = true
+		axes = append(axes, axis)
+	}
+	for _, state := range states {
+		for _, axis := range state.StageGate.RequiredAxes {
+			add(axis)
+		}
+		add(state.NextPressure.Axis)
+	}
+	return axes
 }
 
 func readinessDoctorSummary(readiness readinessState) string {

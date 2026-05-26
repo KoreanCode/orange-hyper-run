@@ -68,6 +68,14 @@ func readinessFinishGateFinding(state projectState, evidenceText string, readine
 		return ""
 	}
 	records := readinessEvidenceRecordsFromGoalText(state.CurrentGoalID, evidenceText)
+	if axis == "sustained_quality" {
+		for _, record := range records {
+			if record.Axis == axis {
+				return ""
+			}
+		}
+		return "Add sustained quality evidence that records repeated runtime proof or a real blocker."
+	}
 	for _, record := range records {
 		if record.Axis == axis && record.Status == "covered" {
 			return ""
@@ -81,14 +89,36 @@ func activeCapabilityFinishGateFinding(root, evidenceText string) string {
 	if err != nil || len(validators) == 0 {
 		return ""
 	}
-	if hasNonPendingSection(evidenceText, "Active Capability Evidence") {
+	lines := usefulSectionLines(evidenceText, "Active Capability Evidence")
+	missing := []string{}
+	for _, validator := range validators {
+		if activeCapabilityEvidenceCovers(validator, lines) {
+			continue
+		}
+		missing = append(missing, validator.Name)
+	}
+	if len(missing) == 0 {
 		return ""
 	}
-	names := []string{}
-	for _, validator := range validators {
-		names = append(names, validator.Name)
+	return "Record active capability evidence for: " + strings.Join(missing, ", ")
+}
+
+func activeCapabilityEvidenceCovers(validator activeValidatorCapability, lines []string) bool {
+	if len(lines) == 0 {
+		return false
 	}
-	return "Record active capability evidence for: " + strings.Join(names, ", ")
+	name := normalizeSentence(validator.Name)
+	command := normalizeSentence(inferredCommandForSignal(validator.Signal))
+	for _, line := range lines {
+		normalized := normalizeSentence(line)
+		if name != "" && strings.Contains(normalized, name) {
+			return true
+		}
+		if command != "" && strings.Contains(normalized, command) {
+			return true
+		}
+	}
+	return false
 }
 
 func readinessEvidenceRecordsFromGoalText(goalID, evidenceText string) []readinessEvidenceRecord {

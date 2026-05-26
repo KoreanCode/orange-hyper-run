@@ -119,6 +119,7 @@ func readinessDimensionDefs() []readinessDimensionDef {
 		{ID: "operations_docs", Name: "Operations and docs", Keywords: []string{"readme", "docs", "runbook", "rollback", "logs", "monitor", "environment"}, Gap: "Operational notes, setup, rollback, or handoff docs are not sufficient."},
 		{ID: "maintainability", Name: "Maintainability", Keywords: []string{"refactor", "cleanup", "component", "module", "architecture", "helper", "table-driven"}, Gap: "The codebase has not accumulated enough maintainability evidence."},
 		{ID: "reference_benchmark", Name: "Reference benchmark", Keywords: []string{"reference", "benchmark", "baseline", "category", "comparison", "comparable", "above baseline", "below baseline"}, Gap: "Reference comparison has not proven category baseline and differentiating strength."},
+		{ID: "sustained_quality", Name: "Sustained quality", Keywords: []string{"sustained", "repeated evidence", "active validator", "active harness", "repeated pressure"}, Gap: "Sustained quality needs repeated runtime evidence and an active validator or equivalent reusable quality structure."},
 	}
 }
 
@@ -380,6 +381,10 @@ func readinessAxisForLabel(label string, defs []readinessDimensionDef) string {
 		"referencebenchmark":  "reference_benchmark",
 		"baseline":            "reference_benchmark",
 		"comparison":          "reference_benchmark",
+		"sustainedquality":    "sustained_quality",
+		"sustained":           "sustained_quality",
+		"activevalidator":     "sustained_quality",
+		"activeharness":       "sustained_quality",
 	}
 	if axis := aliases[compact]; axis != "" {
 		return axis
@@ -453,6 +458,9 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 			"refactor, modularity, test, helper, cleanup, or architecture evidence"
 	case "reference_benchmark":
 		return referenceBenchmarkEvidenceQuality(normalized)
+	case "sustained_quality":
+		return sustainedQualityEvidenceCovered(normalized),
+			"active validator, active harness, or active capability evidence"
 	default:
 		return len(strings.Fields(normalized)) >= 4, "specific evidence for this readiness axis"
 	}
@@ -691,6 +699,36 @@ func securityBaselineEvidenceCovered(normalized string) bool {
 	return hasSecurityBoundary && hasProof
 }
 
+func sustainedQualityEvidenceCovered(normalized string) bool {
+	if hasAny(normalized, "not active", "not yet active", "not required behavior yet", "not active required behavior") {
+		return false
+	}
+	return hasAny(normalized, "active validator", "active harness", "active capability") &&
+		hasAny(normalized, "promoted", "required", "covered", "verified", "proved", "proven", "active")
+}
+
+func sustainedQualityGrowthEvidence(growth growthState) (bool, bool, string) {
+	for _, candidate := range growth.Candidates {
+		if candidate.Status != "active" {
+			continue
+		}
+		if candidate.Kind == "validator" || candidate.Kind == "harness" {
+			return true, true, "Active " + candidate.Kind + " " + candidate.Name + " proves repeated quality pressure became required behavior."
+		}
+	}
+	for _, candidate := range growth.Candidates {
+		if candidate.Status == "promotable" || candidate.Status == "repeated" {
+			return false, true, "Repeated quality pressure exists but has not become active required behavior yet: " + candidate.Name
+		}
+	}
+	for _, pressure := range growth.Pressures {
+		if pressure.GoalCount >= growthRepeatedSignalGoals && (pressure.Effect == "validation" || pressure.Effect == "harness") {
+			return false, true, "Repeated quality pressure exists but has not crossed the active threshold yet: " + pressure.Signal
+		}
+	}
+	return false, false, ""
+}
+
 func deploymentEvidenceCovered(normalized string) bool {
 	deploymentTarget := hasAny(normalized,
 		"deploy", "deployed", "deployment", "url", "https://", "http://", "build", "release", "hosted", "docker", "ci",
@@ -715,6 +753,9 @@ func operationsDocsEvidenceCovered(normalized string) bool {
 }
 
 func growthEvidenceForDimension(growth growthState, def readinessDimensionDef) (bool, bool, string) {
+	if def.ID == "sustained_quality" {
+		return sustainedQualityGrowthEvidence(growth)
+	}
 	for _, pressure := range growth.Pressures {
 		if !pressureMatchesReadiness(pressure, def) {
 			continue
@@ -742,6 +783,8 @@ func pressureMatchesReadiness(pressure growthPressure, def readinessDimensionDef
 		return pressure.Effect == "stop_condition" || hasAny(signal, def.Keywords...)
 	case "maintainability":
 		return pressure.Effect == "implementation" || hasAny(signal, def.Keywords...)
+	case "sustained_quality":
+		return pressure.GoalCount >= growthRepeatedSignalGoals && (pressure.Effect == "validation" || pressure.Effect == "harness")
 	default:
 		return hasAny(signal, def.Keywords...)
 	}
@@ -809,13 +852,14 @@ func readinessGateDefinition(stage string) (string, string, []string, []string) 
 	normalized := normalizeLabel(stage)
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Service Quality", "Sustained Service Quality",
-			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark"},
+			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "sustained_quality"},
 			[]string{
 				"Required validation or documented manual checks are repeatable.",
 				"Security, privacy, and misuse boundaries are explicit and verified.",
 				"Setup, release or run, rollback, and recovery paths are documented and checked.",
 				"Maintainability evidence shows the next operator can continue without hidden context.",
 				"Reference benchmark evidence shows no core category-baseline gap and at least one above-baseline strength.",
+				"Repeated runtime evidence has promoted an active validator, active harness, or equivalent reusable quality structure.",
 			}
 	}
 	if strings.Contains(normalized, "beta") {
@@ -876,6 +920,9 @@ func readinessPressureForDimension(plan map[string]string, stage string, dim rea
 	if dim.ID == "reference_benchmark" {
 		workBoundary = "Compare the current result against 3-5 named category references before adding feature breadth; close only the strongest critical below-baseline gap if one is found."
 		validationSignal = "Fill Reference Benchmark Evidence with named references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and decision."
+	} else if dim.ID == "sustained_quality" {
+		workBoundary = "Do not claim sustained quality from one good packet. Repeat the highest-value validation or operational proof until it becomes active required behavior."
+		validationSignal = "Record repeated packet evidence and the active validator, active harness, or equivalent reusable quality structure that now protects the service."
 	}
 	return readinessPressure{
 		Axis:             dim.ID,
@@ -912,6 +959,8 @@ func readinessRecommendedGoal(plan map[string]string, stage, axis string) string
 		return fmt.Sprintf("Reduce the highest-friction code path so %s can keep growing.", product)
 	case "reference_benchmark":
 		return fmt.Sprintf("Compare %s against 3-5 named category references, define the baseline, and close the strongest critical below-baseline gap if one exists.", product)
+	case "sustained_quality":
+		return fmt.Sprintf("Repeat the highest-value %s quality proof until active validation or an equivalent reusable quality structure is justified.", product)
 	default:
 		return fmt.Sprintf("Advance %s toward %s readiness.", product, stage)
 	}

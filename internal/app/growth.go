@@ -859,12 +859,6 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 	if err := writeText(filepath.Join(root, candidate.LifecyclePath), body); err != nil {
 		return err
 	}
-	if candidate.Status != "retired" {
-		candidatePath := filepath.Join(root, hyperDir, "capabilities", "candidates", candidate.Kind, candidate.Name+".md")
-		if candidatePath != filepath.Join(root, candidate.LifecyclePath) {
-			return writeText(candidatePath, body)
-		}
-	}
 	return nil
 }
 
@@ -972,13 +966,9 @@ func firstBacktickCommand(value string) string {
 
 func removeConflictingLifecycleCopies(root string, candidate growthCandidate) *hyperError {
 	lifecyclePath := filepath.Join(root, candidate.LifecyclePath)
-	candidatePath := filepath.Join(root, hyperDir, "capabilities", "candidates", candidate.Kind, candidate.Name+".md")
 	for _, bucket := range []string{"candidates", "active", "retired"} {
 		path := filepath.Join(root, hyperDir, "capabilities", bucket, candidate.Kind, candidate.Name+".md")
 		keep := path == lifecyclePath
-		if candidate.Status != "retired" && path == candidatePath {
-			keep = true
-		}
 		if keep {
 			continue
 		}
