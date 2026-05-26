@@ -314,6 +314,8 @@ func memorySignal(text string) string {
 	}
 	prefixes := []string{
 		"decisions:",
+		"pressure signal:",
+		"pressure signals:",
 		"readiness evidence:",
 		"reusable patterns:",
 		"learn decision:",
@@ -346,7 +348,33 @@ func memorySignal(text string) string {
 	if isPlaceholder(signal) {
 		return ""
 	}
+	signal = stripPressureSignalLabel(signal)
 	return signal
+}
+
+func stripPressureSignalLabel(signal string) string {
+	labels := []string{
+		"repeated_validation:",
+		"service_quality_boundary:",
+		"implementation_pattern:",
+		"work_boundary:",
+		"known_failure:",
+		"recurring_failure:",
+	}
+	for {
+		normalized := strings.ToLower(strings.TrimSpace(signal))
+		changed := false
+		for _, label := range labels {
+			if strings.HasPrefix(normalized, label) {
+				signal = strings.TrimSpace(signal[len(label):])
+				changed = true
+				break
+			}
+		}
+		if !changed {
+			return strings.TrimSpace(signal)
+		}
+	}
 }
 
 func isNoisyGrowthSignal(signal string) bool {

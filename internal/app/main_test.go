@@ -1637,6 +1637,18 @@ func TestCommandHandoffPatternClassifiesAsValidation(t *testing.T) {
 	}
 }
 
+func TestMemorySignalStripsPressureSignalLabels(t *testing.T) {
+	got := memorySignal("GOAL-0002 pressure signals: repeated_validation: `./check.sh` passed again as the handoff smoke.")
+	if got != "`./check.sh` passed again as the handoff smoke." {
+		t.Fatalf("expected clean pressure signal, got %q", got)
+	}
+
+	got = memorySignal("GOAL-0003 pressure signals: service_quality_boundary: Keep security rejection and export proof in the handoff.")
+	if got != "Keep security rejection and export proof in the handoff." {
+		t.Fatalf("expected clean service boundary signal, got %q", got)
+	}
+}
+
 func TestBacktickCodeSymbolDoesNotClassifyAsValidationCommand(t *testing.T) {
 	pressureType, effect := growthClassification("pattern", "Pattern: Check `loadState()` fallback before rendering.")
 	if pressureType != "implementation_pattern" || effect != "implementation" {
@@ -3170,6 +3182,24 @@ func TestReadinessEvidenceCoversFileBackedPersistence(t *testing.T) {
 	}
 	if record.Axis != "persistence" || record.Status != "covered" {
 		t.Fatalf("expected covered persistence evidence, got %+v", record)
+	}
+
+	textFileRecord, ok := parseReadinessEvidenceLine("GOAL-0003", "Data persistence: `notes.txt` stores the added note and `./check.sh` reads it back through a separate list command before export.", readinessDimensionDefs())
+	if !ok {
+		t.Fatal("expected labeled txt persistence evidence to parse")
+	}
+	if textFileRecord.Axis != "persistence" || textFileRecord.Status != "covered" {
+		t.Fatalf("expected covered txt persistence evidence, got %+v", textFileRecord)
+	}
+}
+
+func TestReadinessEvidenceCoversRejectedInputErrorHandling(t *testing.T) {
+	record, ok := parseReadinessEvidenceLine("GOAL-0001", "Error handling: Empty list returns `no notes`, unsafe input containing a secret-like value is rejected, and the smoke command proves both paths.", readinessDimensionDefs())
+	if !ok {
+		t.Fatal("expected rejected input error handling evidence to parse")
+	}
+	if record.Axis != "error_handling" || record.Status != "covered" {
+		t.Fatalf("expected covered rejected input error evidence, got %+v", record)
 	}
 }
 

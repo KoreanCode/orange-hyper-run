@@ -472,12 +472,12 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 		return coreUXEvidenceCovered(normalized),
 			"browser, screenshot, smoke, or verified primary-flow evidence"
 	case "persistence":
-		return hasAny(normalized, "persist", "reload", "restart", "saved", "survive", "stored", "created", "re-read", "reread", "confirmed", "row") &&
-				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage", "json", ".json", "file", "disk", "filesystem"),
+		return hasAny(normalized, "persist", "reload", "restart", "saved", "save", "survive", "stored", "stores", "created", "re-read", "reread", "read back", "reads it back", "confirmed", "row") &&
+				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage", "json", ".json", ".txt", "file", "disk", "filesystem"),
 			"MySQL, SQLite, DB, file, JSON, reload, restart, storage, or database evidence"
 	case "error_handling":
 		return hasAny(normalized, "empty", "error", "loading", "fallback", "failure", "edge") &&
-				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works"),
+				hasAny(normalized, "handled", "covered", "verified", "tested", "implemented", "works", "rejected", "proves", "proved", "passed"),
 			"empty, loading, error, failure, fallback, or edge-state evidence"
 	case "validation_coverage":
 		return hasAny(normalized, "smoke", "playwright", "go test", "npm run", "pytest", "build", "command", "validation", "browser", "screenshot", "`") &&
