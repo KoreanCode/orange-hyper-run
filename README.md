@@ -7,93 +7,100 @@
 
 # Hyper Run
 
-Hyper Run is an evidence-first project growth protocol. Execution logs create pressure, pressure creates candidates, and repeated proof promotes project-specific structure.
+Hyper Run helps AI coding sessions keep project memory between runs.
 
-You write a simple `plan.md`. Hyper Run turns it into the next small work packet, stores progress under `.hyper/`, and uses completed evidence to make the next packet more specific.
+You keep a short `plan.md` in your project. `hyper run` turns that plan and the project history into the next focused work packet. After the work is done, `hyper complete` reads the evidence and prepares the next step.
 
-It is agent-agnostic: Codex Desktop, CLI agents, Cursor-style agents, or other coding assistants can consume the same runtime packet. The basic loop is still one command:
+The goal is simple: start from a small MVP and keep improving it without every AI session feeling like a reset.
+
+The basic command is:
 
 ```bash
 hyper run
 ```
 
-## Why Use It?
+Hyper Run works with Codex Desktop, CLI agents, Cursor-style agents, and other coding assistants because the work packet is just files inside the project.
+
+## Why Use It
 
 AI coding sessions often lose project context:
 
 - the next task becomes too broad
 - previous decisions are forgotten
-- validation evidence is scattered
-- small MVP work does not naturally grow into service quality
+- test or browser proof is scattered across chat
+- a small MVP does not naturally grow into a reliable service
 
-Hyper Run keeps that context inside the project. It is not a task splitter or a full project manager. It creates the next focused runtime packet, learns from the result, and lets repeated evidence decide when the project needs stronger structure.
+Hyper Run keeps that context in your repo.
 
-## Core Ideas
+It is not a project manager. It is not a big framework. It is a small CLI that creates the next focused AI work packet, asks for proof, and uses that proof to make the next packet better.
 
-Hyper Run has a few internal concepts, but they are simple:
-
-| Concept | Simple meaning |
-| --- | --- |
-| `plan.md` | The human-written product brief. It says what the product is, who it is for, and what stage it is in. |
-| Runtime packet | The next small work bundle generated from `plan.md` and project history. Usually this is `.hyper/goals/GOAL-0001/goal.md`. |
-| Evidence | Proof that the work was done and checked. This goes in `evidence.md`. |
-| Proof Contract | The runtime packet's short proof boundary: functional proof, surface proof, and operational proof. |
-| Learn | The step that extracts what the project repeatedly needed, failed at, or proved. It is not a generic summary. |
-| Pressure Ledger | The project ledger of unresolved or repeated pressure. For example, if every run needs the same validation, Hyper Run can suggest a validator candidate. |
-| Readiness | Stage contracts that check whether the project is ready to move from Tiny MVP to Usable MVP, Beta, and Service Quality. |
-| Capability candidate | A suggested validator, skill, or harness. It is only a candidate until enough repeated evidence proves it should be active. |
-
-The key idea is **harness-less growth**. A project does not need a harness on day one. It starts with `plan.md`, runs small packets, records evidence, and only creates stronger structure when the project repeatedly proves it needs that structure.
+## The Loop
 
 ```text
-Execution -> Evidence -> Pressure Ledger -> Capability candidate -> Structure when proven
+plan.md -> hyper run -> goal.md/tasks.md -> evidence.md/next.md -> hyper complete -> next packet
 ```
 
-This is the main difference from a harness-first workflow. A harness usually starts with a predefined workflow. Hyper Run starts with execution evidence and lets the project earn validators, skills, agents, or harnesses only when repeated pressure makes them useful.
+What you actually touch:
 
-Each runtime packet also asks for proof in three plain areas:
-
-- Functional proof: the smallest useful behavior works.
-- Surface proof: if a user-facing screen changed, a real user can understand the screen, take the primary action, and see the result or recovery state.
-- Operational proof: the safest available build, test, smoke, setup, or handoff path is repeatable, or the blocker is documented.
-
-Surface proof is not a design harness. Screenshot, browser, responsive, accessibility, Figma, or design-system checks only become stronger candidates after repeated evidence shows the project needs them.
-
-## Principles
-
-Hyper Run follows four product rules:
-
-- No structure before pressure.
-- No stage advancement without evidence.
-- No harness before repeated need.
-- No memory without reusable signal.
-
-These rules matter because Hyper Run should not create process for its own sake. Structure appears only when the project keeps proving it needs that structure.
-
-## Pressure Ledger
-
-The Pressure Ledger lives in `.hyper/growth/state.json`. It tracks repeated validation needs, recurring failures, reusable implementation patterns, constraints, and readiness gaps.
-
-The ledger does not immediately force new behavior. It moves through a lifecycle:
-
-```text
-observed -> repeated -> promotable -> active -> retired
-```
-
-Before a threshold is reached, generated validators, skills, agents, or harnesses remain candidates. After repeated proof, they can become active project-specific structure.
-
-## Stage Contracts
-
-Stages are not just labels. Each stage changes what `goal.md` asks Codex or another coding agent to prove.
-
-| Stage | Contract |
+| File or command | What it means |
 | --- | --- |
-| Tiny MVP | Existence proof: prove one useful flow exists with the smallest reversible product slice. |
-| Usable MVP | Usability proof: make the primary flow usable end-to-end for a real user. |
-| Beta | Repeatability proof: prove reliability around realistic data, failures, validation, docs, and release readiness. |
-| Service Quality | Operability proof: treat security, deployment, operations, rollback, and repeatable validation as required product behavior. |
+| `plan.md` | A plain product brief: what you are building, who it is for, current stage, and constraints. |
+| `hyper run` | Creates the next focused work packet. |
+| `goal.md` / `tasks.md` | What the AI should do now. |
+| `evidence.md` | What changed and how it was checked. |
+| `next.md` | The one next recommended step and reusable lessons. |
+| `hyper complete` | Closes the packet, checks the evidence, and prepares the next step. |
+| `hyper status --short` | Shows the current stage, blocker, and next action. |
 
-`hyper run` keeps working while the project has unresolved growth pressure. When pressure repeats, Hyper Run creates candidates. When evidence keeps confirming the same need, those candidates can become active project structure.
+## How It Grows
+
+Hyper Run does not ask you to build a harness on day one.
+
+It starts light: one plan, one focused packet, one evidence file. If the same need keeps appearing, Hyper Run can suggest project-specific structure later, such as a validator, skill, agent, or harness.
+
+For example:
+
+- if every packet needs `npm run build`, Hyper Run may suggest a validator
+- if every UI change needs a browser screenshot, it may suggest a visual check
+- if the project repeatedly hits the same failure mode, it may turn that into a stop condition
+
+Those suggestions are not forced immediately. They stay as candidates until repeated evidence proves they are useful.
+
+## Terms You May See
+
+Hyper Run has internal terms, but you do not need to memorize them.
+
+| Term | Plain meaning |
+| --- | --- |
+| Runtime packet | The next AI work bundle. |
+| Evidence | Proof that the work was done and checked. |
+| Proof Contract | The packet's proof checklist. |
+| Learn | Extracting reusable lessons from `evidence.md` and `next.md`. Not a summary. |
+| Pressure Ledger | A list of repeated needs, gaps, or failures the project keeps showing. |
+| Readiness pressure | The next missing proof needed to move the project forward. |
+| Capability candidate | A suggested validator, skill, agent, or harness. It is not active yet. |
+| Growth without a harness | Start light; add structure only after the project proves it needs it. |
+
+The short version:
+
+- no structure before repeated need
+- no stage advancement without evidence
+- no memory unless it changes future work
+
+## Stages
+
+Stages tell the AI what kind of proof matters right now.
+
+| Stage | What Hyper Run tries to prove |
+| --- | --- |
+| Tiny MVP | One useful thing works. |
+| Usable MVP | The main flow is usable end-to-end. |
+| Beta | Realistic data, errors, validation, docs, and release path are repeatable. |
+| Service Quality | Security, deployment, operations, rollback, repeatable checks, and category benchmark are good enough to treat it like a real service. |
+
+For Service Quality benchmark examples, see [Reference Benchmark Evidence Examples](docs/examples/reference-benchmark.md).
+
+`hyper run` keeps generating the next focused packet until the project reaches the stage you are aiming for.
 
 ## Basic Flow
 
@@ -117,16 +124,16 @@ hyper run "Next improvement"
 ```mermaid
 flowchart TD
   A["hyper init<br/>create plan.md and .hyper/"] --> B["Edit plan.md<br/>product brief and current stage"]
-  B --> C["hyper run [focus]<br/>create runtime packet"]
+  B --> C["hyper run [focus]<br/>create the next work packet"]
   C --> D["Implement current GOAL<br/>read goal.md and tasks.md"]
   D --> E["Update evidence.md and next.md"]
-  E --> F["hyper complete<br/>run Finish Gate"]
-  F --> G{"Finish Gate passed?"}
-  G -- "No" --> H["Write review.md findings<br/>stay in the same GOAL"]
+  E --> F["hyper complete<br/>check the packet"]
+  F --> G{"Enough proof?"}
+  G -- "No" --> H["Write review.md findings<br/>fix the same GOAL"]
   H --> D
-  G -- "Yes" --> I["Learn<br/>refresh memory, growth, readiness"]
-  I --> J["Next Packet Planner<br/>write .hyper/next-packet.md"]
-  J --> K{"Stage gate ready?"}
+  G -- "Yes" --> I["Save reusable lessons<br/>refresh project state"]
+  I --> J["Prepare next command<br/>write .hyper/next-packet.md"]
+  J --> K{"Ready for next stage?"}
   K -- "Yes, user accepts" --> L["hyper advance<br/>update plan.md stage"]
   K -- "No or not accepted" --> M["hyper status --short<br/>review next action"]
   L --> N{"Auto until target reached?"}
@@ -135,7 +142,7 @@ flowchart TD
   N -- "Yes" --> O["Stop and review<br/>choose the next service target"]
 ```
 
-`hyper complete` runs a finish gate before learning. If validation, readiness evidence, active capability evidence, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps you in the same packet.
+`hyper complete` checks the packet before saving lessons. If validation, stage evidence, active checks, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps you in the same packet.
 
 For longer Codex Desktop sessions, start with an auto target:
 
@@ -143,7 +150,7 @@ For longer Codex Desktop sessions, start with an auto target:
 hyper run --auto --until service-quality "Keep upgrading this service"
 ```
 
-Auto mode does not skip evidence or silently advance stages. It keeps the next packet command planned in `.hyper/next-packet.md`; stage changes still require explicit acceptance with `hyper advance`.
+Auto mode does not skip proof or silently advance stages. It keeps the next packet command planned in `.hyper/next-packet.md`; stage changes still require explicit acceptance with `hyper advance`.
 
 In Codex Desktop you can use the same idea as a project command:
 
