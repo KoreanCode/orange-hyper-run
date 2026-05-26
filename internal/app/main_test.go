@@ -497,6 +497,38 @@ func TestStatusShortPrioritizesActivePacketGuard(t *testing.T) {
 	assertNotContains(t, short, "Guard: accept the stage change before running `hyper advance`")
 }
 
+func TestStatusShortGapMatchesNextReadinessPressure(t *testing.T) {
+	state := projectState{Project: "Active Guard CLI", Stage: "Tiny MVP", Status: "active", ActiveRunID: "RUN-0001", CurrentGoalID: "GOAL-0001", CurrentGoalPath: ".hyper/goals/GOAL-0001/goal.md", AutoContinue: true, RunUntil: "Service Quality"}
+	derived := goalState{State: "active", Reason: "Runtime packet evidence is still pending."}
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Tiny MVP",
+		Dimensions: []readinessDimension{
+			{ID: "validation_coverage", Name: "Validation coverage", Status: "missing", Gap: "The primary behavior does not have repeatable validation evidence."},
+		},
+		StageGate: readinessStageGate{
+			CurrentStage: "Tiny MVP",
+			NextStage:    "Usable MVP",
+			Status:       "not_ready",
+			RequiredAxes: []string{"product_completeness", "core_ux", "validation_coverage"},
+			BlockingGaps: []string{
+				"Core UX: The primary user flow is not yet proven usable.",
+				"Validation coverage: The primary behavior does not have repeatable validation evidence.",
+			},
+		},
+		NextPressure: readinessPressure{
+			Axis:     "validation_coverage",
+			AxisName: "Validation coverage",
+			Status:   "missing",
+			Reason:   "Validation coverage is missing for the Tiny MVP -> Usable MVP gate.",
+		},
+	}
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Gap: Validation coverage: The primary behavior does not have repeatable validation evidence.")
+	assertNotContains(t, short, "Gap: Core UX")
+}
+
 func TestRunBlocksPendingActiveGoal(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")

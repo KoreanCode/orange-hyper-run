@@ -142,11 +142,21 @@ func statusShortGap(readiness readinessState) string {
 	if readiness.Version == 0 {
 		return ""
 	}
-	if len(readiness.StageGate.BlockingGaps) > 0 {
-		return compactText(readiness.StageGate.BlockingGaps[0], 120)
+	if readiness.StageGate.CurrentStage == readiness.StageGate.NextStage && readiness.StageGate.Status == "ready" {
+		return ""
 	}
 	if readiness.StageGate.Advancement.Candidate {
 		return "none; stage advancement is ready"
+	}
+	if readiness.NextPressure.Axis != "" && readiness.NextPressure.Axis != "stage_advancement" {
+		dim := readinessDimensionMap(readiness.Dimensions)[readiness.NextPressure.Axis]
+		if dim.ID != "" {
+			return compactText(readiness.NextPressure.AxisName+": "+firstNonBlank(dim.Gap, dim.Evidence, readiness.NextPressure.Reason), 120)
+		}
+		return compactText(readinessPressureSummary(readiness), 120)
+	}
+	if len(readiness.StageGate.BlockingGaps) > 0 {
+		return compactText(readiness.StageGate.BlockingGaps[0], 120)
 	}
 	if gap := nextProofGap(readiness); gap != "" && gap != "none" {
 		return gap
