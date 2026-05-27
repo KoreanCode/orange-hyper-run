@@ -132,7 +132,7 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Readiness pressure: "+readinessPressureSummary(updatedReadiness),
 		"Next action: "+nextPlan.Command,
 		"Why: "+nextPlan.Reason,
-		"Next packet plan: "+filepath.Join(hyperDir, "next-packet.md"),
+		"Next packet plan: "+displayRelPath(hyperDir, "next-packet.md"),
 		"",
 		"Next:",
 		"  "+nextPlan.Command,

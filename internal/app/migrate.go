@@ -58,7 +58,7 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 				if nextErr != nil {
 					return commandOutput{}, nextErr
 				}
-				nextPacketMessage = filepath.Join(hyperDir, "next-packet.md") + " (" + nextPlan.Action + ")"
+				nextPacketMessage = displayRelPath(hyperDir, "next-packet.md") + " (" + nextPlan.Action + ")"
 			}
 		} else if consistency.Repairable {
 			stateMessage = "state.json needs repair; run `hyper repair`"

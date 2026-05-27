@@ -65,7 +65,7 @@ func failedFinishGateGoalState(root, goalID string) (goalState, bool) {
 	if strings.TrimSpace(goalID) == "" || finishGateReviewStatus(root, goalID) != "failed" {
 		return goalState{}, false
 	}
-	reviewPath := filepath.Join(hyperDir, "goals", goalID, "review.md")
+	reviewPath := displayRelPath(hyperDir, "goals", goalID, "review.md")
 	return goalState{
 		State:  "active",
 		Reason: "Finish gate failed. Fix " + reviewPath + " findings, then run `hyper complete` again.",

@@ -186,7 +186,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"Readiness pressure: " + readinessPressureSummary(readiness),
 				"Next action: " + nextPlan.Command,
 				"Why: " + nextPlan.Reason,
-				"Next packet plan: " + filepath.Join(hyperDir, "next-packet.md"),
+				"Next packet plan: " + displayRelPath(hyperDir, "next-packet.md"),
 				"",
 				"No runtime packet created.",
 				"",
@@ -476,7 +476,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Readiness pressure: " + readinessPressureSummary(readiness),
 		"Next action: " + nextCommand,
 		"Why: " + nextReason,
-		"Next packet plan: " + filepath.Join(hyperDir, "next-packet.md"),
+		"Next packet plan: " + displayRelPath(hyperDir, "next-packet.md"),
 		line,
 		"",
 		"Next:",
@@ -518,8 +518,8 @@ func blockingActiveGoal(root string, state projectState) string {
 			"Reason: " + failed.Reason,
 			"",
 			"Fix the same packet before creating another one:",
-			"  update " + filepath.Join(hyperDir, "goals", state.CurrentGoalID, "evidence.md"),
-			"  update " + filepath.Join(hyperDir, "goals", state.CurrentGoalID, "next.md"),
+			"  update " + displayRelPath(hyperDir, "goals", state.CurrentGoalID, "evidence.md"),
+			"  update " + displayRelPath(hyperDir, "goals", state.CurrentGoalID, "next.md"),
 			"  hyper complete",
 		}, "\n")
 	}

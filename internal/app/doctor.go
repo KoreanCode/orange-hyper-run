@@ -201,7 +201,7 @@ func doctorNextPacketPlanCheck(root string) doctorCheck {
 	if actual != expected.Command {
 		return doctorCheck{"Next packet plan", "WARN", "expected `" + expected.Command + "`, found `" + actual + "`; run `hyper migrate`"}
 	}
-	return doctorCheck{"Next packet plan", "OK", filepath.Join(hyperDir, "next-packet.md") + " matches current state"}
+	return doctorCheck{"Next packet plan", "OK", displayRelPath(hyperDir, "next-packet.md") + " matches current state"}
 }
 
 func nextPacketPlanCommand(body string) string {
