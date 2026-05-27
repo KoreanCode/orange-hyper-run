@@ -64,13 +64,17 @@ Tiny MVP
 func parsePlan(body string) map[string]string {
 	result := map[string]string{}
 	current := ""
+	currentWritable := false
 	for _, line := range strings.Split(body, "\n") {
 		if strings.HasPrefix(line, "## ") {
 			current = strings.TrimSpace(strings.TrimPrefix(line, "## "))
-			result[current] = ""
+			if _, ok := result[current]; !ok {
+				result[current] = ""
+			}
+			currentWritable = firstRuntimeValue(result[current]) == ""
 			continue
 		}
-		if current != "" {
+		if current != "" && currentWritable {
 			existing := result[current]
 			if existing != "" {
 				existing += "\n"
@@ -83,6 +87,7 @@ func parsePlan(body string) map[string]string {
 }
 
 func augmentPlanAliases(plan map[string]string, body string) {
+	augmentInlinePlanAliases(plan, body)
 	for heading, value := range plan {
 		canonical := canonicalPlanKey(heading)
 		if canonical == "" {
@@ -95,14 +100,107 @@ func augmentPlanAliases(plan map[string]string, body string) {
 	}
 }
 
+func augmentInlinePlanAliases(plan map[string]string, body string) {
+	lines := strings.Split(body, "\n")
+	inFence := false
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence || line == "" {
+			continue
+		}
+		label, value, ok := splitInlinePlanField(line)
+		if !ok {
+			continue
+		}
+		canonical := canonicalPlanKey(label)
+		if canonical == "" {
+			continue
+		}
+		if strings.TrimSpace(value) == "" {
+			value = followingInlinePlanValue(lines, i+1)
+		}
+		if inlineProductBriefCanFillMVP(label, plan) {
+			setPlanAliasIfMissing(plan, "MVP", value)
+			continue
+		}
+		setPlanAliasIfMissing(plan, canonical, value)
+	}
+}
+
+func inlineProductBriefCanFillMVP(label string, plan map[string]string) bool {
+	switch compactPlanHeading(label) {
+	case "productbrief", "brief", "productdefinition", "servicedefinition":
+		return firstRuntimeValue(plan["Product"]) != "" && firstRuntimeValue(plan["MVP"]) == ""
+	default:
+		return false
+	}
+}
+
+func splitInlinePlanField(line string) (string, string, bool) {
+	line = strings.TrimSpace(line)
+	line = strings.TrimLeft(line, "#")
+	line = strings.TrimSpace(line)
+	line = strings.TrimLeft(line, "-*")
+	line = strings.TrimSpace(line)
+	index := strings.Index(line, ":")
+	if index <= 0 {
+		return "", "", false
+	}
+	label := strings.TrimSpace(line[:index])
+	if label == "" || len([]rune(label)) > 48 {
+		return "", "", false
+	}
+	return label, strings.TrimSpace(line[index+1:]), true
+}
+
+func followingInlinePlanValue(lines []string, start int) string {
+	values := []string{}
+	inFence := false
+	for i := start; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~") {
+			inFence = !inFence
+			if len(values) == 0 {
+				continue
+			}
+		}
+		if inFence {
+			values = append(values, line)
+			continue
+		}
+		if line == "" {
+			if len(values) == 0 {
+				continue
+			}
+			break
+		}
+		if strings.HasPrefix(line, "#") {
+			break
+		}
+		if label, _, ok := splitInlinePlanField(line); ok && canonicalPlanKey(label) != "" {
+			break
+		}
+		values = append(values, line)
+	}
+	return strings.Join(values, "\n")
+}
+
 func canonicalPlanKey(heading string) string {
 	normalized := compactPlanHeading(heading)
 	aliases := map[string]string{
 		"product":           "Product",
+		"productbrief":      "Product",
+		"brief":             "Product",
 		"productdefinition": "Product",
 		"service":           "Product",
 		"servicedefinition": "Product",
+		"project":           "Product",
 		"projectname":       "Product",
+		"name":              "Product",
 		"oneliner":          "Product",
 		"제품":                "Product",
 		"제품정의":              "Product",
@@ -150,9 +248,15 @@ func canonicalPlanKey(heading string) string {
 		"법적운영리스크":           "Constraints",
 		"successcriteria":   "Success Criteria",
 		"successmetrics":    "Success Criteria",
+		"successsignals":    "Success Criteria",
+		"successsignal":     "Success Criteria",
+		"validation":        "Success Criteria",
+		"validationplan":    "Success Criteria",
 		"성공지표":              "Success Criteria",
 		"성공기준":              "Success Criteria",
 		"완료기준":              "Success Criteria",
+		"검증":                "Success Criteria",
+		"검증방법":              "Success Criteria",
 		"currentfocus":      "Current Focus",
 		"priority":          "Current Focus",
 		"priorities":        "Current Focus",
@@ -231,6 +335,9 @@ func updatePlanCurrentStage(body, nextStage string) (string, bool) {
 		}
 	}
 	if headingIndex == -1 {
+		if updated, changed, found := updateInlinePlanCurrentStage(body, nextStage); found {
+			return updated, changed
+		}
 		trimmed := strings.TrimRight(body, "\n")
 		if trimmed != "" {
 			trimmed += "\n\n"
@@ -261,14 +368,61 @@ func updatePlanCurrentStage(body, nextStage string) (string, bool) {
 	return out, true
 }
 
+func updateInlinePlanCurrentStage(body, nextStage string) (string, bool, bool) {
+	lines := strings.Split(body, "\n")
+	inFence := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		label, value, ok := splitInlinePlanField(line)
+		if !ok || canonicalPlanKey(label) != "Current Stage" {
+			continue
+		}
+		current := strings.TrimSpace(value)
+		if strings.EqualFold(current, nextStage) || normalizeRuntimeStage(current) == nextStage {
+			return body, false, true
+		}
+		index := strings.Index(line, ":")
+		if index < 0 {
+			return body, false, true
+		}
+		lines[i] = strings.TrimRight(line[:index+1], " ") + " " + nextStage
+		out := strings.Join(lines, "\n")
+		if !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		return out, true, true
+	}
+	return body, false, false
+}
+
 func firstMarkdownHeading(body, prefix string) string {
 	for _, line := range strings.Split(body, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, prefix) && !strings.HasPrefix(trimmed, prefix+"#") {
-			return strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+			heading := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+			if genericPlanTitle(heading) {
+				continue
+			}
+			return heading
 		}
 	}
 	return ""
+}
+
+func genericPlanTitle(value string) bool {
+	switch compactPlanHeading(value) {
+	case "plan", "productplan", "projectplan", "serviceplan", "기획서", "제품기획서", "프로젝트기획서", "서비스기획서":
+		return true
+	default:
+		return false
+	}
 }
 
 func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext, growth growthState, readiness readinessState) episode {
@@ -278,13 +432,13 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	product := readinessProductName(plan)
 	objective := runtimeObjective(focus, plan, stage, product, readiness)
 	validation := applyReadinessValidation(applyGrowthValidation(applyStageValidation(validationForBuildStyle(buildStyle), stage), growth), readiness)
-	stopCondition := applyReadinessStopConditions(applyGrowthStopConditions(firstRuntimeValue(plan["Success Criteria"], stageDoneCondition(stage)), growth), readiness)
+	stopCondition := runtimeStopCondition(plan, stage, growth, readiness)
 	scope := runtimeWorkBoundary(objective, stage, plan, growth, readiness)
 	nonGoals := firstRuntimeValue(plan["Non-goals"], "No explicit non-goals recorded in plan.md.")
 	docs := episodeDocs{
 		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
 		Tasks:    buildTasksDoc(goalID, buildStyle, stage, readiness, growth),
-		Evidence: buildEvidenceDoc(goalID, stage, readiness),
+		Evidence: buildEvidenceDoc(goalID, stage, readiness, growth),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
 		Next:     buildNextDoc(goalID, readiness),
 	}
@@ -340,8 +494,33 @@ func runtimeObjective(focus string, plan map[string]string, stage, product strin
 
 func broadRuntimeFocus(focus string) bool {
 	normalized := normalizeLabel(focus)
-	return hasAny(normalized,
-		"service", "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better",
+	explicitQualityTarget := hasAny(normalized,
+		"service quality",
+		"service-level",
+		"service ready",
+		"service-ready",
+		"production service",
+		"production quality",
+		"production ready",
+		"production-ready",
+		"sustained service quality",
+		"toward service quality",
+		"to service quality",
+		"until service quality",
+		"실서비스",
+		"서비스화",
+		"서비스 수준",
+	)
+	fields := strings.Fields(normalized)
+	if len(fields) > 5 && !explicitQualityTarget {
+		return false
+	}
+	serviceAction := hasAny(normalized, "production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better")
+	if strings.Contains(normalized, "service") && !explicitQualityTarget && !serviceAction {
+		return false
+	}
+	return explicitQualityTarget || hasAny(normalized,
+		"production", "quality", "harden", "upgrade", "improve", "polish", "complete", "finish", "better",
 		"실서비스", "서비스", "품질", "고도화", "업그레이드", "완성", "개선", "베타", "프로덕션",
 	)
 }
@@ -395,12 +574,17 @@ func isNoIssueText(normalized string) bool {
 		normalized == "no blockers remain" ||
 		normalized == "no failure" ||
 		normalized == "no failures" ||
+		normalized == "none critical" ||
+		normalized == "no critical gap" ||
+		normalized == "no critical gaps" ||
 		normalized == "no failure in this episode" ||
 		normalized == "no failures in this episode" ||
 		normalized == "no failure in this run" ||
 		normalized == "no failures in this run" ||
 		normalized == "no failure this run" ||
 		normalized == "no failures this run" ||
+		normalized == "no new failure" ||
+		normalized == "no new failures" ||
 		normalized == "clear: implementation and validation completed for this packet" ||
 		normalized == "clear implementation and validation completed for this packet" ||
 		normalized == "implementation and validation completed for this packet" {
@@ -426,10 +610,21 @@ func isNoIssueText(normalized string) bool {
 		strings.HasPrefix(normalized, "no remaining blockers for this packet") ||
 		strings.HasPrefix(normalized, "no blocker remains for this packet") ||
 		strings.HasPrefix(normalized, "no blockers remain for this packet") ||
+		strings.HasPrefix(normalized, "none for this episode") ||
+		strings.HasPrefix(normalized, "none for this packet") ||
+		strings.HasPrefix(normalized, "none for this run") ||
 		strings.HasPrefix(normalized, "no failure for this episode") ||
+		strings.HasPrefix(normalized, "no failure for this packet") ||
 		strings.HasPrefix(normalized, "no failures for this episode") ||
+		strings.HasPrefix(normalized, "no failures for this packet") ||
 		strings.HasPrefix(normalized, "no failure in this run") ||
 		strings.HasPrefix(normalized, "no failures in this run") ||
+		strings.HasPrefix(normalized, "no new failure") ||
+		strings.HasPrefix(normalized, "no new failures") ||
+		strings.HasPrefix(normalized, "none critical for") ||
+		strings.HasPrefix(normalized, "no critical gap for") ||
+		strings.HasPrefix(normalized, "no critical gaps for") ||
+		strings.HasPrefix(normalized, "no core category-baseline gap") ||
 		strings.HasPrefix(normalized, "clear: implementation and validation completed") ||
 		strings.HasPrefix(normalized, "clear implementation and validation completed") ||
 		strings.HasPrefix(normalized, "implementation and validation completed for this packet")
@@ -449,6 +644,7 @@ func normalizeRuntimeStage(stage string) string {
 		{name: "Tiny MVP", patterns: []string{"tiny mvp"}},
 		{name: "Usable MVP", patterns: []string{"usable mvp"}},
 		{name: "Beta", patterns: []string{"beta"}},
+		{name: "Sustained Service Quality", patterns: []string{"sustained service quality", "sustained quality"}},
 		{name: "Service Quality", patterns: []string{"service quality", "production"}},
 	}
 	bestName := ""
@@ -561,6 +757,20 @@ func applyReadinessStopConditions(base string, readiness readinessState) string 
 	return base
 }
 
+func runtimeStopCondition(plan map[string]string, stage string, growth growthState, readiness readinessState) string {
+	base := stageDoneCondition(stage)
+	if criteria := firstRuntimeValue(plan["Success Criteria"]); criteria != "" && !sameStopCondition(criteria, base) {
+		base = "- Plan success criteria: " + compactText(criteria, 240) + "\n" + base
+	}
+	return applyReadinessStopConditions(applyGrowthStopConditions(base, growth), readiness)
+}
+
+func sameStopCondition(criteria, base string) bool {
+	criteria = normalizeSentence(criteria)
+	base = normalizeSentence(base)
+	return criteria == "" || criteria == base || strings.Contains(base, criteria)
+}
+
 func stageDoneCondition(stage string) string {
 	normalized := normalizeLabel(stage)
 	if strings.Contains(normalized, "tiny") && strings.Contains(normalized, "mvp") {
@@ -581,6 +791,14 @@ func stageDoneCondition(stage string) string {
 	}
 	if strings.Contains(normalized, "beta") {
 		return "- Primary flows are validated against realistic data.\n- Known blockers are documented with owner or next action.\n- Release or demo readiness evidence is captured."
+	}
+	if strings.Contains(normalized, "sustained") {
+		return strings.Join([]string{
+			"- Active validators, harnesses, or equivalent reusable quality structures continue to pass or have explicit blockers.",
+			"- Repeated failures or friction are converted into the next focused quality packet.",
+			"- Operational, validation, and maintainability evidence stays current without broad feature expansion.",
+			"- next.md identifies the next sustained-service improvement, not another stage advancement.",
+		}, "\n")
 	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return strings.Join([]string{
@@ -605,6 +823,9 @@ func stageRuntimeBoundary(stage string) string {
 	if strings.Contains(normalized, "beta") {
 		return "Prioritize realistic data, reliability, security, deployment, and documentation gaps over new feature breadth."
 	}
+	if strings.Contains(normalized, "sustained") {
+		return "Keep the service healthy through repeated quality evidence, active validators or harnesses, and friction reduction before adding breadth."
+	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Close operational and reference acceptance criteria first: repeatable validation, security/privacy boundaries, release and rollback proof, operator docs, maintainability evidence, and category-baseline comparison before feature breadth."
 	}
@@ -621,6 +842,9 @@ func stageValidationSignal(stage string) string {
 	}
 	if strings.Contains(normalized, "beta") {
 		return "Beta validation should use realistic data and capture security, deployment, or docs evidence when those axes are touched."
+	}
+	if strings.Contains(normalized, "sustained") {
+		return "Sustained Service Quality validation should run active validators or harnesses, record any blocker, and convert repeated failure into the next focused quality packet."
 	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Service Quality validation should prove the service can be set up, checked, released or run, rolled back, handed off, and compared against category references from documented commands, artifacts, or benchmark notes; run active validators or record why each required check is blocked."
@@ -747,7 +971,7 @@ func executionContractDoc(stage string, readiness readinessState, growth growthS
 		"- If validation fails twice for the same reason, stop and record the failure instead of broadening scope.",
 		"- Close the packet with evidence.md, next.md, and `hyper complete`; do not create the next packet first.",
 	}
-	if readiness.StageGate.Status == "ready" {
+	if readiness.StageGate.Advancement.Candidate {
 		lines = append(lines, "- Gate-ready packets may recommend `hyper advance`, but must not silently change plan.md stage.")
 	}
 	if activeStructureCount(growth.Candidates) > 0 {
@@ -770,12 +994,12 @@ func doneChecklistDoc(stage string, readiness readinessState, growth growthState
 		lines = append(lines, "- Readiness Evidence includes concrete proof for "+readiness.NextPressure.AxisName+".")
 	}
 	if activeStructureCount(growth.Candidates) > 0 {
-		lines = append(lines, "- Active Capability Evidence shows each active validator ran or why it was blocked.")
+		lines = append(lines, "- Active Capability Evidence shows each active validator, skill, or harness ran or why it was blocked.")
 	}
 	if strings.Contains(normalizeLabel(stage), "beta") || strings.Contains(normalizeLabel(stage), "service") {
 		lines = append(lines, "- Stop conditions cover failure, regression, and missing credential cases found during this packet.")
 	}
-	if serviceQualityStage(stage) {
+	if referenceBenchmarkRequired(stage, readiness) {
 		lines = append(lines, "- Reference Benchmark Evidence lists 3-5 references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and the next pressure.")
 	}
 	return strings.Join(lines, "\n")
@@ -822,7 +1046,7 @@ func stageRuntimeBehaviorDoc(stage, buildStyle string, readiness readinessState)
 	if readiness.NextPressure.AxisName != "" {
 		lines = append(lines, "- This packet should move readiness pressure: "+readiness.NextPressure.AxisName)
 	}
-	if readiness.StageGate.Status == "ready" {
+	if readiness.StageGate.Advancement.Candidate {
 		lines = append(lines, "- Gate is ready; only recommend stage advancement, do not silently edit plan.md.")
 	}
 	return strings.Join(lines, "\n")
@@ -831,8 +1055,17 @@ func stageRuntimeBehaviorDoc(stage, buildStyle string, readiness readinessState)
 func activeCapabilitiesDoc(growth growthState) string {
 	candidates := visibleGrowthCandidates(growth.Candidates)
 	lines := []string{}
+	requiredActiveValidators := map[string]bool{}
+	for _, signal := range growth.RuntimeBehavior.ValidationSignals {
+		if name := requiredActiveValidatorName(signal); name != "" {
+			requiredActiveValidators[name] = true
+		}
+	}
 	for _, candidate := range candidates {
 		if candidate.Status != "active" {
+			continue
+		}
+		if candidate.Kind == "validator" && requiredActiveValidators[candidate.Name] {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("- Active %s %s: %s", candidate.Kind, displayGrowthCandidateName(candidate), compactText(candidate.Signal, 180)))
@@ -846,6 +1079,17 @@ func activeCapabilitiesDoc(growth growthState) string {
 		return "- None active. Candidate structures are informational until promoted."
 	}
 	return strings.Join(lines, "\n")
+}
+
+func requiredActiveValidatorName(signal string) string {
+	fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(signal), "- "))
+	if len(fields) < 4 {
+		return ""
+	}
+	if fields[0] == "Required" && fields[1] == "active" && fields[2] == "validator" {
+		return strings.TrimSuffix(fields[3], ":")
+	}
+	return ""
 }
 
 func formatGrowthPrinciples() string {
@@ -878,7 +1122,7 @@ func buildStageGateDoc(readiness readinessState) string {
 		}
 	}
 	for _, evidence := range readiness.StageGate.RequiredEvidence {
-		lines = append(lines, "- Gate evidence: "+compactText(evidence, 160))
+		lines = append(lines, "- Gate requirement: "+compactText(evidence, 160))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -903,8 +1147,28 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, readinessTask, activeTask)
 }
 
-func buildEvidenceDoc(goalID, stage string, readiness readinessState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s## Active Capability Evidence\n\nPending.\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness))
+func buildEvidenceDoc(goalID, stage string, readiness readinessState, growth growthState) string {
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
+}
+
+func activeCapabilityEvidenceTemplate(growth growthState) string {
+	lines := []string{}
+	for _, candidate := range visibleGrowthCandidates(growth.Candidates) {
+		if candidate.Status != "active" {
+			continue
+		}
+		name := displayGrowthCandidateName(candidate)
+		signal := compactText(firstNonBlank(candidate.Signal, candidate.Reason), 160)
+		if signal == "" {
+			lines = append(lines, "- "+name+": Pending. Run or explicitly block this active "+candidate.Kind+".")
+			continue
+		}
+		lines = append(lines, "- "+name+": Pending. Required behavior: "+signal)
+	}
+	if len(lines) == 0 {
+		return "Pending."
+	}
+	return strings.Join(lines, "\n")
 }
 
 func referenceBenchmarkEvidenceTemplate(stage string, readiness readinessState) string {
@@ -931,6 +1195,9 @@ func serviceQualityStage(stage string) bool {
 }
 
 func referenceBenchmarkRequired(stage string, readiness readinessState) bool {
+	if readiness.Version != 0 {
+		return readiness.NextPressure.Axis == "reference_benchmark"
+	}
 	normalized := normalizeLabel(stage)
 	if strings.Contains(normalized, "beta") || serviceQualityStage(stage) {
 		return true

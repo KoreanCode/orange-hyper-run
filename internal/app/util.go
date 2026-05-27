@@ -112,6 +112,10 @@ func oneLine(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
+func displayRelPath(parts ...string) string {
+	return filepath.ToSlash(filepath.Join(parts...))
+}
+
 func compactText(value string, limit int) string {
 	value = oneLine(value)
 	if limit <= 0 || len([]rune(value)) <= limit {

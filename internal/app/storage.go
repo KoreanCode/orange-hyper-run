@@ -15,6 +15,16 @@ func openDB(root string) (*sql.DB, *hyperError) {
 	if err != nil {
 		return nil, dbError(err)
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	if _, err := db.Exec("pragma busy_timeout = 5000"); err != nil {
+		_ = db.Close()
+		return nil, dbError(err)
+	}
+	if _, err := db.Exec("pragma journal_mode = wal"); err != nil {
+		_ = db.Close()
+		return nil, dbError(err)
+	}
 	return db, nil
 }
 

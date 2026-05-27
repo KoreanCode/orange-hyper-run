@@ -65,6 +65,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	checks = append(checks, doctorStateChecks(root)...)
 	checks = append(checks, doctorGrowthMigrationCheck(root))
 	checks = append(checks, doctorReadinessStateCheck(root))
+	checks = append(checks, doctorNextPacketPlanCheck(root))
 	checks = append(checks, doctorSignatureCheck())
 	checks = append(checks, doctorDBCheck(root))
 	checks = append(checks, doctorCodexChecks(root)...)
@@ -136,6 +137,9 @@ func doctorGrowthMigrationCheck(root string) doctorCheck {
 	if growth.Version == 0 {
 		return doctorCheck{"Growth migration", "OK", "no growth state yet"}
 	}
+	if growthHasUnstoredManualActiveCapability(root, growth) {
+		return doctorCheck{"Growth migration", "WARN", "active capability files are not reflected in stored growth state; run `hyper migrate`"}
+	}
 	if growthMigrationNeeded(growth) {
 		return doctorCheck{"Growth migration", "WARN", "legacy or noisy growth entries found; run `hyper migrate`"}
 	}
@@ -150,7 +154,7 @@ func doctorReadinessStateCheck(root string) doctorCheck {
 	if !exists(filepath.Join(root, planFile)) {
 		return doctorCheck{"Readiness state", "WARN", "plan.md missing; cannot refresh readiness"}
 	}
-	current := readinessStateForStatus(root, readGrowthStateIfExists(root))
+	current := readinessStateForStatus(root, growthStateForStatus(root))
 	if current.Version == 0 {
 		return doctorCheck{"Readiness state", "OK", "readiness state is present"}
 	}
@@ -164,21 +168,88 @@ func doctorReadinessStateCheck(root string) doctorCheck {
 	return doctorCheck{"Readiness state", "OK", "readiness state is current"}
 }
 
+func doctorNextPacketPlanCheck(root string) doctorCheck {
+	path := filepath.Join(root, hyperDir, "next-packet.md")
+	statePath := filepath.Join(root, hyperDir, "state.json")
+	if !exists(statePath) {
+		return doctorCheck{"Next packet plan", "OK", "no runtime state yet"}
+	}
+	state, err := readState(statePath)
+	if err != nil {
+		return doctorCheck{"Next packet plan", "WARN", "cannot inspect state.json: " + err.Message}
+	}
+	consistency := currentStateConsistency(root, state)
+	if !consistency.Consistent {
+		return doctorCheck{"Next packet plan", "WARN", "cannot verify until state.json is repaired"}
+	}
+	if consistency.Derived.State == "active" {
+		return doctorCheck{"Next packet plan", "OK", "not required while the current runtime packet is active"}
+	}
+	if refresh := statusRefreshFor(root); statusRefreshActionable(state, consistency.Derived, refresh) {
+		return doctorCheck{"Next packet plan", "WARN", "cannot trust next-packet until refresh completes: " + refresh.Reason}
+	}
+	if !exists(path) {
+		return doctorCheck{"Next packet plan", "WARN", "missing; run `hyper migrate` or complete the current packet again"}
+	}
+	growth := growthStateForStatus(root)
+	readiness := readinessStateForStatus(root, growth)
+	expected := buildNextPacketPlan(state, consistency.Derived, readiness, growth)
+	actual := nextPacketPlanCommand(readIfExists(path))
+	if actual == "" {
+		return doctorCheck{"Next packet plan", "WARN", "missing Command; run `hyper migrate`"}
+	}
+	if actual != expected.Command {
+		return doctorCheck{"Next packet plan", "WARN", "expected `" + expected.Command + "`, found `" + actual + "`; run `hyper migrate`"}
+	}
+	return doctorCheck{"Next packet plan", "OK", displayRelPath(hyperDir, "next-packet.md") + " matches current state"}
+}
+
+func nextPacketPlanCommand(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		if _, value, ok := strings.Cut(strings.TrimSpace(line), "Command:"); ok {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func sameReadinessForDoctor(a, b readinessState) bool {
 	if a.Stage != b.Stage || a.StageGate.Status != b.StageGate.Status || a.NextPressure.Axis != b.NextPressure.Axis {
 		return false
 	}
 	aDims := readinessDimensionMap(a.Dimensions)
 	bDims := readinessDimensionMap(b.Dimensions)
-	if len(aDims) != len(bDims) {
-		return false
-	}
-	for id, aDim := range aDims {
-		if bDims[id].Status != aDim.Status {
+	for _, id := range doctorRelevantReadinessAxes(a, b) {
+		aDim := aDims[id]
+		bDim := bDims[id]
+		if aDim.ID == "" && bDim.ID == "" {
+			continue
+		}
+		if bDim.Status != aDim.Status {
 			return false
 		}
 	}
 	return true
+}
+
+func doctorRelevantReadinessAxes(states ...readinessState) []string {
+	seen := map[string]bool{}
+	axes := []string{}
+	add := func(axis string) {
+		axis = strings.TrimSpace(axis)
+		if axis == "" || seen[axis] {
+			return
+		}
+		seen[axis] = true
+		axes = append(axes, axis)
+	}
+	for _, state := range states {
+		for _, axis := range state.StageGate.RequiredAxes {
+			add(axis)
+		}
+		add(state.NextPressure.Axis)
+	}
+	return axes
 }
 
 func readinessDoctorSummary(readiness readinessState) string {

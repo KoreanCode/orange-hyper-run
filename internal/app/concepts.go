@@ -33,6 +33,8 @@ func stageGrowthContract(stage string) string {
 		return "Usability proof: make the primary flow usable end-to-end for a real user."
 	case strings.Contains(normalized, "beta"):
 		return "Repeatability proof: prove reliability around realistic data, failures, validation, docs, and release readiness."
+	case strings.Contains(normalized, "sustained"):
+		return "Sustained operation proof: keep service quality protected by repeated evidence, active capabilities, and focused friction reduction."
 	case strings.Contains(normalized, "service") || strings.Contains(normalized, "production"):
 		return "Operability proof: treat security, deployment, operations, rollback, and repeatable validation as required product behavior."
 	default:
@@ -93,10 +95,16 @@ func activeStructureCount(candidates []growthCandidate) int {
 func growthLoopStateSummary(growth growthState) string {
 	pressureCount := visibleGrowthPressureCount(growth.Pressures)
 	candidateCount := visibleGrowthCandidateCount(growth.Candidates)
+	activeCount := activeStructureCount(growth.Candidates)
 	if pressureCount == 0 {
+		if activeCount > 0 {
+			return fmt.Sprintf("0 pressure(s), %d candidate(s), %d active structure(s).", candidateCount, activeCount)
+		}
+		if candidateCount > 0 {
+			return fmt.Sprintf("0 pressure(s), %d candidate(s); structure stays candidate until repeated evidence proves it.", candidateCount)
+		}
 		return "Pressure Ledger is empty; the next run starts from plan.md and repository state."
 	}
-	activeCount := activeStructureCount(growth.Candidates)
 	if activeCount > 0 {
 		return fmt.Sprintf("%d pressure(s), %d candidate(s), %d active structure(s).", pressureCount, candidateCount, activeCount)
 	}

@@ -49,7 +49,7 @@ func normalizeRunUntilTarget(value string) (string, *hyperError) {
 	normalized = strings.Join(strings.Fields(normalized), " ")
 	switch normalized {
 	case "", "none":
-		return "", newError("Missing value for --until.\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality.", 2)
+		return "", newError("Missing value for --until.\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
 	case "tiny", "tiny mvp":
 		return "Tiny MVP", nil
 	case "usable", "usable mvp":
@@ -58,8 +58,10 @@ func normalizeRunUntilTarget(value string) (string, *hyperError) {
 		return "Beta", nil
 	case "service", "service quality", "production", "production quality":
 		return "Service Quality", nil
+	case "sustained", "sustained quality", "sustained service", "sustained service quality":
+		return "Sustained Service Quality", nil
 	default:
-		return "", newError("Unknown --until stage: "+value+"\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality.", 2)
+		return "", newError("Unknown --until stage: "+value+"\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
 	}
 }
 

@@ -24,6 +24,15 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
+	staledMemories, err := staleNoisyMemoryRecords(db)
+	if err != nil {
+		return commandOutput{}, err
+	}
+	if staledMemories > 0 {
+		if err := rewriteMemoryMarkdownFiles(root, db); err != nil {
+			return commandOutput{}, err
+		}
+	}
 	before := readGrowthStateIfExists(root)
 	growth, err := updateGrowthState(root, db)
 	if err != nil {
@@ -37,25 +46,39 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		}
 	}
 	stateMessage := "not checked"
+	nextPacketMessage := "not updated; no completed runtime packet state found"
 	if state, stateErr := readState(filepath.Join(root, hyperDir, "state.json")); stateErr == nil {
 		consistency := currentStateConsistency(root, state)
 		if consistency.Consistent {
 			stateMessage = "state.json is consistent"
+			if consistency.Derived.State == "active" {
+				nextPacketMessage = "unchanged while the current runtime packet is active"
+			} else {
+				nextPlan, nextErr := writeNextPacketPlan(root, state, consistency.Derived, readiness, growth)
+				if nextErr != nil {
+					return commandOutput{}, nextErr
+				}
+				nextPacketMessage = displayRelPath(hyperDir, "next-packet.md") + " (" + nextPlan.Action + ")"
+			}
 		} else if consistency.Repairable {
 			stateMessage = "state.json needs repair; run `hyper repair`"
+			nextPacketMessage = "not updated; run `hyper repair` first"
 		} else {
 			stateMessage = "state.json mismatch is not repairable while packet is active"
+			nextPacketMessage = "not updated while packet state is inconsistent"
 		}
 	}
 	return stdout(strings.Join([]string{
 		"Hyper Run Migration",
 		"",
 		fmt.Sprintf("Learn quality gate: refreshed %d legacy memory quality value(s)", refreshedMemories),
+		fmt.Sprintf("Learn quality gate: staled %d noisy memory record(s)", staledMemories),
 		"Growth state: refreshed",
 		fmt.Sprintf("Visible pressures: %d -> %d", visibleGrowthPressureCount(before.Pressures), visibleGrowthPressureCount(growth.Pressures)),
 		fmt.Sprintf("Visible candidates: %d -> %d", visibleGrowthCandidateCount(before.Candidates), visibleGrowthCandidateCount(growth.Candidates)),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"State consistency: " + stateMessage,
+		"Next packet plan: " + nextPacketMessage,
 		"",
 		"Next:",
 		"  hyper doctor",
@@ -93,6 +116,108 @@ func refreshLegacyMemoryQuality(db *sql.DB) (int, *hyperError) {
 		}
 	}
 	return len(updates), nil
+}
+
+func staleNoisyMemoryRecords(db *sql.DB) (int, *hyperError) {
+	rows, err := db.Query(`select id, kind, text, coalesce(confidence, 0), coalesce(quality, '') from memories where stale_at is null order by created_at asc, id asc`)
+	if err != nil {
+		return 0, dbError(err)
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var record memoryRecord
+		if err := rows.Scan(&record.ID, &record.Kind, &record.Text, &record.Confidence, &record.Quality); err != nil {
+			return 0, dbError(err)
+		}
+		if noisyPersistedMemoryRecord(record) {
+			ids = append(ids, record.ID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, dbError(err)
+	}
+	for _, id := range ids {
+		if _, err := db.Exec(`update memories set stale_at = ? where id = ?`, nowISO(), id); err != nil {
+			return 0, dbError(err)
+		}
+	}
+	return len(ids), nil
+}
+
+func noisyPersistedMemoryRecord(record memoryRecord) bool {
+	signal := memorySignal(record.Text)
+	normalized := normalizeSentence(signal)
+	if normalized == "" {
+		return true
+	}
+	return isNoIssueText(normalized) || isPassiveNoChangeText(normalized) || isHyperProtocolNoiseText(normalized)
+}
+
+func rewriteMemoryMarkdownFiles(root string, db *sql.DB) *hyperError {
+	rows, err := db.Query(`select id, kind, text, coalesce(confidence, 0), coalesce(quality, '') from memories where stale_at is null order by created_at asc, id asc`)
+	if err != nil {
+		return dbError(err)
+	}
+	defer rows.Close()
+	type markdownMemory struct {
+		kind    string
+		text    string
+		quality string
+	}
+	memories := []markdownMemory{}
+	for rows.Next() {
+		var record memoryRecord
+		if err := rows.Scan(&record.ID, &record.Kind, &record.Text, &record.Confidence, &record.Quality); err != nil {
+			return dbError(err)
+		}
+		if noisyPersistedMemoryRecord(record) {
+			continue
+		}
+		quality := firstNonBlank(record.Quality, memoryQuality(record.Kind, record.Text, firstNonZeroFloat(record.Confidence, 0.7)), "weak")
+		memories = append(memories, markdownMemory{kind: record.Kind, text: record.Text, quality: quality})
+	}
+	if err := rows.Err(); err != nil {
+		return dbError(err)
+	}
+	files := map[string]struct {
+		title string
+		lines []string
+	}{
+		"decision":   {title: "Decisions"},
+		"pattern":    {title: "Patterns"},
+		"failure":    {title: "Failures"},
+		"constraint": {title: "Constraints"},
+	}
+	for _, mem := range memories {
+		entry, ok := files[mem.kind]
+		if !ok {
+			continue
+		}
+		entry.lines = append(entry.lines, "- ["+mem.quality+"] "+mem.text)
+		files[mem.kind] = entry
+	}
+	for kind, entry := range files {
+		rel := ""
+		switch kind {
+		case "decision":
+			rel = ".hyper/memories/decisions.md"
+		case "pattern":
+			rel = ".hyper/memories/patterns.md"
+		case "failure":
+			rel = ".hyper/memories/failures.md"
+		case "constraint":
+			rel = ".hyper/memories/constraints.md"
+		}
+		body := "# " + entry.title + "\n\n"
+		if len(entry.lines) > 0 {
+			body += strings.Join(entry.lines, "\n") + "\n"
+		}
+		if err := writeText(filepath.Join(root, rel), body); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func growthMigrationNeeded(growth growthState) bool {

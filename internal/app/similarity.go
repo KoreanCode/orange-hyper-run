@@ -64,6 +64,9 @@ func findSimilarContext(db *sql.DB, query string, limit int) ([]similarContext, 
 		if memoryQualityIsIgnored(quality) {
 			continue
 		}
+		if noisyMemoryText(text) {
+			continue
+		}
 		candidates = append(candidates, similarContext{Source: "memory", ID: strconv.FormatInt(id, 10), Kind: firstNonBlank(quality, kind), Text: text})
 	}
 	memRows.Close()

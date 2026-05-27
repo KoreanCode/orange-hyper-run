@@ -85,6 +85,80 @@ func readGrowthStateIfExists(root string) growthState {
 	return state
 }
 
+func growthStateForStatus(root string) growthState {
+	return growthStateWithActiveCapabilityOverlay(root, readGrowthStateIfExists(root))
+}
+
+func growthStateWithActiveCapabilityOverlay(root string, growth growthState) growthState {
+	active, err := activeCapabilities(root)
+	if err != nil {
+		return growth
+	}
+	return mergeActiveCapabilityCandidates(growth, active)
+}
+
+func growthHasUnstoredManualActiveCapability(root string, growth growthState) bool {
+	active, err := activeCapabilities(root)
+	if err != nil {
+		return false
+	}
+	if len(active) == 0 {
+		return false
+	}
+	seen := map[string]growthCandidate{}
+	for _, candidate := range growth.Candidates {
+		seen[growthCandidateIdentity(candidate)] = candidate
+	}
+	for _, capability := range active {
+		if capability.Managed {
+			continue
+		}
+		candidate, ok := seen[growthCandidateIdentity(growthCandidateForActiveCapability(capability))]
+		if !ok || candidate.Status != "active" {
+			return true
+		}
+	}
+	return false
+}
+
+func mergeActiveCapabilityCandidates(growth growthState, active []activeCapability) growthState {
+	if len(active) == 0 {
+		return growth
+	}
+	candidates := append([]growthCandidate{}, growth.Candidates...)
+	seen := map[string]int{}
+	for index, candidate := range candidates {
+		seen[growthCandidateIdentity(candidate)] = index
+	}
+	for _, capability := range active {
+		if capability.Managed {
+			continue
+		}
+		candidate := growthCandidateForActiveCapability(capability)
+		key := growthCandidateIdentity(candidate)
+		if index, ok := seen[key]; ok {
+			if candidates[index].Status != "active" {
+				candidates[index] = candidate
+			}
+			continue
+		}
+		seen[key] = len(candidates)
+		candidates = append(candidates, candidate)
+	}
+	growth.Candidates = candidates
+	growth.PressureLedger = pressureLedgerFor(growth.Pressures, growth.Candidates)
+	return growth
+}
+
+func growthCandidateIdentity(candidate growthCandidate) string {
+	kind := strings.ToLower(strings.TrimSpace(candidate.Kind))
+	name := strings.ToLower(strings.TrimSpace(candidate.Name))
+	if kind != "" || name != "" {
+		return kind + "\x00" + name
+	}
+	return strings.TrimSpace(candidate.LifecyclePath)
+}
+
 func loadMemoryRecords(db *sql.DB) ([]memoryRecord, *hyperError) {
 	rows, err := db.Query(`select id, kind, text, coalesce(confidence, 0), coalesce(quality, '') from memories where stale_at is null order by created_at asc, id asc`)
 	if err != nil {
@@ -118,7 +192,7 @@ func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 		kind := strings.ToLower(strings.TrimSpace(record.Kind))
 		pressureType, effect := growthClassification(kind, signal)
 		canonical := canonicalPressureSignal(signal)
-		acc := findPressureAccumulator(accs, pressureType, canonical)
+		acc := findPressureAccumulator(accs, pressureType, canonical, signal)
 		if acc == nil {
 			acc = &pressureAccumulator{
 				kind:            kind,
@@ -129,6 +203,9 @@ func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 				goals:           map[string]bool{},
 			}
 			accs = append(accs, acc)
+		} else if growthSignalPreferred(signal, acc.signal) {
+			acc.signal = signal
+			acc.canonicalSignal = canonical
 		}
 		acc.memoryCount++
 		acc.goals[memoryGoalID(record.Text)] = true
@@ -158,6 +235,7 @@ func deriveGrowthPressures(records []memoryRecord) []growthPressure {
 			Sources:         sources,
 		})
 	}
+	pressures = suppressResolvedFailurePressures(pressures, records)
 	sort.Slice(pressures, func(i, j int) bool {
 		if pressures[i].Score == pressures[j].Score {
 			if pressures[i].Kind == pressures[j].Kind {
@@ -178,8 +256,14 @@ func growthRecordAllowed(record memoryRecord) bool {
 	if memoryQualityIsIgnored(quality) {
 		return false
 	}
+	if !readinessEvidenceContributesToGrowth(record.Text) {
+		return false
+	}
 	signal := memorySignal(record.Text)
 	if signal == "" || isNoisyGrowthSignal(signal) {
+		return false
+	}
+	if activeCapabilityExecutionSignal(signal) {
 		return false
 	}
 	if quality == "weak" {
@@ -188,16 +272,134 @@ func growthRecordAllowed(record memoryRecord) bool {
 	return true
 }
 
-func findPressureAccumulator(accs []*pressureAccumulator, pressureType, canonical string) *pressureAccumulator {
+func activeCapabilityExecutionSignal(signal string) bool {
+	normalized := normalizeSentence(signal)
+	return hasAny(normalized, "active validator", "active harness", "active capability") &&
+		hasAny(normalized, "passed before packet handoff", "passed for goal", "ran for goal", "blocked because", "record active capability")
+}
+
+func suppressResolvedFailurePressures(pressures []growthPressure, records []memoryRecord) []growthPressure {
+	filtered := make([]growthPressure, 0, len(pressures))
+	for _, pressure := range pressures {
+		if pressureOpenFailure(pressure) && pressureResolvedByLaterMemory(pressure, records) {
+			continue
+		}
+		filtered = append(filtered, pressure)
+	}
+	return filtered
+}
+
+func pressureResolvedByLaterMemory(pressure growthPressure, records []memoryRecord) bool {
+	latest := latestSourceGoal(pressure.Sources)
+	if latest == "" {
+		return false
+	}
+	for _, record := range records {
+		goalID := memoryGoalID(record.Text)
+		if compareGoalID(goalID, latest) <= 0 {
+			continue
+		}
+		signal := memorySignal(record.Text)
+		if failureClosureSignal(signal) && failureClosureOverlaps(pressure.Signal, signal) {
+			return true
+		}
+	}
+	return false
+}
+
+func latestSourceGoal(sources []string) string {
+	latest := ""
+	for _, source := range sources {
+		if compareGoalID(source, latest) > 0 {
+			latest = source
+		}
+	}
+	return latest
+}
+
+func failureClosureSignal(signal string) bool {
+	normalized := normalizeSentence(signal)
+	if hasAny(normalized, "not fixed", "not resolved", "not closed", "still open") {
+		return false
+	}
+	return hasAny(normalized, "closed by", "is closed", "now closed", "resolved", "fixed", "no longer", "now handled", "now configurable")
+}
+
+func failureClosureOverlaps(failure, closure string) bool {
+	failureTokens := tokenSet(pressureTokens(failure))
+	closureTokens := tokenSet(pressureTokens(closure))
+	overlap := 0
+	for token := range failureTokens {
+		if closureTokens[token] {
+			overlap++
+		}
+	}
+	return overlap >= 2 || tokenJaccard(failureTokens, closureTokens) >= 0.35
+}
+
+func readinessEvidenceContributesToGrowth(text string) bool {
+	normalized := normalizeSentence(text)
+	prefix := "readiness evidence:"
+	index := strings.Index(normalized, prefix)
+	if index == -1 {
+		return true
+	}
+	rest := strings.TrimSpace(normalized[index+len(prefix):])
+	return strings.HasPrefix(rest, "validation coverage:")
+}
+
+func findPressureAccumulator(accs []*pressureAccumulator, pressureType, canonical, signal string) *pressureAccumulator {
+	command := ""
+	if pressureType == "repeated_validation" || pressureType == "surface_validation" {
+		command = normalizeSentence(inferredCommandForSignal(signal))
+	}
 	for _, acc := range accs {
 		if acc.pressureType != pressureType {
 			continue
+		}
+		if command != "" && command == normalizeSentence(inferredCommandForSignal(acc.signal)) {
+			return acc
 		}
 		if tokenJaccardString(acc.canonicalSignal, canonical) >= 0.72 {
 			return acc
 		}
 	}
 	return nil
+}
+
+func growthSignalPreferred(candidate, existing string) bool {
+	candidate = strings.TrimSpace(candidate)
+	existing = strings.TrimSpace(existing)
+	if candidate == "" {
+		return false
+	}
+	if existing == "" {
+		return true
+	}
+	candidateNormalized := normalizeSentence(candidate)
+	existingNormalized := normalizeSentence(existing)
+	candidateCoverage := strings.HasPrefix(candidateNormalized, "validation coverage:")
+	existingCoverage := strings.HasPrefix(existingNormalized, "validation coverage:")
+	if existingCoverage != candidateCoverage {
+		return existingCoverage && !candidateCoverage
+	}
+	candidateActionable := actionableGrowthSignal(candidateNormalized)
+	existingActionable := actionableGrowthSignal(existingNormalized)
+	if candidateActionable != existingActionable {
+		return candidateActionable
+	}
+	return len(candidate) < len(existing)
+}
+
+func actionableGrowthSignal(normalized string) bool {
+	return hasAny(normalized,
+		"before every",
+		"before each",
+		"repeated validation path",
+		"smoke command",
+		"run ",
+		"use ",
+	)
 }
 
 func growthScore(goalCount, memoryCount int) float64 {
@@ -226,6 +428,8 @@ func memorySignal(text string) string {
 	}
 	prefixes := []string{
 		"decisions:",
+		"pressure signal:",
+		"pressure signals:",
 		"readiness evidence:",
 		"reusable patterns:",
 		"learn decision:",
@@ -258,7 +462,33 @@ func memorySignal(text string) string {
 	if isPlaceholder(signal) {
 		return ""
 	}
+	signal = stripPressureSignalLabel(signal)
 	return signal
+}
+
+func stripPressureSignalLabel(signal string) string {
+	labels := []string{
+		"repeated_validation:",
+		"service_quality_boundary:",
+		"implementation_pattern:",
+		"work_boundary:",
+		"known_failure:",
+		"recurring_failure:",
+	}
+	for {
+		normalized := strings.ToLower(strings.TrimSpace(signal))
+		changed := false
+		for _, label := range labels {
+			if strings.HasPrefix(normalized, label) {
+				signal = strings.TrimSpace(signal[len(label):])
+				changed = true
+				break
+			}
+		}
+		if !changed {
+			return strings.TrimSpace(signal)
+		}
+	}
 }
 
 func isNoisyGrowthSignal(signal string) bool {
@@ -267,6 +497,9 @@ func isNoisyGrowthSignal(signal string) bool {
 		return true
 	}
 	if isNoIssueText(normalized) || isPassiveNoChangeText(normalized) {
+		return true
+	}
+	if isHyperProtocolNoiseText(normalized) {
 		return true
 	}
 	tokens := pressureTokens(signal)
@@ -362,6 +595,9 @@ func growthClassification(kind, signal string) (string, string) {
 	case "constraint":
 		return "recurring_constraint", "work_boundary"
 	case "failure":
+		if isKnownImplementationGap(signal) {
+			return "implementation_gap", "implementation"
+		}
 		return "recurring_failure", "stop_condition"
 	case "pattern":
 		if isSurfaceValidationPattern(signal) {
@@ -376,9 +612,68 @@ func growthClassification(kind, signal string) (string, string) {
 	}
 }
 
+func isKnownImplementationGap(signal string) bool {
+	normalized := normalizeSentence(signal)
+	return hasAny(normalized,
+		"not handled yet",
+		"not implemented yet",
+		"not covered yet",
+		"not built yet",
+		"needs implementation",
+		"needs recovery",
+		"remains incomplete",
+		"remain incomplete",
+		"remains minimal",
+		"remain minimal",
+		"remains thin",
+		"remain thin",
+		"remains for the next stage",
+	)
+}
+
 func isValidationPattern(signal string) bool {
 	normalized := strings.ToLower(signal)
+	if strings.Contains(normalized, "readiness evidence:") && !strings.Contains(normalized, "validation coverage:") {
+		return false
+	}
+	if documentationPatternSignal(normalized) || referenceBenchmarkPatternSignal(normalized) {
+		return false
+	}
+	if command := firstBacktickCommand(signal); looksLikeRuntimeCommand(command) && hasAny(normalized, "run", "check", "smoke", "validation", "handoff", "before every", "before each", "passed", "repeatable") {
+		return true
+	}
 	return hasAny(normalized, "test", "build", "smoke", "validate", "validation", "playwright", "browser", "go test", "npm run", "pytest")
+}
+
+func documentationPatternSignal(normalized string) bool {
+	if !hasAny(normalized, "readme", "docs", "documentation", "runbook", "operator handoff", "rollback") {
+		return false
+	}
+	return !hasAny(normalized, "passed", "validated", "verified", "check.sh", "go test", "npm run", "`./", "playwright")
+}
+
+func referenceBenchmarkPatternSignal(normalized string) bool {
+	if !hasAny(normalized, "reference benchmark", "category baseline", "baseline gap", "stage advancement") {
+		return false
+	}
+	return !hasAny(normalized, "passed", "validated", "verified", "check.sh", "go test", "npm run", "`./", "playwright")
+}
+
+func looksLikeRuntimeCommand(command string) bool {
+	fields := strings.Fields(strings.TrimSpace(command))
+	if len(fields) == 0 {
+		return false
+	}
+	executable := fields[0]
+	if strings.HasPrefix(executable, "./") || strings.HasPrefix(executable, "../") || strings.HasPrefix(executable, "/") {
+		return true
+	}
+	switch executable {
+	case "bun", "cargo", "deno", "docker", "go", "just", "make", "node", "npm", "pnpm", "python", "python3", "pytest", "uv", "yarn":
+		return true
+	default:
+		return false
+	}
 }
 
 func isSurfaceValidationPattern(signal string) bool {
@@ -402,21 +697,41 @@ func growthBehaviorFromPressures(pressures []growthPressure) growthBehavior {
 		ValidationSignals: []string{},
 		StopConditions:    []string{},
 	}
+	seenBoundary := map[string]bool{}
+	seenValidation := map[string]bool{}
 	for _, pressure := range pressures {
 		switch pressure.Effect {
 		case "work_boundary":
+			key := growthBehaviorBoundaryKey(pressure)
+			if key != "" && seenBoundary[key] {
+				continue
+			}
 			if len(behavior.WorkBoundary) >= 4 {
 				continue
 			}
+			line := ""
 			switch pressure.Kind {
 			case "decision":
-				behavior.WorkBoundary = append(behavior.WorkBoundary, growthLine("Carry forward", pressure, "learned decision"))
+				line = growthLine("Carry forward", pressure, "learned decision")
 			case "constraint":
-				behavior.WorkBoundary = append(behavior.WorkBoundary, growthLine("Respect", pressure, "learned constraint"))
+				line = growthLine("Respect", pressure, "learned constraint")
+			}
+			if line != "" {
+				behavior.WorkBoundary = append(behavior.WorkBoundary, line)
+				if key != "" {
+					seenBoundary[key] = true
+				}
 			}
 		case "validation":
+			key := growthBehaviorValidationKey(pressure)
+			if key != "" && seenValidation[key] {
+				continue
+			}
 			if len(behavior.ValidationSignals) < 3 {
 				behavior.ValidationSignals = append(behavior.ValidationSignals, growthLine("Reuse", pressure, "validation pattern"))
+				if key != "" {
+					seenValidation[key] = true
+				}
 			}
 		case "stop_condition":
 			if len(behavior.StopConditions) < 3 {
@@ -427,11 +742,49 @@ func growthBehaviorFromPressures(pressures []growthPressure) growthBehavior {
 	return behavior
 }
 
+func growthBehaviorBoundaryKey(pressure growthPressure) string {
+	normalized := normalizeSentence(pressure.Signal)
+	if hasAny(normalized, "harness") && hasAny(normalized, "do not", "not create", "not add", "avoid", "without", "until repeated", "while one", "instead of adding") {
+		return "no-harness"
+	}
+	if hasAny(normalized, "active validator", "validator") && hasAny(normalized, "keep", "until", "broader", "release check", "repeatedly proven") {
+		if command := normalizeSentence(inferredCommandForSignal(pressure.Signal)); command != "" {
+			return "active-validator:" + command
+		}
+		return "active-validator"
+	}
+	return pressure.Kind + ":" + pressure.CanonicalSignal
+}
+
+func growthBehaviorValidationKey(pressure growthPressure) string {
+	if command := normalizeSentence(inferredCommandForSignal(pressure.Signal)); command != "" {
+		return "command:" + command
+	}
+	return "signal:" + pressure.CanonicalSignal
+}
+
 func growthBehaviorWithActiveCapabilities(root string, pressures []growthPressure) (growthBehavior, *hyperError) {
 	behavior := growthBehaviorFromPressures(pressures)
 	validators, err := activeValidatorCapabilities(root)
 	if err != nil {
 		return behavior, err
+	}
+	activeCommands := map[string]bool{}
+	for _, validator := range validators {
+		if command := normalizeSentence(inferredCommandForSignal(validator.Signal)); command != "" {
+			activeCommands[command] = true
+		}
+	}
+	if len(activeCommands) > 0 {
+		filtered := behavior.ValidationSignals[:0]
+		for _, signal := range behavior.ValidationSignals {
+			command := normalizeSentence(inferredCommandForSignal(signal))
+			if command != "" && activeCommands[command] {
+				continue
+			}
+			filtered = append(filtered, signal)
+		}
+		behavior.ValidationSignals = filtered
 	}
 	seen := map[string]bool{}
 	for _, signal := range behavior.ValidationSignals {
@@ -449,21 +802,24 @@ func growthBehaviorWithActiveCapabilities(root string, pressures []growthPressur
 	return behavior, nil
 }
 
-type activeValidatorCapability struct {
-	Name   string
-	Signal string
+type activeCapability struct {
+	Kind    string
+	Name    string
+	Signal  string
+	Path    string
+	Managed bool
 }
 
-func activeValidatorCapabilities(root string) ([]activeValidatorCapability, *hyperError) {
+func activeValidatorCapabilities(root string) ([]activeCapability, *hyperError) {
 	dir := filepath.Join(root, hyperDir, "capabilities", "active", "validator")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []activeValidatorCapability{}, nil
+			return []activeCapability{}, nil
 		}
 		return nil, ioError(err)
 	}
-	validators := []activeValidatorCapability{}
+	validators := []activeCapability{}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
@@ -475,6 +831,8 @@ func activeValidatorCapabilities(root string) ([]activeValidatorCapability, *hyp
 		}
 		validator, ok := parseActiveValidatorCapability(entry.Name(), string(body))
 		if ok {
+			validator.Path = path
+			validator.Managed = managedCapabilityFile(string(body))
 			validators = append(validators, validator)
 		}
 	}
@@ -487,10 +845,62 @@ func activeValidatorCapabilities(root string) ([]activeValidatorCapability, *hyp
 	return validators, nil
 }
 
-func parseActiveValidatorCapability(filename, body string) (activeValidatorCapability, bool) {
+func activeCapabilities(root string) ([]activeCapability, *hyperError) {
+	dir := filepath.Join(root, hyperDir, "capabilities", "active")
+	kindEntries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []activeCapability{}, nil
+		}
+		return nil, ioError(err)
+	}
+	capabilities := []activeCapability{}
+	for _, kindEntry := range kindEntries {
+		if !kindEntry.IsDir() {
+			continue
+		}
+		kind := kindEntry.Name()
+		entries, readErr := os.ReadDir(filepath.Join(dir, kind))
+		if readErr != nil {
+			return nil, ioError(readErr)
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(dir, kind, entry.Name())
+			body, bodyErr := os.ReadFile(path)
+			if bodyErr != nil {
+				return nil, ioError(bodyErr)
+			}
+			capability, ok := parseActiveCapability(kind, entry.Name(), string(body))
+			if ok {
+				capability.Path = path
+				capability.Managed = managedCapabilityFile(string(body))
+				capabilities = append(capabilities, capability)
+			}
+		}
+	}
+	sort.Slice(capabilities, func(i, j int) bool {
+		if capabilities[i].Kind == capabilities[j].Kind {
+			if capabilities[i].Name == capabilities[j].Name {
+				return capabilities[i].Signal < capabilities[j].Signal
+			}
+			return capabilities[i].Name < capabilities[j].Name
+		}
+		return capabilities[i].Kind < capabilities[j].Kind
+	})
+	return capabilities, nil
+}
+
+func parseActiveValidatorCapability(filename, body string) (activeCapability, bool) {
+	return parseActiveCapability("validator", filename, body)
+}
+
+func parseActiveCapability(kind, filename, body string) (activeCapability, bool) {
 	status := capabilityField(body, "Status")
 	if status != "" && normalizeLabel(status) != "active" {
-		return activeValidatorCapability{}, false
+		return activeCapability{}, false
 	}
 	name := firstNonBlank(markdownTitle(body), strings.TrimSuffix(filename, filepath.Ext(filename)))
 	signal := firstNonBlank(
@@ -499,9 +909,13 @@ func parseActiveValidatorCapability(filename, body string) (activeValidatorCapab
 		firstSectionLine(body, "Validation"),
 	)
 	if name == "" || signal == "" {
-		return activeValidatorCapability{}, false
+		return activeCapability{}, false
 	}
-	return activeValidatorCapability{Name: name, Signal: oneLine(signal)}, true
+	return activeCapability{Kind: kind, Name: name, Signal: oneLine(signal)}, true
+}
+
+func managedCapabilityFile(body string) bool {
+	return capabilityField(body, "Pressure type") != "" || capabilityField(body, "Evidence count") != ""
 }
 
 func markdownTitle(body string) string {
@@ -538,7 +952,7 @@ func growthLine(verb string, pressure growthPressure, label string) string {
 
 func materializeGrowthCandidates(root string, pressures []growthPressure, previous growthState) ([]growthCandidate, *hyperError) {
 	candidates := []growthCandidate{}
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	for _, pressure := range pressures {
 		if pressure.GoalCount < growthRepeatedSignalGoals {
 			continue
@@ -550,51 +964,81 @@ func materializeGrowthCandidates(root string, pressures []growthPressure, previo
 			if pressure.PressureType == "surface_validation" {
 				reason = "Repeated surface proof pressure crossed the validator threshold."
 			}
-			candidate := growthCandidateForPressure("validator", prefix, "validators", reason, pressure)
-			if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			if err := addGrowthCandidate(root, &candidates, seen, growthCandidateForPressure("validator", prefix, "validators", reason, pressure), pressure); err != nil {
 				return nil, err
-			}
-			if !seen[candidate.LifecyclePath] {
-				candidates = append(candidates, candidate)
-				seen[candidate.LifecyclePath] = true
 			}
 		case "implementation":
-			candidate := growthCandidateForPressure("skill", "skill", "skills", "Repeated implementation pressure crossed the skill threshold.", pressure)
-			if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			if err := addGrowthCandidate(root, &candidates, seen, growthCandidateForPressure("skill", "skill", "skills", "Repeated implementation pressure crossed the skill threshold.", pressure), pressure); err != nil {
 				return nil, err
-			}
-			if !seen[candidate.LifecyclePath] {
-				candidates = append(candidates, candidate)
-				seen[candidate.LifecyclePath] = true
 			}
 		case "stop_condition":
-			candidate := growthCandidateForPressure("validator", "preflight", "validators", "Repeated failure pressure crossed the preflight threshold.", pressure)
-			if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			if err := addGrowthCandidate(root, &candidates, seen, growthCandidateForPressure("validator", "preflight", "validators", "Repeated failure pressure crossed the preflight threshold.", pressure), pressure); err != nil {
 				return nil, err
-			}
-			if !seen[candidate.LifecyclePath] {
-				candidates = append(candidates, candidate)
-				seen[candidate.LifecyclePath] = true
 			}
 		}
 	}
 	if harnessPressureReady(pressures) {
 		pressure := aggregateHarnessPressure(pressures)
-		candidate := harnessCandidateForPressure(pressure)
-		if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+		if err := addGrowthCandidate(root, &candidates, seen, harnessCandidateForPressure(pressure), pressure); err != nil {
 			return nil, err
 		}
-		if !seen[candidate.LifecyclePath] {
-			candidates = append(candidates, candidate)
-			seen[candidate.LifecyclePath] = true
-		}
 	}
+	active, activeErr := activeCapabilities(root)
+	if activeErr != nil {
+		return nil, activeErr
+	}
+	candidates = mergeActiveCapabilityCandidates(growthState{Candidates: candidates}, active).Candidates
 	retired, err := retiredGrowthCandidates(root, previous, candidates)
 	if err != nil {
 		return nil, err
 	}
 	candidates = append(candidates, retired...)
 	return candidates, nil
+}
+
+func addGrowthCandidate(root string, candidates *[]growthCandidate, seen map[string]int, candidate growthCandidate, pressure growthPressure) *hyperError {
+	key := growthCandidateIdentity(candidate)
+	if index, ok := seen[key]; ok {
+		existing := (*candidates)[index]
+		if strongerOrEqualGrowthCandidate(existing, candidate) {
+			return nil
+		}
+		if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+			return err
+		}
+		(*candidates)[index] = candidate
+		return nil
+	}
+	if err := writeGrowthCandidate(root, candidate, pressure); err != nil {
+		return err
+	}
+	seen[key] = len(*candidates)
+	*candidates = append(*candidates, candidate)
+	return nil
+}
+
+func strongerOrEqualGrowthCandidate(existing, candidate growthCandidate) bool {
+	existingRank := growthCandidateStatusRank(existing.Status)
+	candidateRank := growthCandidateStatusRank(candidate.Status)
+	if existingRank != candidateRank {
+		return existingRank > candidateRank
+	}
+	return existing.EvidenceCount >= candidate.EvidenceCount
+}
+
+func growthCandidateStatusRank(status string) int {
+	switch status {
+	case "active":
+		return 4
+	case "promotable":
+		return 3
+	case "repeated":
+		return 2
+	case "observed", "candidate":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func validatorCandidatePrefix(pressure growthPressure) string {
@@ -633,9 +1077,20 @@ func growthCandidateForPressure(kind, prefix, generatedDir, reason string, press
 
 func growthCandidateName(prefix string, pressure growthPressure) string {
 	if command := inferredCommandForSignal(pressure.Signal); command != "" {
-		return prefix + "-" + slugify(command)
+		return growthCandidateNameForCommand(prefix, command)
 	}
 	return prefix + "-" + slugify(cleanCandidateSignal(pressure.Signal))
+}
+
+func growthCandidateNameForCommand(prefix, command string) string {
+	commandSlug := slugify(command)
+	if commandSlug == "" {
+		return prefix
+	}
+	if strings.HasSuffix(prefix, "-smoke") && commandSlug == "smoke-sh" {
+		return prefix
+	}
+	return prefix + "-" + commandSlug
 }
 
 func cleanCandidateSignal(signal string) string {
@@ -668,7 +1123,7 @@ func cleanCandidateSignal(signal string) string {
 }
 
 func harnessCandidateForPressure(pressure growthPressure) growthCandidate {
-	status := harnessStatusForPressure(pressure.MemoryCount)
+	status := harnessStatusForPressure(pressure.GoalCount, pressure.MemoryCount)
 	name := "harness-growth-candidate"
 	return growthCandidate{
 		Kind:                "harness",
@@ -680,10 +1135,26 @@ func harnessCandidateForPressure(pressure growthPressure) growthCandidate {
 		Signal:              pressure.Signal,
 		PressureType:        pressure.PressureType,
 		Sources:             pressure.Sources,
-		EvidenceCount:       pressure.GoalCount,
+		EvidenceCount:       pressure.MemoryCount,
 		RepeatedThreshold:   growthHarnessStablePressures,
 		PromotionThreshold:  growthHarnessPromotableSignals,
 		ActivationThreshold: growthHarnessActiveSignals,
+	}
+}
+
+func growthCandidateForActiveCapability(capability activeCapability) growthCandidate {
+	return growthCandidate{
+		Kind:                capability.Kind,
+		Name:                capability.Name,
+		Status:              "active",
+		LifecyclePath:       capability.Path,
+		Reason:              "Active capability file is installed in the project.",
+		Signal:              capability.Signal,
+		PressureType:        "active_capability",
+		EvidenceCount:       growthActiveSignalGoals,
+		RepeatedThreshold:   growthRepeatedSignalGoals,
+		PromotionThreshold:  growthPromotableSignalGoals,
+		ActivationThreshold: growthActiveSignalGoals,
 	}
 }
 
@@ -700,11 +1171,11 @@ func capabilityStatusForEvidence(goalCount int) string {
 	}
 }
 
-func harnessStatusForPressure(stablePressureCount int) string {
+func harnessStatusForPressure(sourceGoalCount, stablePressureCount int) string {
 	switch {
-	case stablePressureCount >= growthHarnessActiveSignals:
+	case sourceGoalCount >= growthHarnessActiveSignals && stablePressureCount >= growthHarnessActiveSignals:
 		return "active"
-	case stablePressureCount >= growthHarnessPromotableSignals:
+	case sourceGoalCount >= growthHarnessPromotableSignals && stablePressureCount >= growthHarnessPromotableSignals:
 		return "promotable"
 	default:
 		return "repeated"
@@ -759,6 +1230,8 @@ func retiredGrowthCandidates(root string, previous growthState, current []growth
 func harnessPressureReady(pressures []growthPressure) bool {
 	stable := 0
 	hasValidation := false
+	hasImplementation := false
+	hasWorkBoundary := false
 	for _, pressure := range pressures {
 		if pressure.GoalCount < growthRepeatedSignalGoals {
 			continue
@@ -766,11 +1239,17 @@ func harnessPressureReady(pressures []growthPressure) bool {
 		if pressure.Effect == "validation" {
 			hasValidation = true
 		}
+		if pressure.Effect == "implementation" {
+			hasImplementation = true
+		}
+		if pressure.Effect == "work_boundary" {
+			hasWorkBoundary = true
+		}
 		if pressure.Effect == "validation" || pressure.Effect == "implementation" || pressure.Effect == "work_boundary" {
 			stable++
 		}
 	}
-	return hasValidation && stable >= growthHarnessStablePressures
+	return hasValidation && hasImplementation && hasWorkBoundary && stable >= growthHarnessStablePressures
 }
 
 func aggregateHarnessPressure(pressures []growthPressure) growthPressure {
@@ -791,7 +1270,7 @@ func aggregateHarnessPressure(pressures []growthPressure) growthPressure {
 		Signal:          "Promote repeated decisions, validation patterns, and constraints into a project-specific harness candidate.",
 		CanonicalSignal: "harness emergence",
 		Effect:          "harness",
-		State:           harnessStatusForPressure(stablePressureCount),
+		State:           harnessStatusForPressure(len(sources), stablePressureCount),
 		GoalCount:       len(sources),
 		MemoryCount:     stablePressureCount,
 		Score:           growthScore(len(sources), stablePressureCount),
@@ -858,12 +1337,6 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 	}
 	if err := writeText(filepath.Join(root, candidate.LifecyclePath), body); err != nil {
 		return err
-	}
-	if candidate.Status != "retired" {
-		candidatePath := filepath.Join(root, hyperDir, "capabilities", "candidates", candidate.Kind, candidate.Name+".md")
-		if candidatePath != filepath.Join(root, candidate.LifecyclePath) {
-			return writeText(candidatePath, body)
-		}
 	}
 	return nil
 }
@@ -934,15 +1407,16 @@ func candidateEvidenceRequired(candidate growthCandidate, pressure growthPressur
 }
 
 func candidateRequiredBehavior(candidate growthCandidate, pressure growthPressure) string {
+	signal := compactText(cleanCandidateSignal(pressure.Signal), 160)
 	switch candidate.Kind {
 	case "validator":
-		return "Before `hyper complete`, prove this behavior or record why it is blocked: " + compactText(pressure.Signal, 160)
+		return "Before `hyper complete`, prove this behavior or record why it is blocked: " + signal
 	case "skill":
-		return "Keep this implementation guidance in mind when the same pressure appears: " + compactText(pressure.Signal, 160)
+		return "Keep this implementation guidance in mind when the same pressure appears: " + signal
 	case "harness":
 		return "Only consolidate repeated validators, skills, and constraints after the project has enough evidence that the structure will be reused."
 	default:
-		return compactText(pressure.Signal, 160)
+		return signal
 	}
 }
 
@@ -972,13 +1446,9 @@ func firstBacktickCommand(value string) string {
 
 func removeConflictingLifecycleCopies(root string, candidate growthCandidate) *hyperError {
 	lifecyclePath := filepath.Join(root, candidate.LifecyclePath)
-	candidatePath := filepath.Join(root, hyperDir, "capabilities", "candidates", candidate.Kind, candidate.Name+".md")
 	for _, bucket := range []string{"candidates", "active", "retired"} {
 		path := filepath.Join(root, hyperDir, "capabilities", bucket, candidate.Kind, candidate.Name+".md")
 		keep := path == lifecyclePath
-		if candidate.Status != "retired" && path == candidatePath {
-			keep = true
-		}
 		if keep {
 			continue
 		}

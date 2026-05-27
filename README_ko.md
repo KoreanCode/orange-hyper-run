@@ -311,6 +311,22 @@ Web app
 다음 run에서 무엇을 개선해야 하나요?
 ```
 
+짧게 써도 됩니다.
+
+```markdown
+# Plan
+
+Project: Service Desk Lite
+Current Stage: Tiny MVP
+Build Style: Thin vertical slice first.
+
+Product brief:
+팀원이 지원 요청 하나를 만들고, 목록에서 보고, 처리 완료로 바꿀 수 있습니다.
+
+Validation:
+하나의 smoke command로 create/list/handle flow를 증명합니다.
+```
+
 `plan.md`가 너무 비어 있으면 Hyper Run이 README나 docs를 읽고 `.hyper/plan-candidates.md`를 만들 수 있습니다. 거기서 쓸 만한 제품 문맥을 `plan.md`로 옮기면 됩니다.
 
 ## `hyper run`이 하는 일
