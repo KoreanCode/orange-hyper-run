@@ -82,6 +82,66 @@ Service Quality가 blocked인 이유:
 - 하지만 critical below-baseline gap이 남아 있습니다.
 - Hyper Run은 stage를 올리지 않고, 이 gap을 다음 runtime pressure로 바꿔야 합니다.
 
+## Category Template
+
+아래 예시는 시작점입니다. 실제 프로젝트의 evidence에 맞게 reference와 비교 내용을 바꿔야 합니다.
+
+### Web App
+
+```md
+## Reference Benchmark Evidence
+
+- Category: Small authenticated web app
+- References: Linear, Notion, Trello
+- Baseline expectations: a user can sign in, complete the primary workflow, recover from empty/error states, and understand what changed after an action
+- Current comparison: sign-in and primary workflow meet baseline; empty/error states meet baseline; keyboard-first speed is below Linear but not critical for this product stage; project-local recovery notes are above baseline
+- Below-baseline gaps: None critical; advanced keyboard navigation is deferred and documented as a non-goal
+- Above-baseline strength: the app has clearer project-local validation and rollback notes than a typical small MVP
+- Decision: Service Quality is allowed from the benchmark perspective; next pressure should improve keyboard shortcuts only after operational checks stay green
+```
+
+### CLI Tool
+
+```md
+## Reference Benchmark Evidence
+
+- Category: Developer CLI
+- References: GitHub CLI, Vercel CLI, Railway CLI
+- Baseline expectations: install is clear, help output explains common commands, errors tell the user what to do next, and update behavior is documented
+- Current comparison: install meets baseline; help output meets baseline; update checksum verification is above baseline; interactive onboarding is below Vercel CLI but not critical
+- Below-baseline gaps: None critical; interactive onboarding is deferred because command help and doctor output cover the current operator path
+- Above-baseline strength: checksum-verified update plus project-local doctor checks are stronger than a plain download script
+- Decision: Service Quality is allowed from the benchmark perspective; next pressure should reduce first-run wording friction
+```
+
+### Local-First App
+
+```md
+## Reference Benchmark Evidence
+
+- Category: Local-first notes or task app
+- References: Apple Notes, Obsidian, Todoist
+- Baseline expectations: a user can create, edit, list, search, and recover local data from documented steps
+- Current comparison: create/edit/list meet baseline; search meets baseline for the MVP scope; recovery and backup meet baseline through documented export; collaboration is below baseline for Todoist but out of scope
+- Below-baseline gaps: None critical; collaboration is an explicit non-goal for the current service boundary
+- Above-baseline strength: local data ownership and documented export/recovery are clearer than many small web MVPs
+- Decision: Service Quality is allowed from the benchmark perspective; next pressure should monitor data migration evidence before adding sync
+```
+
+### Design-Heavy App
+
+```md
+## Reference Benchmark Evidence
+
+- Category: Design-heavy consumer web app
+- References: Airbnb, Duolingo, Arc
+- Baseline expectations: the first screen communicates the product, primary action is obvious, responsive layout works, and visual style supports the product domain
+- Current comparison: primary action and responsive layout meet baseline; visual polish meets baseline; motion depth is below Duolingo but not critical; domain-specific visual identity is above baseline for the MVP
+- Below-baseline gaps: None critical; advanced animation polish is deferred until performance and accessibility checks stay green
+- Above-baseline strength: the product-specific visual system is clearer than a generic template UI
+- Decision: Service Quality is allowed from the benchmark perspective; next pressure should add accessibility and performance evidence for the visual system
+```
+
 ## Status 출력 예시
 
 benchmark가 필요한데 missing인 경우:

@@ -107,8 +107,8 @@
     "axis_name": "Stage advancement",
     "status": "candidate",
     "reason": "Tiny MVP gate is ready. Recommend updating plan.md Current Stage to Usable MVP after evidence review.",
-    "recommended_goal": "Review readiness evidence and update plan.md Current Stage to Usable MVP if the evidence is accepted.",
-    "work_boundary": "Do not auto-edit plan.md. Review evidence first, then update Current Stage only when the user accepts the stage advancement.",
+    "recommended_goal": "Review readiness evidence, then run `hyper advance` if the stage change to Usable MVP is accepted.",
+    "work_boundary": "Do not run `hyper advance` until the user accepts the stage advancement.",
     "validation_signal": "Record the stage advancement decision or reason for staying in the current stage."
   }
 }
