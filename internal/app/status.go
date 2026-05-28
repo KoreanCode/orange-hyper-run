@@ -116,6 +116,7 @@ func statusShortLinesWithRefresh(state projectState, derived goalState, readines
 		"Proof: " + proofStatusSummary(derived, readiness),
 		"Packet: " + shortPacketSummary(state, derived),
 		"Next: " + next,
+		"Do: " + statusActionHintWithRefresh(state, derived, readiness, refresh),
 		"Why: " + statusActionReasonWithRefresh(state, derived, readiness, growth, refresh),
 	}
 	if refresh.Needed {
@@ -290,9 +291,44 @@ func nextProofGap(readiness readinessState) string {
 func statusActionLinesWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, refresh statusRefresh) []string {
 	lines := []string{"Action:"}
 	lines = append(lines, "  Next action: "+statusNextCommandWithRefresh(state, derived, readiness, refresh))
+	lines = append(lines, "  Do this: "+statusActionHintWithRefresh(state, derived, readiness, refresh))
 	lines = append(lines, "  Why now: "+statusActionReasonWithRefresh(state, derived, readiness, growth, refresh))
 	lines = append(lines, "  Do not do yet: "+statusDoNotDoYetWithRefresh(state, derived, readiness, growth, refresh))
 	return lines
+}
+
+func statusActionHintWithRefresh(state projectState, derived goalState, readiness readinessState, refresh statusRefresh) string {
+	if statusRefreshActionable(state, derived, refresh) {
+		return "Run `hyper migrate`, then run `hyper status --short` again."
+	}
+	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
+		return "Run `hyper repair`, then re-check status."
+	}
+	if strings.TrimSpace(state.CurrentGoalID) == "" {
+		if state.AutoContinue && runUntilReached(state, readiness) {
+			return "Target reached; review status before choosing another run."
+		}
+		return "Create the next runtime packet with `hyper run [focus]`."
+	}
+	if derived.State == "active" {
+		if isFailedFinishGateReason(derived.Reason) {
+			return "Fix review.md findings in this same packet, then run `hyper complete` again."
+		}
+		return "Update evidence.md and next.md for this packet, then run `hyper complete`."
+	}
+	if state.AutoContinue && runUntilReached(state, readiness) {
+		return "Target reached; review status before choosing another run."
+	}
+	if readiness.NextPressure.Axis == "stage_advancement" || readiness.StageGate.Advancement.Candidate {
+		return "Review the evidence; if you accept the stage change, run `hyper advance`."
+	}
+	if readiness.NextPressure.RecommendedGoal != "" {
+		return "Start the recommended packet and keep the work scoped to that one episode."
+	}
+	if state.AutoContinue {
+		return "Continue through the planned auto packet command."
+	}
+	return "Pick the next smallest focus and run `hyper run [focus]`."
 }
 
 func statusActionReason(state projectState, derived goalState, readiness readinessState, growth growthState) string {

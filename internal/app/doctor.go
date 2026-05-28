@@ -78,7 +78,14 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	for _, check := range checks {
 		lines = append(lines, fmt.Sprintf("[%s] %s: %s", check.Status, check.Name, check.Detail))
 	}
-	lines = append(lines, "", doctorSummary(checks), "")
+	lines = append(lines, "", doctorSummary(checks))
+	if actions := doctorActionLines(checks); len(actions) > 0 {
+		lines = append(lines, "", "Next:")
+		for _, action := range actions {
+			lines = append(lines, "  "+action)
+		}
+	}
+	lines = append(lines, "")
 	return stdout(strings.Join(lines, "\n")), nil
 }
 
@@ -310,4 +317,65 @@ func doctorSummary(checks []doctorCheck) string {
 		return fmt.Sprintf("Summary: 0 failures, %d warning(s). Hyper Run is usable, but the warnings should be cleaned up.", warn)
 	}
 	return "Summary: all checks passed."
+}
+
+func doctorActionLines(checks []doctorCheck) []string {
+	actions := []string{}
+	seen := map[string]bool{}
+	for _, check := range checks {
+		if check.Status != "WARN" && check.Status != "FAIL" {
+			continue
+		}
+		action := doctorActionForCheck(check)
+		if action == "" || seen[action] {
+			continue
+		}
+		seen[action] = true
+		actions = append(actions, action)
+	}
+	return actions
+}
+
+func doctorActionForCheck(check doctorCheck) string {
+	name := strings.ToLower(strings.TrimSpace(check.Name))
+	detail := strings.ToLower(strings.TrimSpace(check.Detail))
+	switch name {
+	case "path":
+		if strings.Contains(detail, "not found") {
+			return "Add Hyper Run's install directory to PATH, then run `hyper version`."
+		}
+		return "Run `which hyper`; remove or reorder the older binary so the shell uses the expected Hyper Run executable."
+	case "plan.md":
+		if strings.Contains(detail, "missing") {
+			return "Run `hyper init`, fill in plan.md, then run `hyper doctor` again."
+		}
+		return "Fill the missing plan.md fields, then run `hyper status --short`."
+	case ".hyper":
+		return "Run `hyper init` to recreate project-local Hyper Run files."
+	case "state.json":
+		if strings.Contains(detail, "run `hyper repair`") {
+			return "Run `hyper repair`, then run `hyper doctor` again."
+		}
+		return "Run `hyper init` or `hyper run [focus]` to create runtime state."
+	case "current packet":
+		return "Finish the current packet: update evidence.md and next.md, then run `hyper complete`."
+	case "growth migration", "readiness state":
+		return "Run `hyper migrate`, then run `hyper doctor` again."
+	case "next packet plan":
+		if strings.Contains(detail, "repair") {
+			return "Run `hyper repair`, then run `hyper doctor` again."
+		}
+		return "Run `hyper migrate`, then run `hyper doctor` again."
+	case "signature verification":
+		return "Install `cosign` or unset `HYPER_RUN_VERIFY_SIGNATURE`."
+	case "sqlite":
+		if strings.Contains(detail, "missing") {
+			return "Run `hyper migrate`; if SQLite is still missing, run `hyper init`."
+		}
+		return "Fix the SQLite error, then run `hyper doctor` again."
+	case "codex desktop routing":
+		return "Run `hyper init` to reinstall Codex Desktop routing files."
+	default:
+		return "Fix " + check.Name + ", then run `hyper doctor` again."
+	}
 }
