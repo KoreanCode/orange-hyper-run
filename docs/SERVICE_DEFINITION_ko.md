@@ -26,6 +26,7 @@ Hyper Run이 보장하려는 loop는 작고 반복 가능합니다.
 6. 다음 runtime packet을 만들 때 유사한 이전 context를 가져옵니다.
 7. product, UX, persistence, validation, security, deployment, operations, maintainability 축으로 service readiness를 측정합니다.
 8. 프로젝트가 증거를 통해 필요성을 보였을 때만 generated skill, agent, validator, harness로 성장합니다.
+9. `.hyper/next-packet.md`에 다음 명령을 명시해 auto continuation도 packet 단위로 검토 가능하게 유지합니다.
 
 ## Hyper Run인 것
 
@@ -34,6 +35,7 @@ Hyper Run이 보장하려는 loop는 작고 반복 가능합니다.
 - 다음 coherent execution episode를 만드는 runtime packet generator
 - 파일과 SQLite 기반의 로컬 evidence/learning layer
 - tiny MVP 작업이 usable, beta, service-quality stage로 이어지도록 하는 service-readiness gate
+- evidence와 next-step note가 충분하거나 실제 blocker가 기록될 때까지 다음 packet을 막는 finish gate
 - 프로젝트가 충분히 성장한 뒤 필요한 harness를 만들 수 있게 하는 harness-less starting point
 
 ## Hyper Run이 아닌 것
@@ -196,6 +198,9 @@ Hyper Run은 사용자가 다음을 할 수 있을 때 성공입니다.
 - Runtime packet generation
 - Codex Desktop `$hyper` routing
 - Evidence and next-step templates
+- `review.md`를 통한 finish-gate review
+- `.hyper/next-packet.md`를 통한 auto continuation planning
+- `hyper advance`를 통한 explicit stage advancement
 - Durable Learn extraction
 - Project Growth Engine pressure state
 - Service Readiness state와 Stage Gate runtime compilation
@@ -204,6 +209,8 @@ Hyper Run은 사용자가 다음을 할 수 있을 때 성공입니다.
 - Growth-informed runtime packet compilation
 - Threshold 뒤에서 조용히 생성되는 validator, skill, harness candidate
 - Similar-context retrieval
+- Service Quality gate를 위한 reference benchmark evidence
+- Checksum 검증 install/update와 선택적 cosign signature 검증
 - 명확한 Golden Path example
 
 그 밖의 기능은 product surface area가 되기 전에 run contract를 기준으로 평가해야 합니다.

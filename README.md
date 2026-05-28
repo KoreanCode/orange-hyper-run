@@ -13,6 +13,8 @@ You keep a short `plan.md` in your project. `hyper run` turns that plan and the 
 
 The goal is simple: start from a small MVP and keep improving it without every AI session feeling like a reset.
 
+Current release: `v0.6.1`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, and verify release downloads with checksums plus optional cosign signatures.
+
 The basic command is:
 
 ```bash
@@ -48,8 +50,10 @@ What you actually touch:
 | `hyper run` | Creates the next focused work packet. |
 | `goal.md` / `tasks.md` | What the AI should do now. |
 | `evidence.md` | What changed and how it was checked. |
+| `review.md` | What must be fixed if `hyper complete` decides the packet is not done yet. |
 | `next.md` | The one next recommended step and reusable lessons. |
 | `hyper complete` | Closes the packet, checks the evidence, and prepares the next step. |
+| `.hyper/next-packet.md` | The planned next command, used by auto mode and checked by `hyper doctor`. |
 | `hyper status --short` | Shows the current stage, blocker, and next action. |
 
 ## How It Grows
@@ -101,6 +105,15 @@ Stages tell the AI what kind of proof matters right now.
 For Service Quality benchmark examples, see [Reference Benchmark Evidence Examples](docs/examples/reference-benchmark.md).
 
 `hyper run` keeps generating the next focused packet until the project reaches the stage you are aiming for.
+
+## What Is Current In v0.6.1
+
+- `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
+- `hyper run --auto --until <stage>` plans continuation packet by packet through `.hyper/next-packet.md`. It does not silently advance stages.
+- `hyper advance` applies a stage change only after `hyper status` says the gate is ready and the user accepts it.
+- Service Quality can require reference benchmark evidence: the project must meet its category baseline and show one concrete strength.
+- Installers and `hyper update` verify release checksums. If `cosign` is installed, signature verification also runs.
+- `hyper doctor` checks install state, project state, SQLite, Codex routing, signature capability, and whether `.hyper/next-packet.md` matches current state.
 
 ## Basic Flow
 
@@ -251,11 +264,69 @@ hyper update
 This downloads the latest GitHub release. If Hyper Run cannot replace the current executable, it installs to `~/.local/bin/hyper`.
 For GitHub release updates, Hyper Run downloads `checksums.txt` and verifies the binary before replacing the executable.
 
+After updating an existing Hyper Run project, refresh the project state:
+
+```bash
+hyper version
+hyper migrate
+hyper doctor
+hyper status --short
+```
+
 To update from a fork:
 
 ```bash
 hyper update github:OWNER/orange-hyper-run
 ```
+
+## After Updating A Project
+
+Use this sequence when you update Hyper Run and then return to an existing project:
+
+```bash
+hyper update
+hyper version
+hyper migrate
+hyper doctor
+hyper status --short
+```
+
+What each step proves:
+
+| Command | Why it matters |
+| --- | --- |
+| `hyper version` | Confirms which binary is active on your `PATH`. |
+| `hyper migrate` | Refreshes older `.hyper/` state to the current growth and readiness rules. |
+| `hyper doctor` | Checks install path, project files, SQLite, Codex routing, signature capability, and next-packet freshness. |
+| `hyper status --short` | Shows the current stage, gate, proof, and next action without the full ledger. |
+
+## Troubleshooting
+
+If `hyper update` says it succeeded but `hyper version` still shows an older version:
+
+```bash
+which hyper
+hyper version
+```
+
+Make sure the executable shown by `which hyper` is the same path printed by `hyper version`. If not, an older binary is earlier on your `PATH`.
+
+If `hyper doctor` warns about stale project state:
+
+```bash
+hyper migrate
+hyper doctor
+```
+
+If `hyper run` is blocked, finish the current packet first:
+
+```bash
+hyper resume
+# update evidence.md and next.md
+hyper complete
+```
+
+If `hyper complete` writes `review.md`, fix that same packet instead of starting a new `hyper run`.
 
 ## Project Setup
 
@@ -434,8 +505,10 @@ hyper internal learn        # debug/manual learning command
 From this repository:
 
 ```bash
-go test ./...
+go test -count=1 ./...
 go vet ./...
+staticcheck ./...
+govulncheck ./...
 go build -o dist/hyper ./cmd/hyper
 ```
 
@@ -454,6 +527,8 @@ cd ../my-project
 - [Architecture](docs/ARCHITECTURE.md)
 - [Tiny MVP Flow Example](examples/tiny-mvp-flow/README.md)
 - [Before / After Demo](examples/before-after-demo/README.md)
+- [Reference Benchmark Examples](docs/examples/reference-benchmark.md)
+- [Release Checklist](docs/RELEASE_CHECKLIST.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Changelog](docs/CHANGELOG.md)
 - [Known Limitations](docs/KNOWN_LIMITATIONS.md)

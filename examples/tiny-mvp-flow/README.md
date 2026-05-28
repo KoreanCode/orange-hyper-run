@@ -12,10 +12,11 @@ hyper init
 hyper run "Build the smallest local task list MVP"
 # Codex Desktop executes GOAL-0001 and updates evidence.md / next.md
 hyper complete
+hyper status --short
 hyper run "Add persistence polish after the core flow works"
 ```
 
-`hyper complete` closes the packet and refreshes Learn, Growth, and Readiness. The second `hyper run` should start from that refreshed project state. `hyper internal learn` is available only when you want to inspect or debug learning manually.
+`hyper complete` runs the finish gate, closes the packet, refreshes Learn, Growth, and Readiness, and writes `.hyper/next-packet.md`. The second `hyper run` should start from that refreshed project state. `hyper internal learn` is available only when you want to inspect or debug learning manually.
 
 In Codex Desktop, the equivalent entrypoint is:
 
@@ -31,7 +32,9 @@ plan.md
   goal.md
   tasks.md
   evidence.md
+  review.md
   next.md
+.hyper/next-packet.md
 .hyper/capabilities/
   candidates/
     validator/
@@ -56,7 +59,9 @@ plan.md
 - `goal.md` is a runtime packet, not a permanent spec.
 - `tasks.md` defines the execution checklist for one episode.
 - `evidence.md` records validation, axis-slot readiness evidence, active capability evidence, changed files, decisions, reusable patterns, and blockers.
+- `review.md` records finish-gate findings when a packet is not ready to close yet.
 - `next.md` recommends the next runtime episode and includes structured Learn Notes.
+- `.hyper/next-packet.md` stores the planned next command for guarded auto continuation and doctor checks.
 - `.hyper/memories/` stores durable signals that future packets can retrieve.
 - `.hyper/growth/state.json` stores pressure that changes the next packet's boundary and validation behavior.
 - `.hyper/readiness/state.json` stores stage-gate readiness pressure so MVP work keeps moving toward service quality.

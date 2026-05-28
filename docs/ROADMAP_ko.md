@@ -5,22 +5,21 @@
 ## 가까운 단계
 
 - `hyper run`을 주 사용자 명령으로 유지합니다.
-- `hyper status`, `hyper doctor`, `hyper repair`, `hyper migrate`를 일상적으로 믿고 쓸 수 있게 만듭니다.
-- signature 검증을 필수로 쓰고 싶은 사용자를 위해 cosign 검증 문서를 더 명확하게 만듭니다.
-- 실제 프로젝트 evidence를 기준으로 Learn 품질을 계속 더 엄격하게 만듭니다.
+- 실제 프로젝트 실행 결과를 기준으로 first-run, update, migrate 경험을 계속 다듬습니다.
+- `hyper status --short`와 `hyper doctor`만 봐도 다음 행동을 빠르게 알 수 있게 만듭니다.
 - 코딩 에이전트가 추가 설명 없이 실행할 수 있도록 runtime packet을 계속 개선합니다.
+- before/after 데모 스크립트에서 실제 터미널 녹화나 짧은 GIF를 만듭니다.
+- 실제 프로젝트 evidence를 기준으로 category별 Service Quality 예시를 계속 다듬습니다.
 
 ## 다음 단계
 
 - 오래된 `.hyper/` 프로젝트 상태에 대한 migration 커버리지를 더 늘립니다.
-- web app, CLI, desktop app 예제를 더 명확하게 추가합니다.
-- maintainer용 release checklist를 추가합니다.
+- web app, CLI, desktop app, design-heavy project 예제를 더 깊게 추가합니다.
 - 도메인 경계가 안정된 뒤 패키지 분리를 시작합니다.
 
 ## 이후 단계
 
 - direct installer 경로가 안정된 뒤 package manager 배포를 검토합니다.
-- 터미널 녹화나 짧은 GIF 같은 실사용 데모를 추가합니다.
 - 더 엄격한 gate를 원하는 팀을 위해 agent/capability activation policy를 선택적으로 제공합니다.
 - state, storage, growth, readiness, packet generation 같은 내부 패키지 분리를 검토합니다.
 

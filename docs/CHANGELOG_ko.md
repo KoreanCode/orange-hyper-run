@@ -2,12 +2,52 @@
 
 ## Unreleased
 
-- `hyper update`가 GitHub release checksum을 검증하도록 개선했습니다.
-- SHA256 checksum 검증을 포함한 Windows PowerShell installer를 추가했습니다.
+- `v0.6.1` 동작 기준으로 README와 보조 문서를 갱신했습니다.
+- 영문/한글 maintainer release checklist를 추가했습니다.
+- 업데이트 이후 확인 흐름과 문제 해결 흐름을 추가했습니다.
+- before/after 데모와 reference benchmark 예시를 보강했습니다.
+
+## v0.6.1 - 2026-05-27
+
+- finish gate가 통과되기 전에는 다음 runtime packet을 시작할 수 없게 했습니다.
+- `hyper complete`, `hyper migrate`, `hyper advance`, `hyper doctor`에서 `.hyper/next-packet.md`를 갱신하고 검증합니다.
+- readiness evidence matching, active capability evidence, repeated validation grouping, command-pattern classification, failure-pressure 처리를 더 엄격하게 만들었습니다.
+- first-run plan parsing, service-quality packet guidance, sustained quality flow, short status output, Windows path display를 개선했습니다.
+- `hyper repair`가 실패한 finish gate를 우회하지 못하게 했습니다.
+
+## v0.6.0 - 2026-05-26
+
+- Service Quality reference benchmark evidence와 status 출력을 추가했습니다.
+- 현재 pressure가 해당 축일 때 deployment, security, docs, operations, benchmark proof를 요구하도록 했습니다.
+- README onboarding 문장을 더 쉽게 정리하고 제품 loop를 명확하게 설명했습니다.
+- benchmark readiness helper 주변 staticcheck 문제를 수정했습니다.
+
+## v0.5.6 - 2026-05-26
+
+- 프로젝트 상태 변경 이후 readiness reconciliation을 수정했습니다.
+
+## v0.5.5 - 2026-05-26
+
 - 약하거나 noisy한 memory signal을 걸러내는 Learn quality gate를 추가했습니다.
-- runtime packet에 execution contract와 done checklist를 추가했습니다.
 - `hyper migrate`에서 legacy memory quality를 현재 규칙으로 보정하고 fixture 테스트를 추가했습니다.
 - release asset에 cosign keyless signature bundle을 만들고 install/update에서 선택적으로 검증합니다.
+
+## v0.5.4 - 2026-05-26
+
+- `hyper update`가 GitHub release checksum을 검증하도록 개선했습니다.
+- SHA256 checksum 검증을 포함한 Windows PowerShell installer를 추가했습니다.
+- trusted install/update 검증 테스트를 추가했습니다.
+
+## v0.5.3 - 2026-05-26
+
+- finish-gate review와 auto continuation planning을 추가했습니다.
+- 다음 명령 handoff로 `.hyper/next-packet.md`를 추가했습니다.
+- short status와 completion guidance를 개선했습니다.
+
+## v0.5.2 - 2026-05-22
+
+- `hyper advance`를 사용하는 명시적인 stage advancement workflow를 추가했습니다.
+- stage 변경을 자동 적용하지 않고 추천만 하도록 했습니다.
 
 ## v0.5.1 - 2026-05-22
 

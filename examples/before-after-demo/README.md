@@ -77,9 +77,9 @@ Example result:
 
 ```text
 Action:
-  Next action: hyper run "Review readiness evidence and update plan.md Current Stage to Usable MVP if the evidence is accepted."
+  Next action: hyper advance
   Why now: Tiny MVP gate is ready.
-  Do not do yet: Do not treat candidates as active harnesses or validators before promotion.
+  Do not do yet: Do not run `hyper advance` unless the user accepts the stage advancement.
 ```
 
 ## What Changed
@@ -91,10 +91,77 @@ After Hyper Run, the next AI session reads project-local state:
 - `plan.md` for product intent
 - `.hyper/goals/.../evidence.md` for proof
 - `.hyper/goals/.../next.md` for the recommended next episode
+- `.hyper/next-packet.md` for the planned next command
 - `.hyper/growth/state.json` for repeated pressure
 - `.hyper/readiness/state.json` for stage readiness
 
 The agent still implements the code, but the project now carries its own context.
+
+## Terminal Demo Script
+
+Use this transcript as the source for a terminal recording.
+
+### Before
+
+```text
+$ codex "Build the smallest task app MVP"
+...
+Build passed with `npm run build`.
+Decision: keep storage local-first.
+Deployment is not ready yet.
+
+$ codex "Continue the task app"
+...
+Agent asks again what storage to use.
+Agent does not know whether `npm run build` was the expected validation.
+Agent proposes a broad architecture before the MVP flow is stable.
+```
+
+### After
+
+```bash
+hyper init
+# fill plan.md with product, users, MVP, stage, constraints
+hyper run "Build the smallest task app MVP"
+```
+
+Show the generated packet:
+
+```text
+.hyper/goals/GOAL-0001/
+  goal.md
+  tasks.md
+  evidence.md
+  review.md
+  next.md
+```
+
+After implementation:
+
+```bash
+hyper complete
+hyper status --short
+```
+
+Expected status shape:
+
+```text
+Project: Pocket Tasks
+Stage: Tiny MVP
+Gate: Tiny MVP -> Usable MVP (ready)
+Proof: functional covered, surface covered, operational covered
+Next: hyper advance
+Guard: accept the stage change before running `hyper advance`
+```
+
+Then the next session starts from project files instead of memory in chat:
+
+```bash
+hyper resume
+hyper status --short
+```
+
+The useful contrast is not that Hyper Run writes the app. The useful contrast is that the next agent no longer has to rediscover the product stage, accepted decisions, validation command, or next boundary.
 
 ## Recording Checklist
 
@@ -106,5 +173,6 @@ The agent still implements the code, but the project now carries its own context
 - Simulate or perform one small implementation.
 - Fill `evidence.md` and `next.md`.
 - Run `hyper complete`.
-- Run `hyper status`.
+- Run `hyper status --short`.
 - Highlight the `Action` section and the readiness gate.
+- Start a fresh terminal or agent session and run `hyper resume` to show that the project carries the handoff.

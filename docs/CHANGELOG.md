@@ -2,12 +2,52 @@
 
 ## Unreleased
 
-- Verify GitHub release checksums during `hyper update`.
-- Add a Windows PowerShell installer with SHA256 checksum verification.
+- Refresh README and supporting docs for the `v0.6.1` behavior.
+- Add maintainer release checklists in English and Korean.
+- Add update-after-install and troubleshooting flows.
+- Expand before/after demo and reference benchmark examples.
+
+## v0.6.1 - 2026-05-27
+
+- Require the finish gate to pass before another runtime packet can start.
+- Refresh and validate `.hyper/next-packet.md` during `hyper complete`, `hyper migrate`, `hyper advance`, and `hyper doctor`.
+- Tighten readiness evidence matching, active capability evidence, repeated validation grouping, command-pattern classification, and failure-pressure handling.
+- Improve first-run plan parsing, service-quality packet guidance, sustained quality flow, short status output, and Windows path display.
+- Prevent `hyper repair` from bypassing a failed finish gate.
+
+## v0.6.0 - 2026-05-26
+
+- Add Service Quality reference benchmark evidence and status output.
+- Require deployment, security, docs, operations, and benchmark proof when those readiness axes are the current pressure.
+- Simplify README onboarding language and clarify the product loop.
+- Fix staticcheck coverage around benchmark readiness helpers.
+
+## v0.5.6 - 2026-05-26
+
+- Fix readiness reconciliation after project state changes.
+
+## v0.5.5 - 2026-05-26
+
 - Add Learn quality-gate filtering for weak/noisy memory signals.
-- Add runtime packet execution contracts and done checklists.
 - Refresh legacy memory quality during `hyper migrate` with fixture coverage.
 - Sign release assets with cosign keyless bundles and optionally verify them during install/update.
+
+## v0.5.4 - 2026-05-26
+
+- Verify GitHub release checksums during `hyper update`.
+- Add a Windows PowerShell installer with SHA256 checksum verification.
+- Add trusted install/update verification tests.
+
+## v0.5.3 - 2026-05-26
+
+- Add finish-gate review and auto continuation planning.
+- Add `.hyper/next-packet.md` as the planned next command handoff.
+- Improve short status and completion guidance.
+
+## v0.5.2 - 2026-05-22
+
+- Add the explicit stage advancement workflow with `hyper advance`.
+- Recommend stage changes without applying them silently.
 
 ## v0.5.1 - 2026-05-22
 

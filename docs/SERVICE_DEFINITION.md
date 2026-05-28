@@ -26,6 +26,7 @@ Hyper Run promises a small, repeatable project loop:
 6. Retrieve similar prior context when the next runtime packet is created.
 7. Measure service readiness across product, UX, persistence, validation, security, deployment, operations, and maintainability.
 8. Grow toward generated skills, agents, validators, or harnesses only when the project has earned that structure.
+9. Keep the next command explicit in `.hyper/next-packet.md` so auto continuation remains packet-by-packet and reviewable.
 
 ## What Hyper Run Is
 
@@ -34,6 +35,7 @@ Hyper Run promises a small, repeatable project loop:
 - A runtime packet generator for the next coherent execution episode.
 - A local evidence and learning layer backed by files and SQLite.
 - A service-readiness gate that keeps tiny MVP work moving toward usable, beta, and service-quality stages.
+- A finish gate that blocks the next packet until evidence and next-step notes are good enough or a real blocker is recorded.
 - A harness-less starting point that can later create project-specific harnesses when the evidence shows they are useful.
 
 ## What Hyper Run Is Not
@@ -196,6 +198,9 @@ The current product should stay focused on:
 - Runtime packet generation.
 - Codex Desktop `$hyper` routing.
 - Evidence and next-step templates.
+- Finish-gate review with `review.md`.
+- Auto continuation planning through `.hyper/next-packet.md`.
+- Explicit stage advancement with `hyper advance`.
 - Durable Learn extraction.
 - Project Growth Engine pressure state.
 - Service Readiness state and Stage Gate runtime compilation.
@@ -204,6 +209,8 @@ The current product should stay focused on:
 - Growth-informed runtime packet compilation.
 - Quiet validator, skill, and harness candidates behind thresholds.
 - Similar-context retrieval.
+- Reference benchmark evidence for Service Quality gates.
+- Checksum-verified install/update and optional cosign signature verification.
 - A clear Golden Path example.
 
 Everything else should be evaluated through the run contract before becoming product surface area.
