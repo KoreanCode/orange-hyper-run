@@ -46,7 +46,7 @@ func statusDashboardLines(state projectState, derived goalState, readiness readi
 
 func statusDashboardLinesWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, runs, goals int, refresh statusRefresh) []string {
 	project := compactText(firstNonBlank(state.Project, "Unknown project"), 120)
-	stage := normalizeRuntimeStage(firstNonBlank(state.Stage, readiness.Stage, "Unknown stage"))
+	stage := statusDisplayStage(state, readiness, refresh)
 	lines := []string{
 		"Hyper Run Status",
 		"",
@@ -105,7 +105,7 @@ func statusShortLines(state projectState, derived goalState, readiness readiness
 
 func statusShortLinesWithRefresh(state projectState, derived goalState, readiness readinessState, growth growthState, refresh statusRefresh) []string {
 	project := compactText(firstNonBlank(state.Project, "Unknown project"), 80)
-	stage := normalizeRuntimeStage(firstNonBlank(state.Stage, readiness.Stage, "Unknown stage"))
+	stage := statusDisplayStage(state, readiness, refresh)
 	next := statusNextCommandWithRefresh(state, derived, readiness, refresh)
 	lines := []string{
 		"Hyper Run Status",
@@ -197,11 +197,13 @@ func statusShortGuardWithRefresh(state projectState, derived goalState, readines
 }
 
 type statusRefresh struct {
-	Needed bool
-	Reason string
+	Needed     bool
+	Reason     string
+	PlanStage  string
+	StateStage string
 }
 
-func statusRefreshFor(root string) statusRefresh {
+func statusRefreshFor(root string, state projectState) statusRefresh {
 	growth := readGrowthStateIfExists(root)
 	if growth.Version != 0 {
 		if growthHasUnstoredManualActiveCapability(root, growth) {
@@ -210,6 +212,9 @@ func statusRefreshFor(root string) statusRefresh {
 		if growthMigrationNeeded(growth) {
 			return statusRefresh{Needed: true, Reason: "legacy or noisy growth entries found; run `hyper migrate`"}
 		}
+	}
+	if refresh := stageSourceRefresh(root, state); refresh.Needed {
+		return refresh
 	}
 	stored := readReadinessStateIfExists(root)
 	if stored.Version == 0 || !exists(filepath.Join(root, planFile)) {
@@ -220,6 +225,49 @@ func statusRefreshFor(root string) statusRefresh {
 		return statusRefresh{Needed: true, Reason: "stored readiness differs from current evidence; run `hyper migrate`"}
 	}
 	return statusRefresh{}
+}
+
+func statusDisplayStage(state projectState, readiness readinessState, refresh statusRefresh) string {
+	stage := normalizeRuntimeStage(firstNonBlank(readiness.Stage, state.Stage, "Unknown stage"))
+	if refresh.PlanStage != "" && refresh.StateStage != "" {
+		return refresh.PlanStage + " (state.json: " + refresh.StateStage + ")"
+	}
+	return stage
+}
+
+func stageSourceRefresh(root string, state projectState) statusRefresh {
+	planStage := planRuntimeStage(root)
+	stateStage := normalizeRuntimeStage(state.Stage)
+	if planStage == "" || stateStage == "" || planStage == stateStage {
+		return statusRefresh{}
+	}
+	return statusRefresh{
+		Needed:     true,
+		Reason:     "state.json stage `" + state.Stage + "` differs from plan.md stage `" + planStage + "`; run `hyper migrate`",
+		PlanStage:  planStage,
+		StateStage: state.Stage,
+	}
+}
+
+func planRuntimeStage(root string) string {
+	body := readIfExists(filepath.Join(root, planFile))
+	if strings.TrimSpace(body) == "" {
+		return ""
+	}
+	stage := normalizeRuntimeStage(firstRuntimeValue(parsePlan(body)["Current Stage"]))
+	if knownRuntimeStage(stage) {
+		return stage
+	}
+	return ""
+}
+
+func knownRuntimeStage(stage string) bool {
+	switch normalizeRuntimeStage(stage) {
+	case "Tiny MVP", "Usable MVP", "Beta", "Service Quality", "Sustained Service Quality":
+		return true
+	default:
+		return false
+	}
 }
 
 func proofStatusSummary(derived goalState, readiness readinessState) string {

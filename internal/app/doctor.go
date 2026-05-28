@@ -127,6 +127,9 @@ func doctorStateChecks(root string) []doctorCheck {
 		stateDetail = consistency.Reason + " Run `hyper repair`."
 	}
 	checks := []doctorCheck{{"state.json", stateStatus, stateDetail}}
+	if stageCheck := doctorStageSourceCheck(root, state); stageCheck.Name != "" {
+		checks = append(checks, stageCheck)
+	}
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		checks = append(checks, doctorCheck{"Current packet", "OK", "none active"})
 		return checks
@@ -137,6 +140,14 @@ func doctorStateChecks(root string) []doctorCheck {
 	}
 	checks = append(checks, doctorCheck{"Current packet", status, state.CurrentGoalID + " is " + consistency.Derived.State + "; " + consistency.Derived.Reason})
 	return checks
+}
+
+func doctorStageSourceCheck(root string, state projectState) doctorCheck {
+	refresh := stageSourceRefresh(root, state)
+	if !refresh.Needed {
+		return doctorCheck{}
+	}
+	return doctorCheck{"Stage source", "WARN", refresh.Reason}
 }
 
 func doctorGrowthMigrationCheck(root string) doctorCheck {
@@ -192,7 +203,7 @@ func doctorNextPacketPlanCheck(root string) doctorCheck {
 	if consistency.Derived.State == "active" {
 		return doctorCheck{"Next packet plan", "OK", "not required while the current runtime packet is active"}
 	}
-	if refresh := statusRefreshFor(root); statusRefreshActionable(state, consistency.Derived, refresh) {
+	if refresh := statusRefreshFor(root, state); statusRefreshActionable(state, consistency.Derived, refresh) {
 		return doctorCheck{"Next packet plan", "WARN", "cannot trust next-packet until refresh completes: " + refresh.Reason}
 	}
 	if !exists(path) {
@@ -357,6 +368,8 @@ func doctorActionForCheck(check doctorCheck) string {
 			return "Run `hyper repair`, then run `hyper doctor` again."
 		}
 		return "Run `hyper init` or `hyper run [focus]` to create runtime state."
+	case "stage source":
+		return "Run `hyper migrate`, then run `hyper doctor` again."
 	case "current packet":
 		return "Finish the current packet: update evidence.md and next.md, then run `hyper complete`."
 	case "growth migration", "readiness state":

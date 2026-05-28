@@ -1187,6 +1187,50 @@ func TestStatusSuggestsMigrateBeforeNextActionWhenGrowthIsStale(t *testing.T) {
 	assertContains(t, full.Stdout, "Do not advance or start another packet until `hyper migrate` refreshes growth and readiness state.")
 }
 
+func TestStatusDoctorAndMigrateRecoverPlanStageMismatch(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# LLog 서비스 기획 및 앱 개발 계획서\n\n## 제품 정의\n\n### 프로젝트명\n\n**LLog / 엘로그**\n\n## MVP 목표\n\n운세 확인부터 하루 기록까지 이어지는 첫 사용 루프입니다.\n\n## 현재 단계\n\nBeta\n\n## 로드맵\n\n### 0단계: 화면 검증\n\n화면별 브라우저 검증을 진행합니다.\n")
+	mustRun(t, root, "init")
+
+	state, err := readState(filepath.Join(root, ".hyper", "state.json"))
+	if err != nil {
+		t.Fatalf("read state failed: %v", err)
+	}
+	state.Stage = "화면 검증"
+	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), state); err != nil {
+		t.Fatalf("write state failed: %v", err)
+	}
+
+	short, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status --short failed: %v", err)
+	}
+	assertContains(t, short.Stdout, "Stage: Beta (state.json: 화면 검증)")
+	assertContains(t, short.Stdout, "Next: hyper migrate")
+	assertContains(t, short.Stdout, "Refresh: state.json stage `화면 검증` differs from plan.md stage `Beta`; run `hyper migrate`")
+
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[WARN] Stage source: state.json stage `화면 검증` differs from plan.md stage `Beta`; run `hyper migrate`")
+	assertContains(t, doctor.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
+
+	migrated, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	assertContains(t, migrated.Stdout, "State consistency: state.json is consistent; stage refreshed to Beta")
+	assertContains(t, migrated.Stdout, "Next packet plan: .hyper/next-packet.md (run)")
+	updated, err := readState(filepath.Join(root, ".hyper", "state.json"))
+	if err != nil {
+		t.Fatalf("read migrated state failed: %v", err)
+	}
+	if updated.Stage != "Beta" {
+		t.Fatalf("expected migrated state stage Beta, got %q", updated.Stage)
+	}
+}
+
 func TestStatusDoesNotPutMigrateBeforeActivePacketCompletion(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
@@ -1291,6 +1335,35 @@ React Native + Expo + TypeScript
 	assertContains(t, plan["Build Style"], "React Native")
 	assertContains(t, plan["Success Criteria"], "프로필 입력")
 	assertContains(t, plan["Current Focus"], "온보딩")
+}
+
+func TestParsePlanPrefersCurrentStageOverRoadmapStep(t *testing.T) {
+	plan := parsePlan(`# LLog 서비스 기획 및 앱 개발 계획서
+
+## 제품 정의
+
+### 프로젝트명
+
+**LLog / 엘로그**
+
+## 현재 단계
+
+Beta
+
+## 로드맵
+
+### 0단계: 화면 검증
+
+화면별 브라우저 검증을 진행합니다.
+`)
+
+	if got := plan["Current Stage"]; got != "Beta" {
+		t.Fatalf("expected explicit current stage to win, got %q", got)
+	}
+	readiness := deriveReadinessState(plan, growthState{}, nil)
+	if readiness.Stage != "Beta" {
+		t.Fatalf("expected readiness stage Beta, got %q", readiness.Stage)
+	}
 }
 
 func TestStatusRefreshesUnknownProjectFromPlan(t *testing.T) {
