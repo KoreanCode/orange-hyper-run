@@ -255,6 +255,8 @@ func TestDoctorReportsProjectState(t *testing.T) {
 	assertContains(t, out.Stdout, "Codex Desktop routing")
 	assertContains(t, out.Stdout, "Current packet")
 	assertContains(t, out.Stdout, "Summary:")
+	assertContains(t, out.Stdout, "Next:")
+	assertContains(t, out.Stdout, "Finish the current packet: update evidence.md and next.md, then run `hyper complete`.")
 }
 
 func TestDoctorWarnsWhenStoredReadinessIsStale(t *testing.T) {
@@ -278,6 +280,8 @@ func TestDoctorWarnsWhenStoredReadinessIsStale(t *testing.T) {
 	}
 	assertContains(t, out.Stdout, "[WARN] Readiness state:")
 	assertContains(t, out.Stdout, "Run `hyper migrate`")
+	assertContains(t, out.Stdout, "Next:")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
 }
 
 func TestDoctorWarnsWhenNextPacketPlanIsStale(t *testing.T) {
@@ -295,6 +299,7 @@ func TestDoctorWarnsWhenNextPacketPlanIsStale(t *testing.T) {
 		t.Fatalf("doctor failed: %v", err)
 	}
 	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected `hyper run 'Implement the smallest usable A tiny notes API core flow: the primary user flow'`, found `hyper advance`; run `hyper migrate`")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
 }
 
 func TestDoctorDoesNotTrustNextPacketWhenRefreshIsNeeded(t *testing.T) {
@@ -320,6 +325,7 @@ func TestDoctorDoesNotTrustNextPacketWhenRefreshIsNeeded(t *testing.T) {
 	}
 	assertContains(t, out.Stdout, "[WARN] Growth migration: legacy or noisy growth entries found; run `hyper migrate`")
 	assertContains(t, out.Stdout, "[WARN] Next packet plan: cannot trust next-packet until refresh completes: legacy or noisy growth entries found; run `hyper migrate`")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
 }
 
 func TestDoctorReadinessComparisonIgnoresIrrelevantFutureAxes(t *testing.T) {
@@ -1138,6 +1144,7 @@ func TestStatusShortShowsOnlyDecisionSurface(t *testing.T) {
 	assertContains(t, status.Stdout, "Proof: functional covered, surface covered, operational covered")
 	assertContains(t, status.Stdout, "Packet: GOAL-0001 (completed)")
 	assertContains(t, status.Stdout, "Next: hyper advance")
+	assertContains(t, status.Stdout, "Do: Review the evidence; if you accept the stage change, run `hyper advance`.")
 	assertContains(t, status.Stdout, "Gap: none; stage advancement is ready")
 	assertContains(t, status.Stdout, "Guard: accept the stage change before running `hyper advance`")
 	assertNotContains(t, status.Stdout, "Pressure Ledger:")
@@ -1166,6 +1173,7 @@ func TestStatusSuggestsMigrateBeforeNextActionWhenGrowthIsStale(t *testing.T) {
 		t.Fatalf("status --short failed: %v", err)
 	}
 	assertContains(t, short.Stdout, "Next: hyper migrate")
+	assertContains(t, short.Stdout, "Do: Run `hyper migrate`, then run `hyper status --short` again.")
 	assertContains(t, short.Stdout, "Refresh: legacy or noisy growth entries found; run `hyper migrate`")
 	assertContains(t, short.Stdout, "Guard: run `hyper migrate` before advancing or starting another packet")
 	assertNotContains(t, short.Stdout, "Next: hyper advance")
@@ -1198,6 +1206,7 @@ func TestStatusDoesNotPutMigrateBeforeActivePacketCompletion(t *testing.T) {
 		t.Fatalf("status --short failed: %v", err)
 	}
 	assertContains(t, short.Stdout, "Next: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, short.Stdout, "Do: Update evidence.md and next.md for this packet, then run `hyper complete`.")
 	assertContains(t, short.Stdout, "Refresh: legacy or noisy growth entries found; run `hyper migrate`")
 	assertNotContains(t, short.Stdout, "Next: hyper migrate")
 }
