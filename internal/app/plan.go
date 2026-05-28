@@ -87,7 +87,6 @@ func parsePlan(body string) map[string]string {
 }
 
 func augmentPlanAliases(plan map[string]string, body string) {
-	augmentInlinePlanAliases(plan, body)
 	for heading, value := range plan {
 		canonical := canonicalPlanKey(heading)
 		if canonical == "" {
@@ -95,6 +94,7 @@ func augmentPlanAliases(plan map[string]string, body string) {
 		}
 		setPlanAliasIfMissing(plan, canonical, value)
 	}
+	augmentInlinePlanAliases(plan, body)
 	if firstRuntimeValue(plan["Product"]) == "" {
 		setPlanAliasIfMissing(plan, "Product", firstMarkdownHeading(body, "# "))
 	}
@@ -142,8 +142,9 @@ func inlineProductBriefCanFillMVP(label string, plan map[string]string) bool {
 
 func splitInlinePlanField(line string) (string, string, bool) {
 	line = strings.TrimSpace(line)
-	line = strings.TrimLeft(line, "#")
-	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, "#") {
+		return "", "", false
+	}
 	line = strings.TrimLeft(line, "-*")
 	line = strings.TrimSpace(line)
 	index := strings.Index(line, ":")

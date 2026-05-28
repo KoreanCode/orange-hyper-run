@@ -39,7 +39,8 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		return commandOutput{}, err
 	}
 	readiness := readReadinessStateIfExists(root)
-	if planBody := readIfExists(filepath.Join(root, planFile)); strings.TrimSpace(planBody) != "" {
+	planBody := readIfExists(filepath.Join(root, planFile))
+	if strings.TrimSpace(planBody) != "" {
 		readiness, err = updateReadinessState(root, planBody, growth)
 		if err != nil {
 			return commandOutput{}, err
@@ -48,9 +49,24 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	stateMessage := "not checked"
 	nextPacketMessage := "not updated; no completed runtime packet state found"
 	if state, stateErr := readState(filepath.Join(root, hyperDir, "state.json")); stateErr == nil {
+		stageRefreshed := false
+		if strings.TrimSpace(readiness.Stage) != "" && knownRuntimeStage(readiness.Stage) && normalizeRuntimeStage(state.Stage) != readiness.Stage {
+			state.Stage = readiness.Stage
+			if strings.TrimSpace(planBody) != "" {
+				state.PlanHash = hashText(planBody)
+			}
+			state.UpdatedAt = nowISO()
+			if err := writeJSON(filepath.Join(root, hyperDir, "state.json"), state); err != nil {
+				return commandOutput{}, err
+			}
+			stageRefreshed = true
+		}
 		consistency := currentStateConsistency(root, state)
 		if consistency.Consistent {
 			stateMessage = "state.json is consistent"
+			if stageRefreshed {
+				stateMessage += "; stage refreshed to " + readiness.Stage
+			}
 			if consistency.Derived.State == "active" {
 				nextPacketMessage = "unchanged while the current runtime packet is active"
 			} else {

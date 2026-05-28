@@ -337,7 +337,7 @@ func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	runs, goals := statusDBCounts(root)
 	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
-	refresh := statusRefreshFor(root)
+	refresh := statusRefreshFor(root, state)
 	if short {
 		return stdout(strings.Join(statusShortLinesWithRefresh(state, derived, readiness, growth, refresh), "\n")), nil
 	}
