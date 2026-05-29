@@ -302,7 +302,42 @@ func TestDoctorWarnsWhenNextPacketPlanIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doctor failed: %v", err)
 	}
-	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected `hyper run 'Implement the smallest usable A tiny notes API core flow: the primary user flow'`, found `hyper advance`; run `hyper migrate`")
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected action `run`, found `advance`; run `hyper migrate`")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
+}
+
+func TestDoctorWarnsWhenNextPacketAdvanceReviewIsMissing(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+	writeFile(t, filepath.Join(root, ".hyper", "next-packet.md"), strings.Join([]string{
+		"# Next Packet Plan",
+		"",
+		"Mode: single packet",
+		"Action: advance",
+		"Command: hyper advance",
+		"Reason: Tiny MVP gate is ready.",
+		"Readiness gate: Tiny MVP -> Usable MVP (ready)",
+		"Readiness pressure: Stage advancement: Tiny MVP gate is ready.",
+		"",
+		"## Guard",
+		"",
+		"Do not run `hyper advance` unless the user accepts the stage change.",
+		"",
+		"## Codex Desktop Continuation",
+		"",
+		"Pause here.",
+		"",
+	}, "\n"))
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: missing Stage Advancement Review; run `hyper migrate`")
 	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
 }
 

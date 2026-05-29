@@ -10,6 +10,7 @@
 - plan target에서 온 continuation 명령은 plain `hyper run`으로 유지하고, `--auto --until`은 명시적인 override로 남겼습니다.
 - `plan.md`의 `Target Stage`가 바뀌거나 제거되면 저장된 auto target도 함께 맞추게 했습니다.
 - status, next-packet planning, `hyper advance`에 명시적인 stage advancement review 출력을 추가했습니다.
+- `.hyper/next-packet.md`에 필요한 guard, continuation, stage advancement review section이 빠지면 `hyper doctor`가 경고하게 했습니다.
 - `.hyper/next-packet.md`에 Codex Desktop continuation 안내를 추가해 auto mode가 run, repair, advance, stop 중 무엇을 해야 하는지 더 명확하게 했습니다.
 - auto mode의 `hyper run`과 `hyper resume` Codex Desktop payload에 next-packet continuation 안내를 포함했습니다.
 

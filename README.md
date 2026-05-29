@@ -117,7 +117,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 - Stage advancement output and `.hyper/next-packet.md` show the accepted gate, exact plan change, covered proof, and user-decision guard.
 - Service Quality can require reference benchmark evidence: the project must meet its category baseline and show one concrete strength.
 - Installers and `hyper update` verify release checksums. If `cosign` is installed, signature verification also runs.
-- `hyper doctor` checks install state, project state, SQLite, Codex routing, signature capability, and whether `.hyper/next-packet.md` matches current state.
+- `hyper doctor` checks install state, project state, SQLite, Codex routing, signature capability, and whether `.hyper/next-packet.md` matches current state and required handoff sections.
 - `hyper status` and `hyper doctor` detect when `state.json` has an old stage that no longer matches `plan.md`; `hyper migrate` refreshes it.
 
 ## Basic Flow

@@ -226,21 +226,53 @@ func doctorNextPacketPlanCheck(root string) doctorCheck {
 	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
 	expected := buildNextPacketPlan(state, consistency.Derived, readiness, growth)
-	actual := nextPacketPlanCommand(readIfExists(path))
+	body := readIfExists(path)
+	actualAction := nextPacketPlanAction(body)
+	if actualAction == "" {
+		return doctorCheck{"Next packet plan", "WARN", "missing Action; run `hyper migrate`"}
+	}
+	if actualAction != expected.Action {
+		return doctorCheck{"Next packet plan", "WARN", "expected action `" + expected.Action + "`, found `" + actualAction + "`; run `hyper migrate`"}
+	}
+	actual := nextPacketPlanCommand(body)
 	if actual == "" {
 		return doctorCheck{"Next packet plan", "WARN", "missing Command; run `hyper migrate`"}
 	}
 	if actual != expected.Command {
 		return doctorCheck{"Next packet plan", "WARN", "expected `" + expected.Command + "`, found `" + actual + "`; run `hyper migrate`"}
 	}
+	if issue := nextPacketPlanShapeIssue(expected, body); issue != "" {
+		return doctorCheck{"Next packet plan", "WARN", issue + "; run `hyper migrate`"}
+	}
 	return doctorCheck{"Next packet plan", "OK", displayRelPath(hyperDir, "next-packet.md") + " matches current state"}
 }
 
 func nextPacketPlanCommand(body string) string {
+	return nextPacketPlanField(body, "Command:")
+}
+
+func nextPacketPlanAction(body string) string {
+	return nextPacketPlanField(body, "Action:")
+}
+
+func nextPacketPlanField(body, name string) string {
 	for _, line := range strings.Split(body, "\n") {
-		if _, value, ok := strings.Cut(strings.TrimSpace(line), "Command:"); ok {
+		if _, value, ok := strings.Cut(strings.TrimSpace(line), name); ok {
 			return strings.TrimSpace(value)
 		}
+	}
+	return ""
+}
+
+func nextPacketPlanShapeIssue(expected plannedNextPacket, body string) string {
+	if !strings.Contains(body, "## Guard") {
+		return "missing Guard section"
+	}
+	if !strings.Contains(body, "## Codex Desktop Continuation") {
+		return "missing Codex Desktop Continuation"
+	}
+	if expected.Action == "advance" && !strings.Contains(body, "## Stage Advancement Review") {
+		return "missing Stage Advancement Review"
 	}
 	return ""
 }

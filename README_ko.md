@@ -117,7 +117,7 @@ Service Quality benchmark 예시는 [Reference Benchmark Evidence 예시](docs/e
 - Stage advancement 출력과 `.hyper/next-packet.md`는 accepted gate, 정확한 plan change, 충족된 proof, user-decision guard를 보여줍니다.
 - Service Quality에서는 reference benchmark evidence가 필요할 수 있습니다. 해당 category의 기본 기대치를 충족하고, 구체적인 강점 하나가 있어야 합니다.
 - installer와 `hyper update`는 release checksum을 검증합니다. `cosign`이 설치되어 있으면 signature 검증도 실행합니다.
-- `hyper doctor`는 설치 상태, 프로젝트 상태, SQLite, Codex routing, signature 검증 가능 여부, `.hyper/next-packet.md`의 최신성을 확인합니다.
+- `hyper doctor`는 설치 상태, 프로젝트 상태, SQLite, Codex routing, signature 검증 가능 여부, `.hyper/next-packet.md`의 최신성과 필요한 handoff section을 확인합니다.
 - `hyper status`와 `hyper doctor`는 `state.json`의 오래된 stage가 `plan.md`와 다르면 알려줍니다. `hyper migrate`가 그 상태를 갱신합니다.
 
 ## 기본 흐름
