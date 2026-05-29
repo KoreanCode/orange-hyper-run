@@ -1269,17 +1269,21 @@ func runtimeContinuation(similar []similarContext) string {
 	return formatSimilarContext(similar)
 }
 
-func createExecutionHandoff(runID, goalID string) handoff {
+func createExecutionHandoff(runID, goalID string, autoContinue bool) handoff {
 	_ = runID
 	goalPath := fmt.Sprintf(".hyper/goals/%s/goal.md", goalID)
 	evidencePath := fmt.Sprintf(".hyper/goals/%s/evidence.md", goalID)
 	nextPath := fmt.Sprintf(".hyper/goals/%s/next.md", goalID)
+	instructions := fmt.Sprintf("Read %s as a runtime packet and complete it checkpoint by checkpoint. Update %s, write %s, and stop early for destructive actions, missing credentials, unclear product scope, or repeated validation failure.", goalPath, evidencePath, nextPath)
+	if autoContinue {
+		instructions += " After `hyper complete` passes, read `.hyper/next-packet.md`; if Action is `run`, execute its Command and continue the next packet; if Action is `advance` or `stop`, pause and report it to the user; if Action is `complete-current`, repair the current packet before continuing."
+	}
 	return handoff{
 		Adapter:           "prompt",
 		EventType:         "execution_handoff_generated",
 		Description:       "Prompt handoff mode. In Codex Desktop, use this as the execution payload for `$hyper run`.",
 		InstructionsLabel: "Codex Desktop payload:",
-		Instructions:      fmt.Sprintf("Read %s as a runtime packet and complete it checkpoint by checkpoint. Update %s, write %s, and stop early for destructive actions, missing credentials, unclear product scope, or repeated validation failure.", goalPath, evidencePath, nextPath),
+		Instructions:      instructions,
 	}
 }
 

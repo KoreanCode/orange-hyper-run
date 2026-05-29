@@ -234,7 +234,6 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 	}
 
 	planHash := hashText(planResult.Body)
-	handoff := createExecutionHandoff(runID, goalID)
 	state := projectState{
 		Project:          firstNonBlank(episode.Plan["Product"], "Unknown project"),
 		Stage:            episode.Stage,
@@ -250,6 +249,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 		RunUntil:         opts.RunUntil,
 		UpdatedAt:        now,
 	}
+	handoff := createExecutionHandoff(runID, goalID, state.AutoContinue)
 
 	if err := insertRun(db, runID, episode.Objective, episode.Stage, "active", now, goalID, summary); err != nil {
 		return commandOutput{}, err
@@ -507,7 +507,7 @@ func resumeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return stdout("No active runtime packet found. Start with `hyper run`.\n"), nil
 	}
-	handoff := createExecutionHandoff(state.ActiveRunID, state.CurrentGoalID)
+	handoff := createExecutionHandoff(state.ActiveRunID, state.CurrentGoalID, state.AutoContinue)
 	return stdout(strings.Join([]string{
 		fmt.Sprintf("Resuming %s at %s.", state.ActiveRunID, state.CurrentGoalID),
 		"",

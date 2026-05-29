@@ -155,6 +155,7 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, out.Stdout, "GOAL-0001")
 	assertContains(t, out.Stdout, "Auto learn: skipped")
 	assertContains(t, out.Stdout, "Codex Desktop payload:")
+	assertNotContains(t, out.Stdout, "After `hyper complete` passes")
 	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
 	assertContains(t, goal, "# GOAL-0001 Runtime Packet")
 	assertContains(t, goal, "## Continue From")
@@ -959,6 +960,13 @@ func TestRunUsesPlanTargetStageAsDefaultAutoTarget(t *testing.T) {
 	}
 	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
 	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, out.Stdout, "After `hyper complete` passes, read `.hyper/next-packet.md`")
+	assertContains(t, out.Stdout, "if Action is `run`, execute its Command and continue the next packet")
+	resume, err := runCLI(args("resume"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("resume failed: %v", err)
+	}
+	assertContains(t, resume.Stdout, "After `hyper complete` passes, read `.hyper/next-packet.md`")
 	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
 	assertContains(t, state, `"auto_continue": true`)
 	assertContains(t, state, `"run_until": "Service Quality"`)
@@ -1015,6 +1023,7 @@ func TestRunManualFocusDoesNotReuseReachedPreviousAutoTarget(t *testing.T) {
 	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
 	assertContains(t, out.Stdout, "Run mode: single packet")
 	assertNotContains(t, out.Stdout, "Run-until target already reached")
+	assertNotContains(t, out.Stdout, "After `hyper complete` passes")
 }
 
 func TestRunExplicitUntilOverridesPlanTargetStage(t *testing.T) {
