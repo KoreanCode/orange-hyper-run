@@ -50,8 +50,19 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	nextPacketMessage := "not updated; no completed runtime packet state found"
 	if state, stateErr := readState(filepath.Join(root, hyperDir, "state.json")); stateErr == nil {
 		stageRefreshed := false
+		targetRefreshed := false
 		if strings.TrimSpace(readiness.Stage) != "" && knownRuntimeStage(readiness.Stage) && normalizeRuntimeStage(state.Stage) != readiness.Stage {
 			state.Stage = readiness.Stage
+			stageRefreshed = true
+		}
+		if strings.TrimSpace(planBody) != "" {
+			beforeTarget := state
+			state = applyPlanTargetToState(state, parsePlan(planBody))
+			targetRefreshed = beforeTarget.AutoContinue != state.AutoContinue ||
+				beforeTarget.RunUntil != state.RunUntil ||
+				beforeTarget.RunTargetSource != state.RunTargetSource
+		}
+		if stageRefreshed || targetRefreshed {
 			if strings.TrimSpace(planBody) != "" {
 				state.PlanHash = hashText(planBody)
 			}
@@ -59,13 +70,15 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			if err := writeJSON(filepath.Join(root, hyperDir, "state.json"), state); err != nil {
 				return commandOutput{}, err
 			}
-			stageRefreshed = true
 		}
 		consistency := currentStateConsistency(root, state)
 		if consistency.Consistent {
 			stateMessage = "state.json is consistent"
 			if stageRefreshed {
 				stateMessage += "; stage refreshed to " + readiness.Stage
+			}
+			if targetRefreshed {
+				stateMessage += "; run target refreshed to " + migrateTargetSummary(state)
 			}
 			if consistency.Derived.State == "active" {
 				nextPacketMessage = "unchanged while the current runtime packet is active"
@@ -101,6 +114,13 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"  hyper status",
 		"",
 	}, "\n")), nil
+}
+
+func migrateTargetSummary(state projectState) string {
+	if strings.TrimSpace(state.RunUntil) == "" {
+		return "single packet"
+	}
+	return state.RunUntil
 }
 
 func refreshLegacyMemoryQuality(db *sql.DB) (int, *hyperError) {

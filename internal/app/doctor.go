@@ -209,6 +209,7 @@ func doctorNextPacketPlanCheck(root string) doctorCheck {
 	if err != nil {
 		return doctorCheck{"Next packet plan", "WARN", "cannot inspect state.json: " + err.Message}
 	}
+	state = applyPlanTargetFromRoot(root, state)
 	consistency := currentStateConsistency(root, state)
 	if !consistency.Consistent {
 		return doctorCheck{"Next packet plan", "WARN", "cannot verify until state.json is repaired"}

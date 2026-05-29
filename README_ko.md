@@ -110,6 +110,7 @@ Service Quality benchmark 예시는 [Reference Benchmark Evidence 예시](docs/e
 
 - `plan.md`에 `Target Stage`를 적으면 plain `hyper run`이 그 목표까지 packet 단위 continuation으로 동작합니다.
 - 목표가 `plan.md`에서 왔을 때 다음 continuation 명령도 plain `hyper run`으로 유지합니다. `--auto --until`은 일회성 override가 필요할 때만 씁니다.
+- `Target Stage`를 바꾸거나 제거하면 다음 status/run/migrate 흐름이 수정된 plan target을 따릅니다.
 - `hyper complete`는 packet을 학습하기 전에 finish gate를 실행합니다. evidence가 약하면 `review.md`에 보강할 내용을 남기고 같은 packet에 머무릅니다.
 - `hyper run --auto --until <stage>`는 명시적인 override로 계속 사용할 수 있습니다. stage를 몰래 올리지는 않습니다.
 - `hyper advance`는 `hyper status`가 gate ready라고 말하고 사용자가 stage 변경을 받아들였을 때만 적용합니다.

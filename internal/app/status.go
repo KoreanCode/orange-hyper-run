@@ -32,8 +32,7 @@ func refreshStateFromPlanForStatus(root string, state projectState) projectState
 	if strings.TrimSpace(state.Stage) == "" {
 		state.Stage = normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
 	}
-	state = applyPlanTargetToState(state, plan)
-	return state
+	return applyPlanTargetToState(state, plan)
 }
 
 func staleProjectName(project string) bool {

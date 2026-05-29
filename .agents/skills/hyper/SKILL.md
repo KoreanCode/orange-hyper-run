@@ -30,7 +30,7 @@ Learn role:
 
 Command mapping:
 - `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.
-- `$hyper run [focus]`: run `hyper run [focus]`; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target. Read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.
+- `$hyper run [focus]`: run `hyper run [focus]`; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target and continuation command. Read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.
 - `$hyper run --auto --until <stage> [focus]`: run `hyper run --auto --until <stage> [focus]` as an explicit target override, then continue packet by packet using `.hyper/next-packet.md` until the target stage is reached or a guard stops progress.
 - `$hyper complete`: run `hyper complete` after evidence and next notes are written so project readiness is refreshed.
 - `$hyper status`: run `hyper status` and use the dashboard to decide whether to complete, repair, advance, migrate, or start the next packet.
@@ -42,7 +42,7 @@ Command mapping:
 - `hyper run [focus]`: treat this the same as `$hyper run [focus]` when the user is speaking inside Codex Desktop.
 
 Execution rules:
-1. Run a CLI command only when a new or resumed runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target.
+1. Run a CLI command only when a new or resumed runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target and continuation command.
 2. Read the generated runtime packet in `goal.md` and the checklist in `tasks.md` before editing project files.
 3. Keep implementation scoped to the current runtime episode.
 4. Run the safest available validation, or record why validation is blocked.

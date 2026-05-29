@@ -25,6 +25,14 @@ func readState(path string) (projectState, *hyperError) {
 	return state, nil
 }
 
+func applyPlanTargetFromRoot(root string, state projectState) projectState {
+	planBody := readIfExists(filepath.Join(root, planFile))
+	if strings.TrimSpace(planBody) == "" {
+		return state
+	}
+	return applyPlanTargetToState(state, parsePlan(planBody))
+}
+
 func initEventType(created, hasActiveGoal bool) string {
 	if created {
 		return "project_initialized"

@@ -1002,6 +1002,54 @@ func TestRunUsesPlanTargetStageAsDefaultAutoTarget(t *testing.T) {
 	assertContains(t, status.Stdout, "Next: hyper run 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
 }
 
+func TestPlanTargetStageChangeUpdatesStatusAndNextRun(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nBeta\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Mode: auto until Beta")
+	assertContains(t, status.Stdout, "Target: Beta (plan.md Target Stage)")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: auto until Beta")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
+	assertContains(t, state, `"run_until": "Beta"`)
+	assertContains(t, state, `"run_target_source": "plan.md Target Stage"`)
+	assertNotContains(t, state, `"run_until": "Service Quality"`)
+}
+
+func TestPlanTargetStageRemovalClearsPlanDrivenAutoTarget(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Mode: single packet")
+	assertContains(t, status.Stdout, "Target: none")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: single packet")
+	assertNotContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
+	assertNotContains(t, state, `"auto_continue": true`)
+	assertNotContains(t, state, `"run_until"`)
+	assertNotContains(t, state, `"run_target_source"`)
+}
+
 func TestRunPlanTargetStageStopsWhenTargetAlreadyReached(t *testing.T) {
 	root := t.TempDir()
 	mustRun(t, root, "init")

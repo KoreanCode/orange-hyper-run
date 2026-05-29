@@ -148,10 +148,10 @@ Reference Benchmark Evidence should not be a generic scorecard. It should turn o
 - Category: Developer CLI / project-growth runtime
 - References: Tool A, Tool B, Tool C
 - Baseline expectations: install is clear; one command creates useful work context; status and recovery are understandable
-- Current comparison: setup meets baseline; evidence loop is above baseline; auto continuation is below baseline
-- Below-baseline gaps: auto continuation and stage advance clarity
+- Current comparison: setup meets baseline; evidence loop is above baseline; plan-driven continuation meets baseline; stage advance clarity is below baseline
+- Below-baseline gaps: stage advance clarity
 - Above-baseline strength: project-local evidence and readiness pressure
-- Decision: Service Quality is blocked until auto continuation and stage advance reach the category baseline
+- Decision: Service Quality is blocked until stage advance clarity reaches the category baseline
 ```
 
 Hyper Run treats this evidence as covered only when the benchmark has a category, 3-5 named references, baseline expectations, a current below/meets/above-baseline comparison, no critical below-baseline gap, one above-baseline strength, and a decision. `hyper status` shows the benchmark line whenever it is required by the current gate.

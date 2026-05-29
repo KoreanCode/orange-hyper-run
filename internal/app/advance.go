@@ -82,6 +82,7 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	state.Stage = nextStage
 	state.PlanPath = planFile
 	state.PlanHash = hashText(updatedPlan)
+	state = applyPlanTargetToState(state, plan)
 	state.UpdatedAt = now
 	if err := writeJSON(statePath, state); err != nil {
 		return commandOutput{}, err

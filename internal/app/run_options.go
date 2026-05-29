@@ -67,11 +67,16 @@ func applyDefaultRunTarget(opts runOptions, plan map[string]string, previous pro
 }
 
 func applyPlanTargetToState(state projectState, plan map[string]string) projectState {
-	if strings.TrimSpace(state.RunUntil) != "" {
-		return state
-	}
 	target, ok, err := planRunTarget(plan)
 	if err != nil || !ok {
+		if !ok && state.RunTargetSource == planTargetStageSource {
+			state.AutoContinue = false
+			state.RunUntil = ""
+			state.RunTargetSource = ""
+		}
+		return state
+	}
+	if strings.TrimSpace(state.RunUntil) != "" && state.RunTargetSource != planTargetStageSource {
 		return state
 	}
 	state.AutoContinue = true

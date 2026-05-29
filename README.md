@@ -110,6 +110,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 
 - `plan.md` can set `Target Stage`, so plain `hyper run` defaults to packet-by-packet continuation toward that target.
 - When the target comes from `plan.md`, the planned continuation command stays plain `hyper run`; `--auto --until` is only needed for an explicit one-off override.
+- If you change or remove `Target Stage`, the next status/run/migrate cycle follows the updated plan target.
 - `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
 - `hyper run --auto --until <stage>` still works as an explicit override. It does not silently advance stages.
 - `hyper advance` applies a stage change only after `hyper status` says the gate is ready and the user accepts it.

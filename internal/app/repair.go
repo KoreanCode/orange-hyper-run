@@ -137,6 +137,10 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		if readinessErr != nil {
 			return commandOutput{}, readinessErr
 		}
+		state = applyPlanTargetToState(state, parsePlan(planBody))
+	}
+	if err := writeJSON(statePath, state); err != nil {
+		return commandOutput{}, err
 	}
 	nextPlan, nextErr := writeNextPacketPlan(root, state, consistency.Derived, readiness, growth)
 	if nextErr != nil {

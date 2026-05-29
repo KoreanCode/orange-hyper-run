@@ -434,6 +434,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		if err != nil {
 			return commandOutput{}, err
 		}
+		state = applyPlanTargetToState(state, parsePlan(planBody))
 	}
 	finishGate.Review = renderFinishGateReview(finishGate, state, derived, readiness)
 	if err := writeText(filepath.Join(root, hyperDir, "goals", state.CurrentGoalID, "review.md"), finishGate.Review); err != nil {
@@ -512,6 +513,7 @@ func resumeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
+	state = applyPlanTargetFromRoot(root, state)
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return stdout("No active runtime packet found. Start with `hyper run`.\n"), nil
 	}
