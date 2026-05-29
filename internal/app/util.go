@@ -159,6 +159,16 @@ func joinNonEmpty(values []string, sep string) string {
 	return strings.Join(nonEmpty, sep)
 }
 
+func compactNonEmptyLines(values []string) []string {
+	nonEmpty := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			nonEmpty = append(nonEmpty, value)
+		}
+	}
+	return nonEmpty
+}
+
 func hashText(value string) string {
 	hash := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(hash[:])

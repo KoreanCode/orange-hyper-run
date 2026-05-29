@@ -17,7 +17,7 @@ Learn role: Learn is not a summary. It extracts what the project repeatedly need
 
 Required workflow:
 
-1. Run `hyper run [focus]` only when a new runtime packet is needed.
+1. Run `hyper run [focus]` only when a new runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target.
 2. Read the generated runtime packet path from the CLI output, or read `.hyper/state.json` and use `current_goal_path`.
 3. Read `.hyper/goals/<GOAL-ID>/goal.md` and `.hyper/goals/<GOAL-ID>/tasks.md`.
 4. Implement the smallest coherent step that satisfies the current episode.
@@ -34,7 +34,7 @@ Use `hyper status --short` when the user wants the current stage, gate, proof, a
 
 Use `hyper migrate` when project state, growth rules, or generated candidates need to be refreshed after a CLI update.
 
-Use `hyper run --auto --until <stage> [focus]` only when the user wants packet-by-packet continuation toward a target stage. Auto mode still requires finish-gate evidence and does not silently advance stages.
+Use `hyper run --auto --until <stage> [focus]` to override the `plan.md` target. Auto mode still requires finish-gate evidence and does not silently advance stages.
 
 Use `hyper advance` only when `hyper status` says the stage gate is ready and the user accepts the stage change.
 

@@ -7,7 +7,7 @@ Hyper Run is usable, but some parts are still early. This document is intentiona
 - Creating project-local Hyper Run state with `hyper init`.
 - Generating runtime packets with `hyper run`.
 - Closing packets with `hyper complete`.
-- Guarded auto continuation with `hyper run --auto --until <stage>`.
+- Guarded auto continuation from `plan.md` `Target Stage` or `hyper run --auto --until <stage>`.
 - Explicit stage advancement with `hyper advance`.
 - Reading status and readiness with `hyper status`.
 - Diagnosing common install/project issues with `hyper doctor`.
@@ -20,7 +20,7 @@ Hyper Run is usable, but some parts are still early. This document is intentiona
 
 - Growth pressure classification is heuristic. It is useful, but not a formal semantic model.
 - Capability candidates are generated from repeated evidence, but activation policy is still conservative.
-- Auto mode is packet-by-packet continuation, not an unattended autonomous background runner.
+- Auto mode is packet-by-packet continuation, not an unattended autonomous background runner. `Target Stage` makes plain `hyper run` choose the target, but finish gates and stage-advance guards still apply.
 - Reference benchmark evidence is structured and checked, but the quality of the comparison still depends on the evidence written by the agent or developer.
 - Package boundaries are still mostly inside `internal/app`; this is acceptable for the current CLI size, but should be split later.
 - Existing `.hyper/` projects may need `hyper migrate` after larger growth/readiness changes.

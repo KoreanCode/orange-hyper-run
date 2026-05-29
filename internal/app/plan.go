@@ -48,6 +48,10 @@ func planTemplate() string {
 
 Tiny MVP
 
+## Target Stage
+
+Service Quality
+
 ## Build Style
 
 ## Non-goals
@@ -229,6 +233,18 @@ func canonicalPlanKey(heading string) string {
 		"현재스테이지":            "Current Stage",
 		"스테이지":              "Current Stage",
 		"페이즈":               "Current Stage",
+		"targetstage":       "Target Stage",
+		"target":            "Target Stage",
+		"goalstage":         "Target Stage",
+		"rununtil":          "Target Stage",
+		"runtarget":         "Target Stage",
+		"servicetarget":     "Target Stage",
+		"qualitytarget":     "Target Stage",
+		"목표단계":              "Target Stage",
+		"목표스테이지":            "Target Stage",
+		"서비스목표":             "Target Stage",
+		"품질목표":              "Target Stage",
+		"실행목표":              "Target Stage",
 		"buildstyle":        "Build Style",
 		"stack":             "Build Style",
 		"technicalstack":    "Build Style",

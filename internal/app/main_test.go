@@ -20,6 +20,7 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, out.Stdout, "$hyper run")
 	assertContains(t, out.Stdout, "Fill in plan.md")
 	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "# Product Plan")
+	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Target Stage\n\nService Quality")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), "initialized")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl")), "project_initialized")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper run")
@@ -945,6 +946,102 @@ func TestRunAutoUntilPlansNextPacketAfterComplete(t *testing.T) {
 	assertContains(t, nextPlan, "Action: run")
 	assertContains(t, nextPlan, "Command: hyper run --auto --until 'Service Quality'")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: passed")
+}
+
+func TestRunUsesPlanTargetStageAsDefaultAutoTarget(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nUsable MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
+	assertContains(t, state, `"auto_continue": true`)
+	assertContains(t, state, `"run_until": "Service Quality"`)
+
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary notes flow.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and revisit customer notes flow.\nData persistence: SQLite database stored a created customer note and confirmed the row after reload.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nHandle empty, failure, and edge states.\n")
+
+	complete, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	assertContains(t, complete.Stdout, "Next action: hyper run --auto --until 'Service Quality'")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Mode: auto until Service Quality")
+}
+
+func TestRunPlanTargetStageStopsWhenTargetAlreadyReached(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nService Ready CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one service handoff command.\n\n## Current Stage\n\nService Quality\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nService target reached guard does not create extra work.\n")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run-until target already reached: Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, out.Stdout, "No runtime packet created.")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0001")) {
+		t.Fatal("plain run with reached plan target should not create a runtime packet")
+	}
+}
+
+func TestRunManualFocusDoesNotReuseReachedPreviousAutoTarget(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nService Ready CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one service handoff command.\n\n## Current Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nManual follow-up packets can still start after an auto target was reached.\n")
+	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), projectState{
+		Project:          "Service Ready CLI",
+		Stage:            "Service Quality",
+		Status:           "completed",
+		ExecutionAdapter: defaultExecutionAdapter(),
+		PlanPath:         planFile,
+		AutoContinue:     true,
+		RunUntil:         "Service Quality",
+		UpdatedAt:        "now",
+	}); err != nil {
+		t.Fatalf("write state failed: %v", err)
+	}
+
+	out, err := runCLI(args("run", "Start a manual follow-up packet"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "Run mode: single packet")
+	assertNotContains(t, out.Stdout, "Run-until target already reached")
+}
+
+func TestRunExplicitUntilOverridesPlanTargetStage(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works.\n")
+
+	out, err := runCLI(args("run", "--until", "beta"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: auto until Beta")
+	assertNotContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_until": "Beta"`)
+}
+
+func TestRunInvalidPlanTargetStageFailsClearly(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid plan target to fail")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+	assertContains(t, err.Message, "service-quality")
 }
 
 func TestStatusAutoTargetReachedExplainsPause(t *testing.T) {
@@ -2989,6 +3086,7 @@ func TestPlanAliasesAcceptInlineFields(t *testing.T) {
 
 Project: Service Desk Lite
 Current Stage: Tiny MVP
+Run Until: Service Quality
 
 Product brief:
 A tiny internal support queue where a teammate can create one request, see it in a list, and mark it handled.
@@ -3006,6 +3104,9 @@ Use the smallest command or smoke check that proves the useful flow still works.
 	}
 	if got := plan["Current Stage"]; got != "Tiny MVP" {
 		t.Fatalf("Current Stage inline field = %q", got)
+	}
+	if got := plan["Target Stage"]; got != "Service Quality" {
+		t.Fatalf("Target Stage inline field = %q", got)
 	}
 	if got := plan["Build Style"]; got != "Thin vertical slice first." {
 		t.Fatalf("Build Style inline field = %q", got)

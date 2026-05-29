@@ -42,6 +42,40 @@ func parseRunOptions(args []string) (runOptions, *hyperError) {
 	return opts, nil
 }
 
+func applyDefaultRunTarget(opts runOptions, plan map[string]string, previous projectState) (runOptions, *hyperError) {
+	if strings.TrimSpace(opts.RunUntil) != "" {
+		return opts, nil
+	}
+	if target, ok, err := planRunTarget(plan); ok || err != nil {
+		if err != nil {
+			return runOptions{}, err
+		}
+		opts.AutoContinue = true
+		opts.RunUntil = target
+		opts.RunTargetSource = "plan.md Target Stage"
+		return opts, nil
+	}
+	if opts.AutoContinue && previous.AutoContinue && strings.TrimSpace(previous.RunUntil) != "" {
+		opts.AutoContinue = true
+		opts.RunUntil = previous.RunUntil
+		opts.RunTargetSource = "previous auto target"
+		return opts, nil
+	}
+	return opts, nil
+}
+
+func planRunTarget(plan map[string]string) (string, bool, *hyperError) {
+	value := firstRuntimeValue(plan["Target Stage"])
+	if value == "" {
+		return "", false, nil
+	}
+	target, err := normalizeRunUntilTarget(value)
+	if err != nil {
+		return "", true, newError("Invalid plan.md Target Stage: "+value+"\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
+	}
+	return target, true, nil
+}
+
 func normalizeRunUntilTarget(value string) (string, *hyperError) {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	normalized = strings.ReplaceAll(normalized, "-", " ")
@@ -73,4 +107,11 @@ func formatRunMode(opts runOptions) string {
 		return "auto until " + opts.RunUntil
 	}
 	return "auto"
+}
+
+func runTargetSourceLine(opts runOptions) string {
+	if strings.TrimSpace(opts.RunTargetSource) == "" || strings.TrimSpace(opts.RunUntil) == "" {
+		return ""
+	}
+	return "Run target source: " + opts.RunTargetSource
 }

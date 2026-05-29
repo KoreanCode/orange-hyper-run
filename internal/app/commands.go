@@ -123,11 +123,11 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 
 func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 	root := fsys.root()
-	focus := opts.Focus
 	planResult, err := requirePlanForRun(root)
 	if err != nil {
 		return commandOutput{}, err
 	}
+	plan := parsePlan(planResult.Body)
 	if err := ensureProjectLayout(root); err != nil {
 		return commandOutput{}, err
 	}
@@ -152,6 +152,11 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 	}
 
 	previous := readStateIfExists(root)
+	opts, err = applyDefaultRunTarget(opts, plan, previous)
+	if err != nil {
+		return commandOutput{}, err
+	}
+	focus := opts.Focus
 	if blocked := blockingActiveGoal(root, previous); blocked != "" {
 		return commandOutput{}, newError(blocked, 2)
 	}
@@ -177,10 +182,11 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 			if err != nil {
 				return commandOutput{}, err
 			}
-			return stdout(strings.Join([]string{
+			return stdout(strings.Join(compactNonEmptyLines([]string{
 				"Run-until target already reached: " + opts.RunUntil,
 				"Stage: " + normalizeRuntimeStage(firstNonBlank(readiness.Stage, stopState.Stage)),
 				"Run mode: " + formatRunMode(opts),
+				runTargetSourceLine(opts),
 				"Auto learn: " + formatAutoLearn(autoLearn),
 				"Readiness gate: " + readinessGateSummary(readiness),
 				"Readiness pressure: " + readinessPressureSummary(readiness),
@@ -193,7 +199,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"Next:",
 				"  " + nextPlan.Command,
 				"",
-			}, "\n")), nil
+			}), "\n")), nil
 		}
 	}
 
@@ -294,6 +300,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 		"Run: " + runID,
 		"Runtime packet: " + goalID,
 		"Run mode: " + formatRunMode(opts),
+		runTargetSourceLine(opts),
 		"Auto learn: " + formatAutoLearn(autoLearn),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
@@ -304,6 +311,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 	if planCandidatePath != "" {
 		lines = append(lines, "Plan import candidates: "+planCandidatePath)
 	}
+	lines = compactNonEmptyLines(lines)
 	lines = append(lines,
 		"",
 		"Loaded plan.md as the product brief.",

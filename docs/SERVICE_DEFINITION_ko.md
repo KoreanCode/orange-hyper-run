@@ -67,7 +67,7 @@ plan.md
 
 ## Run Contract
 
-하나의 `hyper run`은 정확히 하나의 runtime packet을 만듭니다. 그 packet은 실행 agent가 다음을 완료했을 때 끝난 것으로 봅니다.
+CLI에서 `hyper run`을 한 번 실행하면 최대 하나의 runtime packet을 만듭니다. `plan.md`에 `Target Stage`가 있으면 plain `hyper run`은 guarded auto mode로 들어가고, 각 packet이 완료될 때마다 다음 continuation 명령을 기록합니다. 그 packet은 실행 agent가 다음을 완료했을 때 끝난 것으로 봅니다.
 
 - `plan.md`, `goal.md`, `tasks.md`를 읽었습니다.
 - packet의 `Stage Gate`와 selected readiness pressure를 확인했습니다.
@@ -78,7 +78,7 @@ plan.md
 - `hyper complete`를 실행해 Learn, Growth, Readiness가 완료된 packet 기준으로 갱신되었습니다.
 - destructive action, missing credentials, unclear product scope, repeated validation failure 앞에서 멈췄습니다.
 
-`hyper run` 하나를 무한 background loop로 보면 안 됩니다. 무한한 것은 unchecked command 하나가 아니라, 반복되는 프로젝트 성장 loop입니다. 이전 active packet의 evidence가 아직 pending이면 새 `hyper run`은 차단됩니다.
+`hyper run`을 unchecked background loop로 보면 안 됩니다. 길게 이어지는 부분은 packet 단위 continuation입니다. 하나의 packet을 만들고, 실행하고, evidence를 확인하고, 학습한 뒤, guard가 허용할 때만 `.hyper/next-packet.md`의 다음 명령을 따릅니다. 이전 active packet의 evidence가 아직 pending이면 새 `hyper run`은 차단됩니다.
 
 ## Learn 역할
 
@@ -175,7 +175,7 @@ Readiness는 Learn이나 Growth를 대체하지 않습니다. Learn은 durable s
 Hyper Run의 user-facing layer는 작게 유지해야 합니다.
 
 - `hyper init`: project-local runtime files를 초기화합니다.
-- `hyper run [focus]`: 다음 runtime packet을 만듭니다.
+- `hyper run [focus]`: 다음 runtime packet을 만들고, `plan.md`의 `Target Stage`가 있으면 기본 auto target으로 사용합니다.
 - `hyper complete`: active packet을 닫고 Learn, Growth, Readiness를 갱신합니다.
 - `hyper resume`: active packet을 재개합니다.
 - `hyper status`: 현재 runtime state를 보여줍니다.

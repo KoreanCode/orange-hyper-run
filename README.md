@@ -9,7 +9,7 @@
 
 Hyper Run helps AI coding sessions keep project memory between runs.
 
-You keep a short `plan.md` in your project. `hyper run` turns that plan and the project history into the next focused work packet. After the work is done, `hyper complete` reads the evidence and prepares the next step.
+You keep a short `plan.md` in your project. `hyper run` turns that plan and the project history into the next focused work packet. If `plan.md` has a `Target Stage`, plain `hyper run` keeps planning packet by packet toward that target. After each packet, `hyper complete` reads the evidence and prepares the next step.
 
 The goal is simple: start from a small MVP and keep improving it without every AI session feeling like a reset.
 
@@ -46,7 +46,7 @@ What you actually touch:
 
 | File or command | What it means |
 | --- | --- |
-| `plan.md` | A plain product brief: what you are building, who it is for, current stage, and constraints. |
+| `plan.md` | A plain product brief: what you are building, who it is for, current stage, target stage, and constraints. |
 | `hyper run` | Creates the next focused work packet. |
 | `goal.md` / `tasks.md` | What the AI should do now. |
 | `evidence.md` | What changed and how it was checked. |
@@ -106,10 +106,11 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 
 `hyper run` keeps generating the next focused packet until the project reaches the stage you are aiming for.
 
-## What Is Current In v0.6.3
+## What Is Current
 
+- `plan.md` can set `Target Stage`, so plain `hyper run` defaults to packet-by-packet continuation toward that target.
 - `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
-- `hyper run --auto --until <stage>` plans continuation packet by packet through `.hyper/next-packet.md`. It does not silently advance stages.
+- `hyper run --auto --until <stage>` still works as an explicit override. It does not silently advance stages.
 - `hyper advance` applies a stage change only after `hyper status` says the gate is ready and the user accepts it.
 - Service Quality can require reference benchmark evidence: the project must meet its category baseline and show one concrete strength.
 - Installers and `hyper update` verify release checksums. If `cosign` is installed, signature verification also runs.
@@ -122,7 +123,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 hyper init
 # edit plan.md once
 
-hyper run "Build the smallest usable MVP"
+hyper run
 # implement the generated packet
 # update evidence.md and next.md
 
@@ -162,13 +163,21 @@ For Service Quality and Sustained Service Quality packets, the evidence must als
 
 Every packet also carries a no-drift guard. If the work would move outside `plan.md` product direction, target user, core loop, non-goals, or constraints, the agent should stop and record the blocker instead of widening the project silently.
 
-For longer Codex Desktop sessions, start with an auto target:
+For longer Codex Desktop sessions, put the target in `plan.md`:
+
+```markdown
+## Target Stage
+
+Service Quality
+```
+
+Then plain `hyper run` uses that target. You can still override it from the command line:
 
 ```bash
 hyper run --auto --until service-quality "Keep upgrading this service"
 ```
 
-Use `--until sustained-service-quality` when the goal is to keep planning packets after Service Quality and focus on repeatable validators, operational handoff, and friction reduction.
+Use `Target Stage: Sustained Service Quality` or `--until sustained-service-quality` when the goal is to keep planning packets after Service Quality and focus on repeatable validators, operational handoff, and friction reduction.
 
 Auto mode does not skip proof or silently advance stages. It keeps the next packet command planned in `.hyper/next-packet.md`; stage changes still require explicit acceptance with `hyper advance`.
 
@@ -368,6 +377,10 @@ What is the smallest useful version?
 
 Tiny MVP
 
+## Target Stage
+
+Service Quality
+
 ## Build Style
 
 Web app
@@ -396,6 +409,7 @@ Short form also works:
 
 Project: Service Desk Lite
 Current Stage: Tiny MVP
+Run Until: Service Quality
 Build Style: Thin vertical slice first.
 
 Product brief:
@@ -491,8 +505,8 @@ That updates `plan.md` from the current stage to the next stage, refreshes readi
 
 ```bash
 hyper init                  # install Hyper Run files in this project
-hyper run [focus]           # create the next runtime packet
-hyper run --auto --until service-quality [focus]
+hyper run [focus]           # create the next packet; uses plan.md Target Stage when present
+hyper run --auto --until service-quality [focus]  # explicit target override
 hyper run --auto --until sustained-service-quality [focus]
 hyper complete              # run the finish gate, close the packet, and learn
 hyper advance               # apply an accepted stage change when the gate is ready

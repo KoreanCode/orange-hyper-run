@@ -6,6 +6,7 @@
 - Keep Service Quality packets open for repair when the Self Review verdict is `fail`.
 - Add Product satisfaction as a readiness axis for Beta, Service Quality, and Sustained Service Quality gates.
 - Add a no-drift runtime guard to packet work boundaries and stop conditions so agents record blockers instead of silently widening product direction.
+- Let `plan.md` define `Target Stage`, making plain `hyper run` default to guarded auto continuation toward that target.
 
 ## v0.6.3 - 2026-05-29
 

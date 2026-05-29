@@ -67,7 +67,7 @@ plan.md
 
 ## Run Contract
 
-One `hyper run` creates exactly one runtime packet. That packet is complete when the executing agent has:
+One CLI invocation of `hyper run` creates at most one runtime packet. If `plan.md` has `Target Stage`, plain `hyper run` enters guarded auto mode and writes the planned continuation command after each completed packet. The packet is complete when the executing agent has:
 
 - Read `plan.md`, `goal.md`, and `tasks.md`.
 - Checked the packet's `Stage Gate` and selected readiness pressure.
@@ -78,7 +78,7 @@ One `hyper run` creates exactly one runtime packet. That packet is complete when
 - Run `hyper complete` so Learn, Growth, and Readiness refresh from the completed packet.
 - Stopped before destructive actions, missing credentials, unclear product scope, or repeated validation failure.
 
-`hyper run` should not be treated as an infinite background loop. The infinite part is the repeated project growth loop, not a single unchecked command. A new `hyper run` is blocked while the previous active packet still has pending evidence.
+`hyper run` should not be treated as an unchecked background loop. The long-running part is packet-by-packet continuation: create one packet, execute it, check evidence, learn, then follow `.hyper/next-packet.md` only if the guard allows it. A new `hyper run` is blocked while the previous active packet still has pending evidence.
 
 ## Learn Role
 
@@ -175,7 +175,7 @@ Readiness does not replace Learn or Growth. Learn extracts durable signals. Grow
 Hyper Run should stay small at the user-facing layer:
 
 - `hyper init` initializes project-local runtime files.
-- `hyper run [focus]` creates the next runtime packet.
+- `hyper run [focus]` creates the next runtime packet and uses `plan.md` `Target Stage` as the default auto target when present.
 - `hyper complete` closes the active packet and refreshes Learn, Growth, and Readiness.
 - `hyper resume` resumes the active packet.
 - `hyper status` shows current runtime state.

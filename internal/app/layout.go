@@ -79,7 +79,49 @@ func ensureAgentsGuide(root string) *hyperError {
 }
 
 func agentsHyperRunSection() string {
-	return "<!-- hyper-run:start -->\n## Hyper Run\n\nWhen the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper status`, `$hyper status --short`, `$hyper migrate`, `$hyper advance`, `$hyper doctor`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.\n\nUse `.agents/skills/hyper/SKILL.md` as the thin Codex Desktop router. Keep product judgment, execution state, learning, and generated project knowledge in `plan.md`, `.hyper/`, and the `hyper` CLI rather than in static skill text.\n\nMethod: Hyper Run is an evidence-first project growth protocol. Execution logs create pressure, pressure creates candidates, and repeated proof promotes project-specific structure.\n\nProtocol: Hyper Run runtime packets are agent-agnostic. Codex Desktop is one consumer, but the packet can be read by CLI agents and other coding assistants.\n\nPrinciples: No structure before pressure. No stage advancement without evidence. No harness before repeated need. No memory without reusable signal.\n\nLearn role: Learn is not a summary. It extracts what the project repeatedly needed, failed at, or proved from `evidence.md` and `next.md` so future runtime packets can change work boundaries, validation signals, stop conditions, readiness pressure, and capability candidates.\n\nRequired workflow:\n\n1. Run `hyper run [focus]` only when a new runtime packet is needed.\n2. Read the generated runtime packet path from the CLI output, or read `.hyper/state.json` and use `current_goal_path`.\n3. Read `.hyper/goals/<GOAL-ID>/goal.md` and `.hyper/goals/<GOAL-ID>/tasks.md`.\n4. Implement the smallest coherent step that satisfies the current episode.\n5. Run the safest available validation or record why validation is blocked.\n6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.\n7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.\n8. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.\n9. In auto mode, read `.hyper/next-packet.md` after completion and continue only through the planned next command.\n10. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.\n\nUse `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.\n\nUse `hyper status --short` when the user wants the current stage, gate, proof, and next action without the full pressure ledger.\n\nUse `hyper migrate` when project state, growth rules, or generated candidates need to be refreshed after a CLI update.\n\nUse `hyper run --auto --until <stage> [focus]` only when the user wants packet-by-packet continuation toward a target stage. Auto mode still requires finish-gate evidence and does not silently advance stages.\n\nUse `hyper advance` only when `hyper status` says the stage gate is ready and the user accepts the stage change.\n\nUse `hyper doctor` when install, PATH, project state, SQLite, or Codex routing looks wrong.\n<!-- hyper-run:end -->\n"
+	return strings.Join([]string{
+		"<!-- hyper-run:start -->",
+		"## Hyper Run",
+		"",
+		"When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper status`, `$hyper status --short`, `$hyper migrate`, `$hyper advance`, `$hyper doctor`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.",
+		"",
+		"Use `.agents/skills/hyper/SKILL.md` as the thin Codex Desktop router. Keep product judgment, execution state, learning, and generated project knowledge in `plan.md`, `.hyper/`, and the `hyper` CLI rather than in static skill text.",
+		"",
+		"Method: Hyper Run is an evidence-first project growth protocol. Execution logs create pressure, pressure creates candidates, and repeated proof promotes project-specific structure.",
+		"",
+		"Protocol: Hyper Run runtime packets are agent-agnostic. Codex Desktop is one consumer, but the packet can be read by CLI agents and other coding assistants.",
+		"",
+		"Principles: No structure before pressure. No stage advancement without evidence. No harness before repeated need. No memory without reusable signal.",
+		"",
+		"Learn role: Learn is not a summary. It extracts what the project repeatedly needed, failed at, or proved from `evidence.md` and `next.md` so future runtime packets can change work boundaries, validation signals, stop conditions, readiness pressure, and capability candidates.",
+		"",
+		"Required workflow:",
+		"",
+		"1. Run `hyper run [focus]` only when a new runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target.",
+		"2. Read the generated runtime packet path from the CLI output, or read `.hyper/state.json` and use `current_goal_path`.",
+		"3. Read `.hyper/goals/<GOAL-ID>/goal.md` and `.hyper/goals/<GOAL-ID>/tasks.md`.",
+		"4. Implement the smallest coherent step that satisfies the current episode.",
+		"5. Run the safest available validation or record why validation is blocked.",
+		"6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.",
+		"7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.",
+		"8. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.",
+		"9. In auto mode, read `.hyper/next-packet.md` after completion and continue only through the planned next command.",
+		"10. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.",
+		"",
+		"Use `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.",
+		"",
+		"Use `hyper status --short` when the user wants the current stage, gate, proof, and next action without the full pressure ledger.",
+		"",
+		"Use `hyper migrate` when project state, growth rules, or generated candidates need to be refreshed after a CLI update.",
+		"",
+		"Use `hyper run --auto --until <stage> [focus]` to override the `plan.md` target. Auto mode still requires finish-gate evidence and does not silently advance stages.",
+		"",
+		"Use `hyper advance` only when `hyper status` says the stage gate is ready and the user accepts the stage change.",
+		"",
+		"Use `hyper doctor` when install, PATH, project state, SQLite, or Codex routing looks wrong.",
+		"<!-- hyper-run:end -->",
+		"",
+	}, "\n")
 }
 
 func replaceHyperRunSection(path, current, section string) *hyperError {
@@ -142,8 +184,8 @@ func hyperRouterSkillGuide() string {
 		"",
 		"Command mapping:",
 		"- `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.",
-		"- `$hyper run [focus]`: run `hyper run [focus]`, read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.",
-		"- `$hyper run --auto --until <stage> [focus]`: run `hyper run --auto --until <stage> [focus]`, then continue packet by packet using `.hyper/next-packet.md` until the target stage is reached or a guard stops progress.",
+		"- `$hyper run [focus]`: run `hyper run [focus]`; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target. Read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.",
+		"- `$hyper run --auto --until <stage> [focus]`: run `hyper run --auto --until <stage> [focus]` as an explicit target override, then continue packet by packet using `.hyper/next-packet.md` until the target stage is reached or a guard stops progress.",
 		"- `$hyper complete`: run `hyper complete` after evidence and next notes are written so project readiness is refreshed.",
 		"- `$hyper status`: run `hyper status` and use the dashboard to decide whether to complete, repair, advance, migrate, or start the next packet.",
 		"- `$hyper status --short`: run `hyper status --short` when the user wants only the current stage, gate, proof, and next action.",
@@ -154,7 +196,7 @@ func hyperRouterSkillGuide() string {
 		"- `hyper run [focus]`: treat this the same as `$hyper run [focus]` when the user is speaking inside Codex Desktop.",
 		"",
 		"Execution rules:",
-		"1. Run a CLI command only when a new or resumed runtime packet is needed.",
+		"1. Run a CLI command only when a new or resumed runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target.",
 		"2. Read the generated runtime packet in `goal.md` and the checklist in `tasks.md` before editing project files.",
 		"3. Keep implementation scoped to the current runtime episode.",
 		"4. Run the safest available validation, or record why validation is blocked.",
@@ -182,8 +224,8 @@ func hyperRunSkillGuide() string {
 		"Behavior:",
 		"- Treat `$hyper-run`, `$hyper run`, and `hyper run` as Codex-native workflow entry points for the current repository.",
 		"- Keep the growth order explicit: " + growthLoopDefinition,
-		"- Run `hyper run [focus]` when a new runtime packet is needed.",
-		"- Run `hyper run --auto --until <stage> [focus]` when the user wants packet-by-packet continuation toward a target stage.",
+		"- Run `hyper run [focus]` when a new runtime packet is needed; `plan.md` `Target Stage` makes plain `hyper run` use guarded auto continuation.",
+		"- Run `hyper run --auto --until <stage> [focus]` when the user wants to override the plan target.",
 		"- Read the generated runtime packet at `.hyper/goals/<GOAL-ID>/goal.md` and `tasks.md` before implementation.",
 		"- Implement the work directly in the current Codex session.",
 		"- Run the safest available validation or record why validation is blocked.",
@@ -232,7 +274,7 @@ func codexDesktopGuide() string {
 		"",
 		"## $hyper run",
 		"",
-		"1. Run `hyper run [focus]` in the project root.",
+		"1. Run `hyper run [focus]` in the project root. If `plan.md` has `Target Stage`, plain `hyper run` will use it as the guarded auto target.",
 		"2. Read the runtime packet path from stdout, or read `.hyper/state.json` and use `current_goal_path`.",
 		"3. Read the generated `goal.md` runtime packet and `tasks.md` checklist.",
 		"4. Work checkpoint by checkpoint toward the current episode.",
@@ -265,7 +307,7 @@ func codexDesktopGuide() string {
 }
 
 func hyperRunCommandGuide() string {
-	return "# $hyper run\n\nMeaning: create the next Hyper Run runtime packet, execute the current episode, record evidence, capture Learn signals, and let repeated pressure become future structure.\n\nGrowth order: " + growthLoopDefinition + "\n\nPrinciples: " + growthPrinciplesLine() + "\n\nRequired flow:\n\n1. Execute `hyper run [focus]`.\n2. Open the generated runtime packet under `.hyper/goals/<GOAL-ID>/`.\n3. Implement the smallest coherent step that satisfies the current episode in `goal.md`.\n4. Mark real progress in `evidence.md`, including validation, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.\n5. Write the next recommended runtime episode and Learn Notes in `next.md`.\n6. Execute `hyper complete` to close the packet and refresh Learn, Growth, and Readiness.\n\nCompletion requires implementation evidence, Learn signals where applicable, a next recommendation, and a completed Hyper packet.\n"
+	return "# $hyper run\n\nMeaning: create the next Hyper Run runtime packet, execute the current episode, record evidence, capture Learn signals, and let repeated pressure become future structure. If `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target and continues packet by packet through `.hyper/next-packet.md` until a guard stops progress.\n\nGrowth order: " + growthLoopDefinition + "\n\nPrinciples: " + growthPrinciplesLine() + "\n\nRequired flow:\n\n1. Execute `hyper run [focus]`.\n2. Open the generated runtime packet under `.hyper/goals/<GOAL-ID>/`.\n3. Implement the smallest coherent step that satisfies the current episode in `goal.md`.\n4. Mark real progress in `evidence.md`, including validation, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.\n5. Write the next recommended runtime episode and Learn Notes in `next.md`.\n6. Execute `hyper complete` to close the packet and refresh Learn, Growth, and Readiness.\n7. If the next packet plan says `run`, continue only through that planned command; if it says `advance` or `stop`, wait for user review.\n\nCompletion requires implementation evidence, Learn signals where applicable, a next recommendation, and a completed Hyper packet.\n"
 }
 
 func ensureMemoryFiles(root string) *hyperError {

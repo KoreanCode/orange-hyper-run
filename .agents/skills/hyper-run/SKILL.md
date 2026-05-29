@@ -10,8 +10,8 @@ Use this skill as the direct run entry point. For `$hyper run`, the router skill
 Behavior:
 - Treat `$hyper-run`, `$hyper run`, and `hyper run` as Codex-native workflow entry points for the current repository.
 - Keep the growth order explicit: Execution -> Evidence -> Pressure Ledger -> Candidate -> Structure when proven.
-- Run `hyper run [focus]` when a new runtime packet is needed.
-- Run `hyper run --auto --until <stage> [focus]` when the user wants packet-by-packet continuation toward a target stage.
+- Run `hyper run [focus]` when a new runtime packet is needed; `plan.md` `Target Stage` makes plain `hyper run` use guarded auto continuation.
+- Run `hyper run --auto --until <stage> [focus]` when the user wants to override the plan target.
 - Read the generated runtime packet at `.hyper/goals/<GOAL-ID>/goal.md` and `tasks.md` before implementation.
 - Implement the work directly in the current Codex session.
 - Run the safest available validation or record why validation is blocked.

@@ -22,9 +22,10 @@ type projectState struct {
 }
 
 type runOptions struct {
-	Focus        string
-	AutoContinue bool
-	RunUntil     string
+	Focus           string
+	AutoContinue    bool
+	RunUntil        string
+	RunTargetSource string
 }
 
 type episode struct {
