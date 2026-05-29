@@ -4330,6 +4330,34 @@ func TestReferenceBenchmarkNestedReferencesCountAsNamedReferences(t *testing.T) 
 	}
 }
 
+func TestReferenceBenchmarkBelowBaselineGapMustBeExplicitlyNonCritical(t *testing.T) {
+	deceptive := strings.Join([]string{
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Local-first notes app.",
+		"- References: Apple Notes, Notion, Obsidian.",
+		"- Baseline expectations: Users can create, edit, search, recover, and export notes from documented steps.",
+		"- Current comparison: create and search meet baseline; recovery is below baseline; export is above baseline.",
+		"- Below-baseline gaps: None of the recovery problems are fixed yet; recovery is below baseline for corrupted files.",
+		"- Above-baseline strength: local export proof is documented with command output.",
+		"- Decision: Service Quality is allowed only after recovery reaches the baseline.",
+	}, "\n")
+	blockedRecord := referenceBenchmarkRecordFromExample(t, deceptive)
+	if blockedRecord.Status == "covered" {
+		t.Fatalf("below-baseline gap hidden behind 'none' must not be covered: %+v", blockedRecord)
+	}
+	assertContains(t, blockedRecord.Quality, "no critical below-baseline gap")
+
+	nonCritical := strings.Replace(deceptive,
+		"None of the recovery problems are fixed yet; recovery is below baseline for corrupted files.",
+		"None critical; advanced recovery is below baseline but explicitly deferred as a non-goal for this service boundary.",
+		1)
+	allowedRecord := referenceBenchmarkRecordFromExample(t, nonCritical)
+	if allowedRecord.Status != "covered" {
+		t.Fatalf("explicit non-critical/deferred below-baseline gap should be covered, got %+v", allowedRecord)
+	}
+}
+
 func TestReferenceBenchmarkExampleDocsMatchParser(t *testing.T) {
 	body := readFile(t, filepath.Join("..", "..", "docs", "examples", "reference-benchmark.md"))
 	covered := markdownCodeBlockAfterHeading(t, body, "Covered Example")

@@ -40,6 +40,8 @@ covered인 이유:
 - above-baseline strength가 있습니다.
 - decision이 있고, 비교 결과를 다음 pressure로 바꿉니다.
 
+Below-baseline line에 below-baseline 영역이 언급된다면, 그 영역이 현재 service boundary에서 왜 critical하지 않은지 명시해야 합니다. 예를 들어 deferred, out of scope, explicit non-goal이어야 합니다.
+
 ## Emerging 예시
 
 ```md

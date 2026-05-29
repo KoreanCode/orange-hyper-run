@@ -40,6 +40,8 @@ Why this is covered:
 - It names one above-baseline strength.
 - It makes a decision and turns the comparison into next pressure.
 
+If the below-baseline line mentions a below-baseline area, it must explicitly say why that area is not critical for the current service boundary, for example because it is deferred, out of scope, or an explicit non-goal.
+
 ## Emerging Example
 
 ```md

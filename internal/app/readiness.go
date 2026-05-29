@@ -765,6 +765,24 @@ func noCriticalBelowBaselineGap(value string) bool {
 	if normalized == "" || isPlaceholder(normalized) {
 		return normalized == "none" || strings.HasPrefix(normalized, "none critical")
 	}
+	if hasAny(normalized, "pending", "todo") {
+		return false
+	}
+	if hasAny(normalized, "below baseline", "below-baseline") {
+		return hasAny(normalized,
+			"no critical",
+			"none critical",
+			"no core",
+			"not critical",
+			"non-goal",
+			"non goal",
+			"out of scope",
+			"deferred",
+			"explicit non-goal",
+			"not blocked",
+			"not blocking",
+		)
+	}
 	return hasAny(normalized, "none", "no critical", "no core", "no below baseline", "no below-baseline", "not blocked", "none blocking")
 }
 
