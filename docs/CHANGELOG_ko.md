@@ -2,7 +2,18 @@
 
 ## Unreleased
 
-- `v0.6.1` 동작 기준으로 README와 보조 문서를 갱신했습니다.
+아직 릴리즈되지 않은 변경은 없습니다.
+
+## v0.6.3 - 2026-05-29
+
+- 명시적인 `현재 단계` heading이 `0단계: 화면 검증` 같은 roadmap heading보다 우선되도록 plan parsing을 수정했습니다.
+- `state.json`에 저장된 오래된 stage가 `plan.md`와 다르면 `hyper status`와 `hyper doctor`가 refresh 경고를 보여줍니다.
+- `hyper migrate`가 저장된 stage를 갱신하고 `.hyper/next-packet.md`를 수정된 stage와 맞춥니다.
+
+## v0.6.2 - 2026-05-28
+
+- 오래된 프로젝트 상태를 다룰 때 `hyper doctor`와 `hyper status --short`의 action guidance를 개선했습니다.
+- `v0.6.x` 동작 기준으로 README와 보조 문서를 갱신했습니다.
 - 영문/한글 maintainer release checklist를 추가했습니다.
 - 업데이트 이후 확인 흐름과 문제 해결 흐름을 추가했습니다.
 - before/after 데모와 reference benchmark 예시를 보강했습니다.

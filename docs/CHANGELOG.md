@@ -2,7 +2,18 @@
 
 ## Unreleased
 
-- Refresh README and supporting docs for the `v0.6.1` behavior.
+No unreleased changes.
+
+## v0.6.3 - 2026-05-29
+
+- Fix plan parsing so explicit `Current Stage` headings win over roadmap headings such as `0단계: 화면 검증`.
+- Show a status/doctor refresh warning when `state.json` stores an old stage that differs from `plan.md`.
+- Refresh the stored stage during `hyper migrate` and keep `.hyper/next-packet.md` aligned with the corrected stage.
+
+## v0.6.2 - 2026-05-28
+
+- Improve `hyper doctor` and `hyper status --short` action guidance for stale project state.
+- Refresh README and supporting docs for the `v0.6.x` behavior.
 - Add maintainer release checklists in English and Korean.
 - Add update-after-install and troubleshooting flows.
 - Expand before/after demo and reference benchmark examples.

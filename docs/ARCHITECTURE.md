@@ -14,7 +14,7 @@ Hyper Run now keeps the executable entrypoint separate from product runtime logi
 
 This is the first package boundary. It removes product logic from `cmd/hyper` without changing behavior.
 
-As of `v0.6.1`, most domain behavior still lives in `internal/app`. That is intentional until repeated maintenance pressure proves the next stable package boundary.
+As of `v0.6.3`, most domain behavior still lives in `internal/app`. That is intentional until repeated maintenance pressure proves the next stable package boundary.
 
 Future package splits should happen only around proven pressure:
 

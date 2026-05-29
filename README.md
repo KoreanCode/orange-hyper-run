@@ -13,7 +13,7 @@ You keep a short `plan.md` in your project. `hyper run` turns that plan and the 
 
 The goal is simple: start from a small MVP and keep improving it without every AI session feeling like a reset.
 
-Current release: `v0.6.1`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, and verify release downloads with checksums plus optional cosign signatures.
+Current release: `v0.6.3`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
 
 The basic command is:
 
@@ -106,7 +106,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 
 `hyper run` keeps generating the next focused packet until the project reaches the stage you are aiming for.
 
-## What Is Current In v0.6.1
+## What Is Current In v0.6.3
 
 - `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
 - `hyper run --auto --until <stage>` plans continuation packet by packet through `.hyper/next-packet.md`. It does not silently advance stages.
@@ -114,6 +114,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 - Service Quality can require reference benchmark evidence: the project must meet its category baseline and show one concrete strength.
 - Installers and `hyper update` verify release checksums. If `cosign` is installed, signature verification also runs.
 - `hyper doctor` checks install state, project state, SQLite, Codex routing, signature capability, and whether `.hyper/next-packet.md` matches current state.
+- `hyper status` and `hyper doctor` detect when `state.json` has an old stage that no longer matches `plan.md`; `hyper migrate` refreshes it.
 
 ## Basic Flow
 
