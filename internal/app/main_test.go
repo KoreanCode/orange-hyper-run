@@ -22,6 +22,8 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "# Product Plan")
 	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Target Stage\n\nService Quality")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), "initialized")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_until": "Service Quality"`)
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_target_source": "plan.md Target Stage"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl")), "project_initialized")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper run")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper status --short")
@@ -448,7 +450,7 @@ func TestStatusShowsActionGuidance(t *testing.T) {
 	}
 	out := strings.Join(statusDashboardLines(state, derived, readiness, growthState{}, 1, 1), "\n")
 	assertContains(t, out, "Action:")
-	assertContains(t, out, "Next action: hyper run \"Prove the primary flow.\"")
+	assertContains(t, out, "Next action: hyper run 'Prove the primary flow.'")
 	assertContains(t, out, "Why now: Core UX is emerging.")
 	assertContains(t, out, "Do not do yet: Do not advance Tiny MVP until blocking readiness gaps are closed.")
 }
@@ -526,7 +528,7 @@ func TestStatusDoesNotShowFutureReferenceBenchmarkBeforeRequired(t *testing.T) {
 		NextPressure: readinessPressure{Axis: "stage_advancement", AxisName: "Stage advancement", Status: "candidate", Reason: "Tiny MVP gate is ready."},
 	}
 
-	dashboard := strings.Join(readinessDashboardLines(readiness), "\n")
+	dashboard := strings.Join(readinessDashboardLines(projectState{}, readiness), "\n")
 	assertNotContains(t, dashboard, "Reference benchmark")
 	assertNotContains(t, dashboard, "Benchmark:")
 	assertNotContains(t, dashboard, "Emerging axes: Reference benchmark")
@@ -970,6 +972,18 @@ func TestRunUsesPlanTargetStageAsDefaultAutoTarget(t *testing.T) {
 	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
 	assertContains(t, state, `"auto_continue": true`)
 	assertContains(t, state, `"run_until": "Service Quality"`)
+	assertContains(t, state, `"run_target_source": "plan.md Target Stage"`)
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Mode: auto until Service Quality")
+	assertContains(t, status.Stdout, "Target: Service Quality (plan.md Target Stage)")
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[OK] Target Stage: Service Quality from plan.md")
 
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary notes flow.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and revisit customer notes flow.\nData persistence: SQLite database stored a created customer note and confirmed the row after reload.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nHandle empty, failure, and edge states.\n")
@@ -978,8 +992,14 @@ func TestRunUsesPlanTargetStageAsDefaultAutoTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("complete failed: %v", err)
 	}
-	assertContains(t, complete.Stdout, "Next action: hyper run --auto --until 'Service Quality'")
+	assertContains(t, complete.Stdout, "Next action: hyper run 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Mode: auto until Service Quality")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Command: hyper run 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
+	status, err = runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status after complete failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Next: hyper run 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
 }
 
 func TestRunPlanTargetStageStopsWhenTargetAlreadyReached(t *testing.T) {
@@ -1051,6 +1071,11 @@ func TestRunInvalidPlanTargetStageFailsClearly(t *testing.T) {
 	}
 	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
 	assertContains(t, err.Message, "service-quality")
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor should report invalid target without crashing: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[FAIL] Target Stage: invalid `Enterprise Launch`")
 }
 
 func TestStatusAutoTargetReachedExplainsPause(t *testing.T) {

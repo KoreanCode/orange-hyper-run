@@ -7,6 +7,7 @@
 - Add Product satisfaction as a readiness axis for Beta, Service Quality, and Sustained Service Quality gates.
 - Add a no-drift runtime guard to packet work boundaries and stop conditions so agents record blockers instead of silently widening product direction.
 - Let `plan.md` define `Target Stage`, making plain `hyper run` default to guarded auto continuation toward that target.
+- Keep plan-target continuation commands as plain `hyper run`, while preserving `--auto --until` as an explicit override.
 - Add Codex Desktop continuation guidance to `.hyper/next-packet.md` so auto mode clearly says when to run, repair, advance, or stop.
 - Include next-packet continuation instructions in auto-mode `hyper run` and `hyper resume` Codex Desktop payloads.
 

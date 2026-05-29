@@ -18,6 +18,7 @@ type projectState struct {
 	Focus            string `json:"focus"`
 	AutoContinue     bool   `json:"auto_continue,omitempty"`
 	RunUntil         string `json:"run_until,omitempty"`
+	RunTargetSource  string `json:"run_target_source,omitempty"`
 	UpdatedAt        string `json:"updated_at"`
 }
 

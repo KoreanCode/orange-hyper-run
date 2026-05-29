@@ -67,7 +67,7 @@ plan.md
 
 ## Run Contract
 
-One CLI invocation of `hyper run` creates at most one runtime packet. If `plan.md` has `Target Stage`, plain `hyper run` enters guarded auto mode and writes the planned continuation command after each completed packet. The packet is complete when the executing agent has:
+One CLI invocation of `hyper run` creates at most one runtime packet. If `plan.md` has `Target Stage`, plain `hyper run` enters guarded auto mode and writes the planned continuation command after each completed packet. When that target comes from `plan.md`, the continuation command stays plain `hyper run`; `--auto --until` is reserved for explicit command-line overrides. The packet is complete when the executing agent has:
 
 - Read `plan.md`, `goal.md`, and `tasks.md`.
 - Checked the packet's `Stage Gate` and selected readiness pressure.

@@ -109,6 +109,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 ## What Is Current
 
 - `plan.md` can set `Target Stage`, so plain `hyper run` defaults to packet-by-packet continuation toward that target.
+- When the target comes from `plan.md`, the planned continuation command stays plain `hyper run`; `--auto --until` is only needed for an explicit one-off override.
 - `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
 - `hyper run --auto --until <stage>` still works as an explicit override. It does not silently advance stages.
 - `hyper advance` applies a stage change only after `hyper status` says the gate is ready and the user accepts it.
@@ -171,7 +172,7 @@ For longer Codex Desktop sessions, put the target in `plan.md`:
 Service Quality
 ```
 
-Then plain `hyper run` uses that target. You can still override it from the command line:
+Then plain `hyper run` uses that target, and `.hyper/next-packet.md` keeps the next command as `hyper run` so Codex Desktop can continue through the same product entrypoint. You can still override it from the command line:
 
 ```bash
 hyper run --auto --until service-quality "Keep upgrading this service"

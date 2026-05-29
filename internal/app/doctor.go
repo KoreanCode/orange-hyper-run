@@ -53,6 +53,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		} else {
 			checks = append(checks, doctorCheck{"plan.md", "OK", "product brief is present"})
 		}
+		checks = append(checks, doctorPlanTargetCheck(plan))
 	}
 
 	hyperPath := filepath.Join(root, hyperDir)
@@ -87,6 +88,18 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	lines = append(lines, "")
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func doctorPlanTargetCheck(plan map[string]string) doctorCheck {
+	value := firstRuntimeValue(plan["Target Stage"])
+	if value == "" {
+		return doctorCheck{"Target Stage", "OK", "not set; `hyper run` uses single-packet mode unless --until is provided"}
+	}
+	target, err := normalizeRunUntilTarget(value)
+	if err != nil {
+		return doctorCheck{"Target Stage", "FAIL", "invalid `" + value + "`; use tiny-mvp, usable-mvp, beta, service-quality, or sustained-service-quality"}
+	}
+	return doctorCheck{"Target Stage", "OK", target + " from plan.md"}
 }
 
 func doctorSignatureCheck() doctorCheck {

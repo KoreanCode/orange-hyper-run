@@ -58,6 +58,7 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		state.PlanPath = planFile
 		state.PlanHash = planHash
 		state.UpdatedAt = now
+		state = applyPlanTargetToState(state, episode.Plan)
 	} else {
 		state = projectState{
 			Project:          firstNonBlank(episode.Plan["Product"], "Unknown project"),
@@ -68,6 +69,7 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			PlanHash:         planHash,
 			UpdatedAt:        now,
 		}
+		state = applyPlanTargetToState(state, episode.Plan)
 	}
 	if err := writeJSON(filepath.Join(root, hyperDir, "state.json"), state); err != nil {
 		return commandOutput{}, err
@@ -90,6 +92,7 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	lines := []string{
 		"Project: " + state.Project,
 		"Stage: " + state.Stage,
+		statusRunTargetLine(state),
 		"Stage contract: " + stageGrowthContract(state.Stage),
 		"Status: " + state.Status,
 		"Method: " + growthRuntimeDefinition,
@@ -106,7 +109,11 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if planCandidatePath != "" {
 		lines = append(lines, "Plan import candidates: "+planCandidatePath)
 	}
-	next := []string{"  Fill in plan.md", "  hyper run [focus]"}
+	nextRun := "  hyper run [focus]"
+	if state.AutoContinue && state.RunTargetSource == planTargetStageSource {
+		nextRun = "  hyper run"
+	}
+	next := []string{"  Fill in plan.md", nextRun}
 	if hasActiveGoal {
 		next = []string{"  hyper resume"}
 	}
@@ -247,6 +254,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 		Focus:            focus,
 		AutoContinue:     opts.AutoContinue,
 		RunUntil:         opts.RunUntil,
+		RunTargetSource:  opts.RunTargetSource,
 		UpdatedAt:        now,
 	}
 	handoff := createExecutionHandoff(runID, goalID, state.AutoContinue)
@@ -585,6 +593,7 @@ func runUntilStopState(previous projectState, opts runOptions, planBody string, 
 	state.PlanHash = hashText(planBody)
 	state.AutoContinue = true
 	state.RunUntil = opts.RunUntil
+	state.RunTargetSource = opts.RunTargetSource
 	state.UpdatedAt = nowISO()
 	return state
 }

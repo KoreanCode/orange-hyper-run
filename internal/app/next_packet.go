@@ -36,20 +36,14 @@ func buildNextPacketPlan(state projectState, derived goalState, readiness readin
 		}
 	}
 	if readiness.NextPressure.RecommendedGoal != "" {
-		command := "hyper run " + quoteCommandArg(readiness.NextPressure.RecommendedGoal)
-		if state.AutoContinue {
-			command = autoRunCommand(state, readiness.NextPressure.RecommendedGoal)
-		}
+		command := nextRunCommand(state, readiness.NextPressure.RecommendedGoal)
 		return plannedNextPacket{
 			Action:  "run",
 			Command: command,
 			Reason:  readiness.NextPressure.Reason,
 		}
 	}
-	command := "hyper run [next focus]"
-	if state.AutoContinue {
-		command = autoRunCommand(state, "")
-	}
+	command := nextRunCommand(state, "")
 	return plannedNextPacket{
 		Action:  "run",
 		Command: command,
@@ -130,6 +124,17 @@ func autoRunCommand(state projectState, focus string) string {
 	if state.RunUntil != "" {
 		parts = append(parts, "--until", quoteCommandArg(state.RunUntil))
 	}
+	if strings.TrimSpace(focus) != "" {
+		parts = append(parts, quoteCommandArg(focus))
+	}
+	return strings.Join(parts, " ")
+}
+
+func nextRunCommand(state projectState, focus string) string {
+	if state.AutoContinue && state.RunTargetSource != planTargetStageSource {
+		return autoRunCommand(state, focus)
+	}
+	parts := []string{"hyper", "run"}
 	if strings.TrimSpace(focus) != "" {
 		parts = append(parts, quoteCommandArg(focus))
 	}

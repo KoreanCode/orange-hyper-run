@@ -32,6 +32,7 @@ func refreshStateFromPlanForStatus(root string, state projectState) projectState
 	if strings.TrimSpace(state.Stage) == "" {
 		state.Stage = normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
 	}
+	state = applyPlanTargetToState(state, plan)
 	return state
 }
 
@@ -53,6 +54,7 @@ func statusDashboardLinesWithRefresh(state projectState, derived goalState, read
 		"Project: " + project,
 		"Stage: " + stage,
 		"Run mode: " + stateRunMode(state),
+		statusRunTargetLine(state),
 		"Stage contract: " + stageGrowthContract(stage),
 		"Method: " + growthRuntimeDefinition,
 		"Protocol: " + runtimeProtocolDefinition,
@@ -83,7 +85,7 @@ func statusDashboardLinesWithRefresh(state projectState, derived goalState, read
 	lines = append(lines, "")
 	lines = append(lines, pressureDashboardLines(growth)...)
 	lines = append(lines, "")
-	lines = append(lines, readinessDashboardLines(readiness)...)
+	lines = append(lines, readinessDashboardLines(state, readiness)...)
 	lines = append(lines,
 		"",
 		"Next:",
@@ -112,6 +114,7 @@ func statusShortLinesWithRefresh(state projectState, derived goalState, readines
 		"Project: " + project,
 		"Stage: " + stage,
 		"Mode: " + stateRunMode(state),
+		statusRunTargetLine(state),
 		"Gate: " + readinessGateSummary(readiness),
 		"Proof: " + proofStatusSummary(derived, readiness),
 		"Packet: " + shortPacketSummary(state, derived),
@@ -143,6 +146,17 @@ func stateRunMode(state projectState) string {
 		return "auto until " + state.RunUntil
 	}
 	return "auto"
+}
+
+func statusRunTargetLine(state projectState) string {
+	if strings.TrimSpace(state.RunUntil) == "" {
+		return "Target: none"
+	}
+	source := strings.TrimSpace(state.RunTargetSource)
+	if source == "" {
+		return "Target: " + state.RunUntil
+	}
+	return "Target: " + state.RunUntil + " (" + source + ")"
 }
 
 func shortPacketSummary(state projectState, derived goalState) string {
@@ -531,7 +545,7 @@ func candidateDisplayPrefix(candidate growthCandidate) string {
 	return strings.ToLower(strings.TrimSpace(candidate.Kind))
 }
 
-func readinessDashboardLines(readiness readinessState) []string {
+func readinessDashboardLines(state projectState, readiness readinessState) []string {
 	if readiness.Version == 0 {
 		return []string{"Readiness: not recorded"}
 	}
@@ -575,7 +589,7 @@ func readinessDashboardLines(readiness readinessState) []string {
 	if readiness.NextPressure.Axis == "stage_advancement" || readiness.StageGate.Advancement.Candidate {
 		lines = append(lines, "  Recommended action: hyper advance")
 	} else if readiness.NextPressure.RecommendedGoal != "" {
-		lines = append(lines, "  Recommended run: hyper run \""+compactText(readiness.NextPressure.RecommendedGoal, 120)+"\"")
+		lines = append(lines, "  Recommended run: "+nextRunCommand(state, compactText(readiness.NextPressure.RecommendedGoal, 120)))
 	}
 	return lines
 }
@@ -642,6 +656,9 @@ func statusNextCommandWithRefresh(state projectState, derived goalState, readine
 		if state.AutoContinue && runUntilReached(state, readiness) {
 			return "hyper status --short"
 		}
+		if state.AutoContinue {
+			return nextRunCommand(state, "")
+		}
 		return "hyper run [focus]"
 	}
 	if derived.State == "active" {
@@ -654,13 +671,10 @@ func statusNextCommandWithRefresh(state projectState, derived goalState, readine
 		return "hyper advance"
 	}
 	if readiness.NextPressure.RecommendedGoal != "" {
-		if state.AutoContinue {
-			return autoRunCommand(state, readiness.NextPressure.RecommendedGoal)
-		}
-		return "hyper run \"" + compactText(readiness.NextPressure.RecommendedGoal, 120) + "\""
+		return nextRunCommand(state, compactText(readiness.NextPressure.RecommendedGoal, 120))
 	}
 	if state.AutoContinue {
-		return autoRunCommand(state, "")
+		return nextRunCommand(state, "")
 	}
 	return "hyper run [next focus]"
 }

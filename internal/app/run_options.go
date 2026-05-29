@@ -4,6 +4,8 @@ import (
 	"strings"
 )
 
+const planTargetStageSource = "plan.md Target Stage"
+
 func parseRunOptions(args []string) (runOptions, *hyperError) {
 	opts := runOptions{}
 	focus := []string{}
@@ -52,7 +54,7 @@ func applyDefaultRunTarget(opts runOptions, plan map[string]string, previous pro
 		}
 		opts.AutoContinue = true
 		opts.RunUntil = target
-		opts.RunTargetSource = "plan.md Target Stage"
+		opts.RunTargetSource = planTargetStageSource
 		return opts, nil
 	}
 	if opts.AutoContinue && previous.AutoContinue && strings.TrimSpace(previous.RunUntil) != "" {
@@ -62,6 +64,20 @@ func applyDefaultRunTarget(opts runOptions, plan map[string]string, previous pro
 		return opts, nil
 	}
 	return opts, nil
+}
+
+func applyPlanTargetToState(state projectState, plan map[string]string) projectState {
+	if strings.TrimSpace(state.RunUntil) != "" {
+		return state
+	}
+	target, ok, err := planRunTarget(plan)
+	if err != nil || !ok {
+		return state
+	}
+	state.AutoContinue = true
+	state.RunUntil = target
+	state.RunTargetSource = planTargetStageSource
+	return state
 }
 
 func planRunTarget(plan map[string]string) (string, bool, *hyperError) {

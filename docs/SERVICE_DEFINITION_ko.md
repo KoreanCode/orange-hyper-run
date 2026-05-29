@@ -67,7 +67,7 @@ plan.md
 
 ## Run Contract
 
-CLI에서 `hyper run`을 한 번 실행하면 최대 하나의 runtime packet을 만듭니다. `plan.md`에 `Target Stage`가 있으면 plain `hyper run`은 guarded auto mode로 들어가고, 각 packet이 완료될 때마다 다음 continuation 명령을 기록합니다. 그 packet은 실행 agent가 다음을 완료했을 때 끝난 것으로 봅니다.
+CLI에서 `hyper run`을 한 번 실행하면 최대 하나의 runtime packet을 만듭니다. `plan.md`에 `Target Stage`가 있으면 plain `hyper run`은 guarded auto mode로 들어가고, 각 packet이 완료될 때마다 다음 continuation 명령을 기록합니다. 목표가 `plan.md`에서 왔을 때 continuation 명령은 계속 plain `hyper run`으로 유지하고, `--auto --until`은 명령어에서 직접 override할 때만 사용합니다. 그 packet은 실행 agent가 다음을 완료했을 때 끝난 것으로 봅니다.
 
 - `plan.md`, `goal.md`, `tasks.md`를 읽었습니다.
 - packet의 `Stage Gate`와 selected readiness pressure를 확인했습니다.
