@@ -53,7 +53,7 @@ What you actually touch:
 | `review.md` | What must be fixed if `hyper complete` decides the packet is not done yet. |
 | `next.md` | The one next recommended step and reusable lessons. |
 | `hyper complete` | Closes the packet, checks the evidence, and prepares the next step. |
-| `.hyper/next-packet.md` | The planned next command, used by auto mode and checked by `hyper doctor`. |
+| `.hyper/next-packet.md` | The planned next command plus Codex continuation guidance, used by auto mode and checked by `hyper doctor`. |
 | `hyper status --short` | Shows the current stage, blocker, and next action. |
 
 ## How It Grows
@@ -180,6 +180,8 @@ hyper run --auto --until service-quality "Keep upgrading this service"
 Use `Target Stage: Sustained Service Quality` or `--until sustained-service-quality` when the goal is to keep planning packets after Service Quality and focus on repeatable validators, operational handoff, and friction reduction.
 
 Auto mode does not skip proof or silently advance stages. It keeps the next packet command planned in `.hyper/next-packet.md`; stage changes still require explicit acceptance with `hyper advance`.
+
+`.hyper/next-packet.md` also tells Codex Desktop whether to continue with the next `run`, pause for `hyper advance`, repair the current packet, or stop because the target was reached.
 
 In Codex Desktop you can use the same idea as a project command:
 

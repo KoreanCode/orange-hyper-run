@@ -7,6 +7,7 @@
 - Product satisfaction을 Beta, Service Quality, Sustained Service Quality gate의 readiness axis로 추가했습니다.
 - agent가 제품 방향을 조용히 넓히지 않고 blocker로 기록하도록 runtime packet의 work boundary와 stop condition에 no-drift guard를 추가했습니다.
 - `plan.md`에 `Target Stage`를 정의하면 plain `hyper run`이 그 목표까지 guarded auto continuation으로 동작하게 했습니다.
+- `.hyper/next-packet.md`에 Codex Desktop continuation 안내를 추가해 auto mode가 run, repair, advance, stop 중 무엇을 해야 하는지 더 명확하게 했습니다.
 
 ## v0.6.3 - 2026-05-29
 

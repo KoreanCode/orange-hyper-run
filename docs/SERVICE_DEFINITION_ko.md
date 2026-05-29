@@ -78,7 +78,7 @@ CLI에서 `hyper run`을 한 번 실행하면 최대 하나의 runtime packet을
 - `hyper complete`를 실행해 Learn, Growth, Readiness가 완료된 packet 기준으로 갱신되었습니다.
 - destructive action, missing credentials, unclear product scope, repeated validation failure 앞에서 멈췄습니다.
 
-`hyper run`을 unchecked background loop로 보면 안 됩니다. 길게 이어지는 부분은 packet 단위 continuation입니다. 하나의 packet을 만들고, 실행하고, evidence를 확인하고, 학습한 뒤, guard가 허용할 때만 `.hyper/next-packet.md`의 다음 명령을 따릅니다. 이전 active packet의 evidence가 아직 pending이면 새 `hyper run`은 차단됩니다.
+`hyper run`을 unchecked background loop로 보면 안 됩니다. 길게 이어지는 부분은 packet 단위 continuation입니다. 하나의 packet을 만들고, 실행하고, evidence를 확인하고, 학습한 뒤, guard가 허용할 때만 `.hyper/next-packet.md`의 다음 명령을 따릅니다. 이 파일에는 다음 명령뿐 아니라 Codex Desktop continuation 안내도 들어갑니다. 이전 active packet의 evidence가 아직 pending이면 새 `hyper run`은 차단됩니다.
 
 ## Learn 역할
 

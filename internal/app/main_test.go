@@ -2787,6 +2787,29 @@ func TestNextPacketRunCommandKeepsFullRecommendedGoal(t *testing.T) {
 	}
 	assertContains(t, plan.Command, "`Store.Add`")
 	assertContains(t, plan.Command, "future error handling should return persistence failures")
+
+	body := renderNextPacketPlan(state, readiness, plan)
+	assertContains(t, body, "## Codex Desktop Continuation")
+	assertContains(t, body, "Continue automatically by running the command above")
+	assertContains(t, nextPacketPlanCommand(body), plan.Command)
+}
+
+func TestNextPacketCodexContinuationExplainsNonRunActions(t *testing.T) {
+	cases := []struct {
+		action   string
+		command  string
+		expected string
+	}{
+		{"advance", "hyper advance", "only after the user accepts the stage change"},
+		{"complete-current", "hyper complete", "Stay in the current runtime packet"},
+		{"stop", "hyper status --short", "Stop the auto loop"},
+	}
+	for _, tc := range cases {
+		body := renderNextPacketPlan(projectState{}, readinessState{}, plannedNextPacket{Action: tc.action, Command: tc.command, Reason: "test"})
+		assertContains(t, body, "## Codex Desktop Continuation")
+		assertContains(t, body, tc.expected)
+		assertContains(t, nextPacketPlanCommand(body), tc.command)
+	}
 }
 
 func TestOpenFailureFinishGateAcceptsClosureEvidence(t *testing.T) {

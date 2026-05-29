@@ -78,7 +78,7 @@ One CLI invocation of `hyper run` creates at most one runtime packet. If `plan.m
 - Run `hyper complete` so Learn, Growth, and Readiness refresh from the completed packet.
 - Stopped before destructive actions, missing credentials, unclear product scope, or repeated validation failure.
 
-`hyper run` should not be treated as an unchecked background loop. The long-running part is packet-by-packet continuation: create one packet, execute it, check evidence, learn, then follow `.hyper/next-packet.md` only if the guard allows it. A new `hyper run` is blocked while the previous active packet still has pending evidence.
+`hyper run` should not be treated as an unchecked background loop. The long-running part is packet-by-packet continuation: create one packet, execute it, check evidence, learn, then follow `.hyper/next-packet.md` only if the guard allows it. That file includes both the next command and Codex Desktop continuation guidance. A new `hyper run` is blocked while the previous active packet still has pending evidence.
 
 ## Learn Role
 

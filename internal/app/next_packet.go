@@ -88,6 +88,10 @@ func renderNextPacketPlan(state projectState, readiness readinessState, plan pla
 		"",
 		nextPacketGuard(plan),
 		"",
+		"## Codex Desktop Continuation",
+		"",
+		nextPacketCodexContinuation(plan),
+		"",
 	}, "\n")
 }
 
@@ -101,6 +105,21 @@ func nextPacketGuard(plan plannedNextPacket) string {
 		return "Create the next runtime packet only after the current packet has passed the finish gate and completed."
 	case "stop":
 		return "Run-until target is reached. Review status before choosing a new target."
+	default:
+		return "Review `hyper status --short` before continuing."
+	}
+}
+
+func nextPacketCodexContinuation(plan plannedNextPacket) string {
+	switch plan.Action {
+	case "advance":
+		return "Pause here. Tell the user the stage gate is ready and run `hyper advance` only after the user accepts the stage change."
+	case "complete-current":
+		return "Stay in the current runtime packet. Fix evidence, next notes, and review findings, then run `hyper complete` again."
+	case "run":
+		return "Continue automatically by running the command above, then read the newly generated runtime packet and execute it checkpoint by checkpoint."
+	case "stop":
+		return "Stop the auto loop. Report the current status and wait for the user to choose a new target or a manual follow-up packet."
 	default:
 		return "Review `hyper status --short` before continuing."
 	}
