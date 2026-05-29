@@ -876,11 +876,45 @@ func TestCompleteAllowsEmergingSustainedQualityEvidence(t *testing.T) {
 	if _, err := runCLI(args("run", "Repeat handoff validation"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nSustained quality: Repeated runtime evidence exists for the same handoff validation pattern, but it is not active required behavior yet.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nSustained quality: Repeated runtime evidence exists for the same handoff validation pattern, but it is not active required behavior yet.\n\n"+serviceQualitySelfReviewPass()+"\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRepeat validation again.\n")
 
 	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("emerging sustained quality evidence should allow packet closure: %v", err)
+	}
+}
+
+func TestCompleteServiceQualityRequiresPassingSelfReview(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nLocal Build Relay\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one handoff command.\n\n## Current Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nEvery packet proves the handoff command.\n")
+	if _, err := runCLI(args("run", "Improve handoff quality"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	evidencePath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md")
+	nextPath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md")
+	baseEvidence := "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and is repeatable.\n\n"
+	writeFile(t, evidencePath, baseEvidence+"## Blocker\n\nNone blocking.\n")
+	writeFile(t, nextPath, "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nContinue improving handoff quality.\n")
+
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err == nil {
+		t.Fatal("expected missing self review to fail Service Quality finish gate")
+	} else {
+		assertContains(t, err.Message, "Self Review")
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: failed")
+
+	writeFile(t, evidencePath, baseEvidence+"## Self Review\n\nPlan alignment: Matches the CLI handoff plan.\nCore loop quality: The handoff command works but the output is still awkward.\nProduct satisfaction: needs work before it feels service-quality.\nNo drift: Stayed inside CLI handoff scope.\nValidation match: `go test ./...` matches the changed behavior.\nVerdict: fail; fix the awkward output before closing.\n\n## Blocker\n\nNone blocking.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err == nil {
+		t.Fatal("expected failing self review verdict to fail Service Quality finish gate")
+	} else {
+		assertContains(t, err.Message, "Self Review verdict is fail")
+	}
+
+	writeFile(t, evidencePath, baseEvidence+serviceQualitySelfReviewPass()+"\n## Blocker\n\nNone blocking.\n")
+	if out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("passing self review should allow Service Quality completion: %v", err)
+	} else {
+		assertContains(t, out.Stdout, "Finish gate: passed")
 	}
 }
 
@@ -1007,7 +1041,7 @@ func TestRunAutoUntilSustainedQualityPromotesActiveValidator(t *testing.T) {
 	}
 	validation := "`./check.sh` passed with output: `release-note add/list/error smoke passed`."
 	writeEvidence := func(goalID, readiness string) {
-		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "evidence.md"), "# "+goalID+" Evidence\n\n## Validation\n\n"+validation+"\n\n## Readiness Evidence\n\n"+readiness+"\n\n## Active Capability Evidence\n\nNo active project capability required yet.\n\n## Changed Files\n\nfixture\n\n## Decisions\n\nKeep the local CLI boundary.\n\n## Reusable Patterns\n\nUse `./check.sh` as the repeated validation path.\n\n## Blockers\n\nNone blocking.\n")
+		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "evidence.md"), "# "+goalID+" Evidence\n\n## Validation\n\n"+validation+"\n\n## Readiness Evidence\n\n"+readiness+"\n\n"+serviceQualitySelfReviewPass()+"\n## Active Capability Evidence\n\nNo active project capability required yet.\n\n## Changed Files\n\nfixture\n\n## Decisions\n\nKeep the local CLI boundary.\n\n## Reusable Patterns\n\nUse `./check.sh` as the repeated validation path.\n\n## Blockers\n\nNone blocking.\n")
 		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "next.md"), "# "+goalID+" Next\n\n## Recommended Next Goal\n\nContinue toward sustained quality.\n\n## Learn Notes\n\n- pattern: Use `./check.sh` as the repeated validation path.\n")
 	}
 	complete := func(goalID string) string {
@@ -3258,6 +3292,15 @@ func TestAdvanceToSustainedServiceQualityDoesNotLoop(t *testing.T) {
 		"- Above-baseline strength: packet evidence loop.",
 		"- Decision: Service Quality proof can continue.",
 		"",
+		"## Self Review",
+		"",
+		"Plan alignment: The result stays inside the local developer handoff CLI plan.",
+		"Core loop quality: The handoff command remains coherent and repeatable.",
+		"Product satisfaction: The operator-facing result is acceptable for sustained quality advancement.",
+		"No drift: No broad feature or non-goal expansion was introduced.",
+		"Validation match: `go test ./...` and active validator evidence match the result.",
+		"Verdict: pass; the packet is service-quality enough to close.",
+		"",
 		"## Active Capability Evidence",
 		"",
 		"validator-go-test: `go test ./...` passed.",
@@ -3829,12 +3872,17 @@ func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T
 
 	serviceEvidence := buildEvidenceDoc("GOAL-0001", "Service Quality", readinessState{}, growthState{})
 	assertContains(t, serviceEvidence, "## Reference Benchmark Evidence")
+	assertContains(t, serviceEvidence, "## Self Review")
+	assertContains(t, serviceEvidence, "Product satisfaction: Pending")
+	assertContains(t, serviceEvidence, "Verdict: Pending")
 
 	tinyEvidence := buildEvidenceDoc("GOAL-0001", "Tiny MVP", readinessState{}, growthState{})
 	assertNotContains(t, tinyEvidence, "## Reference Benchmark Evidence")
+	assertNotContains(t, tinyEvidence, "## Self Review")
 
 	tasks := buildTasksDoc("GOAL-0001", "Web app", "Service Quality", readinessState{}, growthState{})
 	assertContains(t, tasks, "Fill Reference Benchmark Evidence")
+	assertContains(t, tasks, "Fill Self Review")
 }
 
 func TestReferenceBenchmarkTemplateWaitsForPressure(t *testing.T) {
@@ -4210,6 +4258,10 @@ func mustInitWithPlan(t *testing.T, root, product, focus string) {
 
 func testPlan(product, focus string) string {
 	return "# Product Plan\n\n## Product\n\n" + product + "\n\n## Target Users\n\nSolo builders\n\n## MVP\n\n" + focus + "\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nCLI\n\n## Non-goals\n\nProduction hardening\n\n## Constraints\n\nLocal first\n\n## Success Criteria\n\nOne useful flow works\n\n## Current Focus\n\n" + focus + "\n"
+}
+
+func serviceQualitySelfReviewPass() string {
+	return "## Self Review\n\nPlan alignment: The result still matches plan.md scope and current stage.\nCore loop quality: The core loop is coherent for this packet.\nProduct satisfaction: The visible or operational result is acceptable for this service-quality packet.\nNo drift: No broad feature expansion or non-goal drift was introduced.\nValidation match: Validation evidence matches the actual result.\nVerdict: pass; the packet is service-quality enough to close.\n"
 }
 
 func args(values ...string) []string {

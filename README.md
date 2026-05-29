@@ -158,6 +158,8 @@ flowchart TD
 
 `hyper complete` checks the packet before saving lessons. If validation, stage evidence, active checks, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps you in the same packet.
 
+For Service Quality and Sustained Service Quality packets, the evidence must also include a Self Review. Hyper Run expects the agent to judge plan alignment, core loop quality, product satisfaction, no drift, validation match, and an explicit `Verdict: pass`. A `fail` verdict keeps the same packet open for repair.
+
 For longer Codex Desktop sessions, start with an auto target:
 
 ```bash

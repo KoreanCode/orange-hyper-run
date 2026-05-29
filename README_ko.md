@@ -158,6 +158,8 @@ flowchart TD
 
 `hyper complete`는 배운 점을 저장하기 전에 packet을 먼저 확인합니다. validation, stage evidence, active check, `next.md`가 부족하면 현재 packet의 `review.md`에 보강할 내용을 남기고 같은 packet에 머무르게 합니다.
 
+Service Quality와 Sustained Service Quality packet에서는 Self Review도 필요합니다. Hyper Run은 agent가 plan alignment, core loop quality, product satisfaction, no drift, validation match를 직접 판단하고 `Verdict: pass`를 남기길 요구합니다. `fail`이면 같은 packet을 열어둔 채 재작업하게 됩니다.
+
 Codex Desktop에서 더 긴 세션을 돌릴 때는 목표 stage를 지정할 수 있습니다.
 
 ```bash

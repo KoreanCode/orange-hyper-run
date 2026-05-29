@@ -50,6 +50,10 @@ func runFinishGate(root string, state projectState, derived goalState, readiness
 		result.Status = "failed"
 		result.Findings = append(result.Findings, finding)
 	}
+	if finding := selfReviewFinishGateFinding(state.Stage, readiness, evidenceText); finding != "" {
+		result.Status = "failed"
+		result.Findings = append(result.Findings, finding)
+	}
 
 	result.Review = renderFinishGateReview(result, state, derived, readiness)
 	if err := writeText(filepath.Join(goalDir, "review.md"), result.Review); err != nil {

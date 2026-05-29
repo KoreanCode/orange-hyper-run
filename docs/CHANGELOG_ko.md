@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-아직 릴리즈되지 않은 변경은 없습니다.
+- Service Quality Self Review gate를 추가했습니다. packet 완료 전에 plan alignment, core loop quality, product satisfaction, no drift, validation match, pass/fail verdict를 요구합니다.
+- Self Review verdict가 `fail`이면 Service Quality packet을 닫지 않고 같은 packet에서 재작업하게 합니다.
 
 ## v0.6.3 - 2026-05-29
 

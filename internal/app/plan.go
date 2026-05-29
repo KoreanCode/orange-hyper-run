@@ -947,6 +947,7 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 - Readiness evidence in axis-slot format, for example "%s: proof"
 - Active capability evidence when required validators are present
 - Surface proof evidence when this packet changes a user-facing screen or flow
+- Self Review evidence when the packet is in Service Quality or Sustained Service Quality
 - Changed file summary
 - Decisions that should persist into future runs
 - Reusable patterns that should guide similar future work
@@ -1000,6 +1001,9 @@ func doneChecklistDoc(stage string, readiness readinessState, growth growthState
 	if strings.Contains(normalizeLabel(stage), "beta") || strings.Contains(normalizeLabel(stage), "service") {
 		lines = append(lines, "- Stop conditions cover failure, regression, and missing credential cases found during this packet.")
 	}
+	if line := selfReviewChecklistLine(stage, readiness); line != "" {
+		lines = append(lines, line)
+	}
 	if referenceBenchmarkRequired(stage, readiness) {
 		lines = append(lines, "- Reference Benchmark Evidence lists 3-5 references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and the next pressure.")
 	}
@@ -1017,6 +1021,9 @@ func proofContractDoc(stage, buildStyle string, readiness readinessState) string
 		lines = append(lines,
 			"- Surface proof should name the affected surface, primary user action, checked states, viewport(s), screenshot or browser smoke evidence, and remaining surface gaps.",
 		)
+	}
+	if line := selfReviewProofLine(stage, readiness); line != "" {
+		lines = append(lines, line)
 	}
 	normalizedStage := normalizeLabel(stage)
 	if strings.Contains(normalizedStage, "tiny") && strings.Contains(normalizedStage, "mvp") {
@@ -1137,6 +1144,7 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if referenceBenchmarkRequired(stage, readiness) {
 		referenceTask = "- [ ] Fill Reference Benchmark Evidence with category references, baseline expectations, current comparison, and blocking gaps\n"
 	}
+	selfReviewTask := selfReviewTaskLine(stage, readiness)
 	readinessTask := ""
 	if readiness.NextPressure.AxisName != "" {
 		readinessTask = "- [ ] Fill the `" + readiness.NextPressure.AxisName + ":` readiness evidence slot with concrete proof\n"
@@ -1145,11 +1153,11 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if activeStructureCount(growth.Candidates) > 0 {
 		activeTask = "- [ ] Run or explicitly block every active capability listed in goal.md\n"
 	}
-	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, readinessTask, activeTask)
+	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, selfReviewTask, readinessTask, activeTask)
 }
 
 func buildEvidenceDoc(goalID, stage string, readiness readinessState, growth growthState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), selfReviewEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
 }
 
 func activeCapabilityEvidenceTemplate(growth growthState) string {

@@ -36,6 +36,7 @@ Hyper Run promises a small, repeatable project loop:
 - A local evidence and learning layer backed by files and SQLite.
 - A service-readiness gate that keeps tiny MVP work moving toward usable, beta, and service-quality stages.
 - A finish gate that blocks the next packet until evidence and next-step notes are good enough or a real blocker is recorded.
+- A Self Review gate for Service Quality and Sustained Service Quality packets, so working code is not treated as enough when product satisfaction, core loop quality, or plan alignment is still weak.
 - A harness-less starting point that can later create project-specific harnesses when the evidence shows they are useful.
 
 ## What Hyper Run Is Not

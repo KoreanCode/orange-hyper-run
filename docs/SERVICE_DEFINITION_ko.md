@@ -36,6 +36,7 @@ Hyper Run이 보장하려는 loop는 작고 반복 가능합니다.
 - 파일과 SQLite 기반의 로컬 evidence/learning layer
 - tiny MVP 작업이 usable, beta, service-quality stage로 이어지도록 하는 service-readiness gate
 - evidence와 next-step note가 충분하거나 실제 blocker가 기록될 때까지 다음 packet을 막는 finish gate
+- Service Quality와 Sustained Service Quality packet에서 동작 여부만으로 충분하다고 보지 않고 product satisfaction, core loop quality, plan alignment를 직접 판단하게 하는 Self Review gate
 - 프로젝트가 충분히 성장한 뒤 필요한 harness를 만들 수 있게 하는 harness-less starting point
 
 ## Hyper Run이 아닌 것

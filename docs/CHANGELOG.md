@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-No unreleased changes.
+- Add a Service Quality Self Review gate that requires plan alignment, core loop quality, product satisfaction, no drift, validation match, and an explicit pass/fail verdict before packet completion.
+- Keep Service Quality packets open for repair when the Self Review verdict is `fail`.
 
 ## v0.6.3 - 2026-05-29
 
