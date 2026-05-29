@@ -339,6 +339,11 @@ func readinessEvidenceRecordsFromGoalText(goalID, evidenceText string) []readine
 		}
 		records = append(records, inferReadinessEvidenceFromSurfaceLine(goalID, line)...)
 	}
+	for _, line := range usefulSectionLines(evidenceText, "Self Review") {
+		if record, ok := parseReadinessEvidenceLine(goalID, line, defs); ok {
+			records = append(records, record)
+		}
+	}
 	records = append(records, inferReadinessEvidenceFromReferenceBenchmark(goalID, usefulSectionLines(evidenceText, "Reference Benchmark Evidence"))...)
 	return records
 }

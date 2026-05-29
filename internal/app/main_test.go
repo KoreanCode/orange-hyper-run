@@ -2283,6 +2283,7 @@ func TestStatusReflectsManualActiveCapabilityBeforeMigrate(t *testing.T) {
 		"Deployment readiness: Built the CLI binary and ran the smoke command outside the development command.",
 		"Operations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command.",
 		"Maintainability: Table-driven validation helper keeps command checks repeatable without hidden local context.",
+		"Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass.",
 		"",
 		"## Reference Benchmark Evidence",
 		"",
@@ -2315,7 +2316,7 @@ func TestStatusReflectsManualActiveCapabilityBeforeMigrate(t *testing.T) {
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, full.Stdout, "Pressure ledger: 0 pressure(s), 1 candidate(s), 1 active structure(s).")
-	assertContains(t, full.Stdout, "Covered axes: Product completeness, Validation coverage, Security baseline, Deployment readiness, Operations and docs, Maintainability, Reference benchmark, Sustained quality")
+	assertContains(t, full.Stdout, "Covered axes: Product completeness, Product satisfaction, Validation coverage, Security baseline, Deployment readiness, Operations and docs, Maintainability, Reference benchmark, Sustained quality")
 	if activeStructureCount(readGrowthStateIfExists(root).Candidates) != 0 {
 		t.Fatal("status overlay should not mutate stored growth state")
 	}
@@ -2574,6 +2575,47 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if errorHandling.Status != "covered" {
 		t.Fatalf("expected error handling evidence with missing input text to be covered, got %+v", errorHandling)
 	}
+	productSatisfaction, ok := parseReadinessEvidenceLine("GOAL-0001", "Product satisfaction: Target-user fit, visual polish, copy quality, coherent core loop, and no drift were accepted; verdict pass.", defs)
+	if !ok {
+		t.Fatal("expected product satisfaction evidence to parse")
+	}
+	if productSatisfaction.Status != "covered" {
+		t.Fatalf("expected product satisfaction evidence to be covered, got %+v", productSatisfaction)
+	}
+	directionDriftSatisfaction, ok := parseReadinessEvidenceLine("GOAL-0001", "Product satisfaction: Target-user fit and core loop stayed inside plan.md without direction drift; verdict pass.", defs)
+	if !ok {
+		t.Fatal("expected direction-drift product satisfaction evidence to parse")
+	}
+	if directionDriftSatisfaction.Status != "covered" {
+		t.Fatalf("expected without direction drift evidence to be covered, got %+v", directionDriftSatisfaction)
+	}
+	weakProductSatisfaction, ok := parseReadinessEvidenceLine("GOAL-0001", "Product satisfaction: needs work before the target user would accept it.", defs)
+	if !ok {
+		t.Fatal("expected weak product satisfaction evidence to parse")
+	}
+	if weakProductSatisfaction.Status != "emerging" {
+		t.Fatalf("expected weak product satisfaction evidence to be emerging, got %+v", weakProductSatisfaction)
+	}
+}
+
+func TestSelfReviewFeedsProductSatisfactionReadiness(t *testing.T) {
+	pass := readinessEvidenceRecordsFromGoalText("GOAL-0001", "# GOAL-0001 Evidence\n\n"+serviceQualitySelfReviewPass())
+	record, ok := readinessEvidenceForAxis(pass, "product_satisfaction")
+	if !ok {
+		t.Fatal("expected product satisfaction record from passing self review")
+	}
+	if record.Status != "covered" {
+		t.Fatalf("expected passing self review to cover product satisfaction, got %+v", record)
+	}
+
+	fail := readinessEvidenceRecordsFromGoalText("GOAL-0002", "# GOAL-0002 Evidence\n\n## Self Review\n\nProduct satisfaction: needs work before the target user would accept it.\nVerdict: fail.\n")
+	record, ok = readinessEvidenceForAxis(fail, "product_satisfaction")
+	if !ok {
+		t.Fatal("expected product satisfaction record from failing self review")
+	}
+	if record.Status != "emerging" {
+		t.Fatalf("expected failing self review to leave product satisfaction emerging, got %+v", record)
+	}
 }
 
 func TestLatestFailurePressureBlocksStageAdvancement(t *testing.T) {
@@ -2711,6 +2753,7 @@ func TestBetaGateAcceptsStaticDeploymentAndRunbookEvidence(t *testing.T) {
 		"Deployment readiness: proof. Release/build artifacts are created at `dist/llog-beta-demo/index.html` and `dist/llog-beta-demo.zip` outside the `prototype/` development path. Demo deployment path is documented in `demo-release.md`. Validation proved the release artifacts through direct `file://` execution, isolated artifact server URL `http://127.0.0.1:4201/?artifact=1`, extracted zip release URL `http://127.0.0.1:4202/?release=zip`, artifact parity, and mobile Playwright smoke with realistic data.",
 		"Operations and docs: `demo-release.md` documents artifact creation, direct file run, static server run, smoke path, rollback, and stop conditions.",
 		"Reference benchmark: Category: Static journaling app; References: Day One, Journey, Diarium; Baseline expectations: daily entry, report, setup, and handoff are understandable; Current comparison: core entry and report meet baseline, and local artifact release evidence is above baseline; Below-baseline gaps: None; no critical user or operator baseline gap remains; Above-baseline strength: local artifact release evidence; Decision: Service Quality is allowed from the benchmark perspective.",
+		"Product satisfaction: Target-user fit, visual polish, copy quality, coherent core loop, and no drift were accepted; verdict pass.",
 	}
 	records := []readinessEvidenceRecord{}
 	for _, line := range lines {
@@ -3191,6 +3234,7 @@ func TestAdvanceStopsAutoPlanWhenRunUntilTargetReached(t *testing.T) {
 		"Security baseline: Privacy boundary verified: clipboard content stays local in SQLite, no cloud sync or telemetry, and sensitive text can be deleted locally.",
 		"Deployment readiness: Packaged helper binary smoke passed outside the development command path.",
 		"Operations and docs: README documents setup, local data path, delete path, rollback, and smoke command.",
+		"Product satisfaction: Target-user fit, helper copy quality, coherent save/search/pin core loop, and no drift were accepted; verdict pass.",
 		"",
 		"## Reference Benchmark Evidence",
 		"",
@@ -3617,6 +3661,7 @@ func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
 		readinessEvidenceRecordForAxis("GOAL-0001", "validation_coverage", "`go test ./...` passed and is repeatable."),
 		readinessEvidenceRecordForAxis("GOAL-0001", "operations_docs", "Operations and docs: README documents setup, rollback, and smoke command."),
 		readinessEvidenceRecordForAxis("GOAL-0001", "maintainability", "Maintainability: Test helper keeps command validation repeatable without hidden local context."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "product_satisfaction", "Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass."),
 	})
 	if sustained.Stage != "Sustained Service Quality" {
 		t.Fatalf("expected Sustained Service Quality, got %s", sustained.Stage)
@@ -3670,10 +3715,14 @@ func TestReferenceBenchmarkPressureShapesRuntimePacket(t *testing.T) {
 	assertContains(t, goal, "strongest critical below-baseline gap")
 
 	boundary := runtimeWorkBoundary(goal, "Beta", plan, growthState{}, readiness)
+	assertContains(t, boundary, "No drift guard")
 	assertContains(t, boundary, "Do not add broad feature work")
 	assertContains(t, boundary, "Select 3-5 named references")
 	assertContains(t, boundary, "implement only the smallest fix")
 	assertContains(t, boundary, "do not advance the stage")
+
+	stop := runtimeStopCondition(plan, "Beta", growthState{}, readiness)
+	assertContains(t, stop, "drift outside plan.md product direction")
 
 	next := buildNextDoc("GOAL-0009", readiness)
 	assertContains(t, next, "durable reference signals")
@@ -3701,7 +3750,7 @@ func TestServiceQualityStageDefinesOperationalStandard(t *testing.T) {
 	}
 
 	_, _, axes, evidence := readinessGateDefinition("Service Quality")
-	for _, axis := range []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "sustained_quality"} {
+	for _, axis := range []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "product_satisfaction", "sustained_quality"} {
 		found := false
 		for _, got := range axes {
 			if got == axis {
@@ -3718,6 +3767,7 @@ func TestServiceQualityStageDefinesOperationalStandard(t *testing.T) {
 	assertContains(t, joinedEvidence, "rollback")
 	assertContains(t, joinedEvidence, "hidden context")
 	assertContains(t, joinedEvidence, "Reference benchmark evidence")
+	assertContains(t, joinedEvidence, "Product satisfaction")
 	assertContains(t, joinedEvidence, "Repeated runtime evidence")
 }
 
@@ -3742,6 +3792,7 @@ func TestServiceQualityGateRequiresSustainedGrowthEvidence(t *testing.T) {
 			"Above-baseline strength: packet evidence loop.",
 			"Decision: Service Quality proof can continue.",
 		}, "; ")),
+		readinessEvidenceRecordForAxis("GOAL-0001", "product_satisfaction", "Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass."),
 	}
 
 	state := deriveReadinessState(plan, growthState{}, evidence)
@@ -3854,6 +3905,8 @@ func TestServiceQualityPressureWalksRequiredAxesInOrder(t *testing.T) {
 		"Above-baseline strength: packet evidence loop.",
 		"Decision: Service Quality proof can continue.",
 	}, "; ")))
+	assertNext("product_satisfaction", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0007", "product_satisfaction", "Product satisfaction: Target-user fit, visual polish, copy quality, coherent core loop, and no drift were accepted; verdict pass."))
 	assertNext("sustained_quality", growthState{})
 
 	state := deriveReadinessState(plan, growthState{Candidates: []growthCandidate{{Kind: "validator", Name: "validator-go-test", Status: "active"}}}, evidence)

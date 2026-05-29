@@ -111,6 +111,7 @@ func readinessDimensionDefs() []readinessDimensionDef {
 	return []readinessDimensionDef{
 		{ID: "product_completeness", Name: "Product completeness", Keywords: []string{"product", "mvp", "success criteria", "target users"}, Gap: "The product slice is still too vague to measure."},
 		{ID: "core_ux", Name: "Core UX", Keywords: []string{"flow", "user flow", "screen", "ui", "ux", "browser", "click", "task", "chat", "message"}, Gap: "The primary user flow is not yet proven usable."},
+		{ID: "product_satisfaction", Name: "Product satisfaction", Keywords: []string{"satisfaction", "satisfying", "polish", "visual polish", "copy", "flow feel", "target user fit", "no drift", "service-quality enough"}, Gap: "The result works, but product satisfaction has not been proven against the target user, core loop, visual/copy quality, and plan direction."},
 		{ID: "persistence", Name: "Data persistence", Keywords: []string{"persist", "persistence", "storage", "database", "sqlite", "mysql", "postgres", "postgresql", "db", "sql", "localstorage", "reload", "save"}, Gap: "User data durability has not been proven."},
 		{ID: "error_handling", Name: "Error handling", Keywords: []string{"error", "empty", "loading", "failure", "fallback", "blocked", "edge case"}, Gap: "Failure, empty, or edge states are not yet handled."},
 		{ID: "validation_coverage", Name: "Validation coverage", Keywords: []string{"test", "smoke", "validation", "validate", "playwright", "go test", "npm run", "pytest"}, Gap: "The primary behavior does not have repeatable validation evidence."},
@@ -229,6 +230,12 @@ func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readine
 				continue
 			}
 			records = append(records, inferReadinessEvidenceFromSurfaceLine(goalID, line)...)
+		}
+		for _, line := range usefulSectionLines(body, "Self Review") {
+			record, ok := parseReadinessEvidenceLine(goalID, line, defs)
+			if ok {
+				records = append(records, record)
+			}
 		}
 		records = append(records, inferReadinessEvidenceFromReferenceBenchmark(goalID, usefulSectionLines(body, "Reference Benchmark Evidence"))...)
 	}
@@ -408,6 +415,17 @@ func readinessAxisForLabel(label string, defs []readinessDimensionDef) string {
 		"coreux":              "core_ux",
 		"ux":                  "core_ux",
 		"flow":                "core_ux",
+		"satisfaction":        "product_satisfaction",
+		"satisfying":          "product_satisfaction",
+		"productsatisfaction": "product_satisfaction",
+		"productquality":      "product_satisfaction",
+		"polish":              "product_satisfaction",
+		"visualpolish":        "product_satisfaction",
+		"copy":                "product_satisfaction",
+		"copyquality":         "product_satisfaction",
+		"flowfeel":            "product_satisfaction",
+		"targetuserfit":       "product_satisfaction",
+		"nodrift":             "product_satisfaction",
 		"data":                "persistence",
 		"datapersistence":     "persistence",
 		"persistence":         "persistence",
@@ -493,6 +511,9 @@ func readinessEvidenceQuality(axis, text string) (bool, string) {
 	case "core_ux":
 		return coreUXEvidenceCovered(normalized),
 			"browser, screenshot, smoke, or verified primary-flow evidence"
+	case "product_satisfaction":
+		return productSatisfactionEvidenceCovered(normalized),
+			"target-user fit, visual polish, copy quality, coherent core loop, no-drift, and explicit pass/acceptable evidence"
 	case "persistence":
 		return hasAny(normalized, "persist", "reload", "restart", "saved", "save", "survive", "stored", "stores", "created", "re-read", "reread", "read back", "reads it back", "confirmed", "row") &&
 				hasAny(normalized, "sqlite", "mysql", "postgres", "postgresql", "database", " db ", "db check", "sql", "localstorage", "local storage", "storage", "json", ".json", ".txt", "file", "disk", "filesystem"),
@@ -766,6 +787,67 @@ func sustainedQualityEvidenceCovered(normalized string) bool {
 		hasAny(normalized, "promoted", "required", "covered", "verified", "proved", "proven", "active")
 }
 
+func productSatisfactionEvidenceCovered(normalized string) bool {
+	noDriftProof := hasAny(normalized,
+		"no drift",
+		"no-drift",
+		"without drift",
+		"without direction drift",
+		"did not drift",
+		"does not drift",
+		"not drift",
+		"stayed inside",
+		"stayed within",
+		"inside plan.md",
+	)
+	if hasAny(normalized,
+		"not satisfying",
+		"not satisfactory",
+		"not acceptable",
+		"not accepted",
+		"needs work",
+		"need work",
+		"unfinished",
+		"awkward",
+		"below baseline",
+		"below quality",
+		"blocking gap",
+		"drifted",
+		"drift",
+	) && !noDriftProof {
+		return false
+	}
+	qualitySurface := hasAny(normalized,
+		"satisfaction",
+		"satisfying",
+		"acceptable",
+		"accepted",
+		"polish",
+		"copy",
+		"flow feel",
+		"target user",
+		"target-user",
+		"core loop",
+		"visual",
+		"service-quality enough",
+		"ready",
+	)
+	qualityProof := hasAny(normalized,
+		"pass",
+		"passed",
+		"acceptable",
+		"accepted",
+		"coherent",
+		"matches",
+		"fits",
+		"fit",
+	)
+	qualityProof = qualityProof || noDriftProof || hasAny(normalized,
+		"enough to close",
+	)
+	return qualitySurface && qualityProof
+}
+
 func sustainedQualityGrowthEvidence(growth growthState) (bool, bool, string) {
 	active := []string{}
 	for _, candidate := range growth.Candidates {
@@ -970,30 +1052,32 @@ func readinessGateDefinition(stage string) (string, string, []string, []string) 
 	normalized := normalizeLabel(stage)
 	if strings.Contains(normalized, "sustained") {
 		return "Sustained Service Quality", "Sustained Service Quality",
-			[]string{"validation_coverage", "operations_docs", "maintainability", "sustained_quality"},
+			[]string{"validation_coverage", "operations_docs", "maintainability", "product_satisfaction", "sustained_quality"},
 			[]string{
 				"Active validators, harnesses, or equivalent reusable quality structures continue to pass or have explicit blockers.",
 				"Operational handoff, rollback, and recovery notes stay current.",
 				"Maintainability evidence shows repeated friction is reduced before feature breadth.",
+				"Product satisfaction remains acceptable for the target user and core loop without direction drift.",
 				"Sustained quality remains protected by repeated runtime evidence and active required behavior.",
 			}
 	}
 	if strings.Contains(normalized, "service") || strings.Contains(normalized, "production") {
 		return "Service Quality", "Sustained Service Quality",
-			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "sustained_quality"},
+			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "product_satisfaction", "sustained_quality"},
 			[]string{
 				"Required validation or documented manual checks are repeatable.",
 				"Security, privacy, and misuse boundaries are explicit and verified.",
 				"Setup, release or run, rollback, and recovery paths are documented and checked.",
 				"Maintainability evidence shows the next operator can continue without hidden context.",
 				"Reference benchmark evidence shows no core category-baseline gap and at least one above-baseline strength.",
+				"Product satisfaction is explicitly reviewed against target-user fit, core-loop quality, visual/copy polish, and no-drift.",
 				"Repeated runtime evidence has promoted an active validator, active harness, or equivalent reusable quality structure.",
 			}
 	}
 	if strings.Contains(normalized, "beta") {
 		return "Beta", "Service Quality",
-			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark"},
-			[]string{"Primary flows are validated with realistic data.", "Basic security and failure boundaries are handled.", "Demo or deployment path is documented.", "Reference benchmark evidence proves category baseline and one concrete strength."}
+			[]string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark", "product_satisfaction"},
+			[]string{"Primary flows are validated with realistic data.", "Basic security and failure boundaries are handled.", "Demo or deployment path is documented.", "Reference benchmark evidence proves category baseline and one concrete strength.", "Product satisfaction evidence shows the result is acceptable for the target user and core loop."}
 	}
 	if strings.Contains(normalized, "usable") {
 		return "Usable MVP", "Beta",
@@ -1144,6 +1228,9 @@ func readinessPressureForDimension(plan map[string]string, stage string, dim rea
 	if dim.ID == "reference_benchmark" {
 		workBoundary = "Compare the current result against 3-5 named category references before adding feature breadth; close only the strongest critical below-baseline gap if one is found."
 		validationSignal = "Fill Reference Benchmark Evidence with named references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and decision."
+	} else if dim.ID == "product_satisfaction" {
+		workBoundary = "Improve the actual product feel inside the existing plan.md direction: target-user fit, core-loop quality, visual/copy polish, and no-drift before adding feature breadth."
+		validationSignal = "Fill Self Review and Product satisfaction evidence with screenshots, browser/manual review, or comparable proof; use `Verdict: fail` when the result is not satisfying enough."
 	} else if dim.ID == "sustained_quality" {
 		workBoundary = "Do not claim sustained quality from one good packet. Repeat the highest-value validation or operational proof until it becomes active required behavior."
 		validationSignal = "Record repeated packet evidence and the active validator, active harness, or equivalent reusable quality structure that now protects the service."
@@ -1183,6 +1270,8 @@ func readinessRecommendedGoal(plan map[string]string, stage, axis string) string
 		return fmt.Sprintf("Reduce the highest-friction code path so %s can keep growing.", product)
 	case "reference_benchmark":
 		return fmt.Sprintf("Compare %s against 3-5 named category references, define the baseline, and close the strongest critical below-baseline gap if one exists.", product)
+	case "product_satisfaction":
+		return fmt.Sprintf("Improve actual %s product satisfaction for the core loop without adding new feature breadth.", product)
 	case "sustained_quality":
 		return fmt.Sprintf("Repeat the highest-value %s quality proof until active validation or an equivalent reusable quality structure is justified.", product)
 	default:

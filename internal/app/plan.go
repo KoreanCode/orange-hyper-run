@@ -673,6 +673,7 @@ func runtimeWorkBoundary(objective, stage string, plan map[string]string, growth
 		"- Do the smallest coherent implementation step that advances: " + compactText(objective, 180),
 		"- Keep the work inside the current stage: " + stage,
 		"- Stage contract: " + compactText(stageGrowthContract(stage), 180),
+		"- No drift guard: do not change product direction, target user, core loop, or plan non-goals unless this packet explicitly records a blocker or user decision.",
 	}
 	if guidance := stageRuntimeBoundary(stage); guidance != "" {
 		lines = append(lines, "- "+guidance)
@@ -763,6 +764,7 @@ func runtimeStopCondition(plan map[string]string, stage string, growth growthSta
 	if criteria := firstRuntimeValue(plan["Success Criteria"]); criteria != "" && !sameStopCondition(criteria, base) {
 		base = "- Plan success criteria: " + compactText(criteria, 240) + "\n" + base
 	}
+	base += "\n- Stop and record a blocker if the work would drift outside plan.md product direction, target user, core loop, non-goals, or constraints."
 	return applyReadinessStopConditions(applyGrowthStopConditions(base, growth), readiness)
 }
 

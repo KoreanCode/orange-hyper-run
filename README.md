@@ -160,6 +160,8 @@ flowchart TD
 
 For Service Quality and Sustained Service Quality packets, the evidence must also include a Self Review. Hyper Run expects the agent to judge plan alignment, core loop quality, product satisfaction, no drift, validation match, and an explicit `Verdict: pass`. A `fail` verdict keeps the same packet open for repair.
 
+Every packet also carries a no-drift guard. If the work would move outside `plan.md` product direction, target user, core loop, non-goals, or constraints, the agent should stop and record the blocker instead of widening the project silently.
+
 For longer Codex Desktop sessions, start with an auto target:
 
 ```bash
@@ -464,6 +466,7 @@ It checks whether the project has evidence for things like:
 - deployment
 - docs
 - maintainability
+- product satisfaction
 
 You record this in `evidence.md`:
 
@@ -473,6 +476,7 @@ You record this in `evidence.md`:
 Core UX: Browser smoke test passed for create and complete flow.
 Validation coverage: `go test ./...` passed and is repeatable.
 Data persistence: Records survive reload using SQLite.
+Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass.
 ```
 
 When enough evidence exists, `hyper status` shows the next stage is ready. Hyper Run still does not change the stage silently. If you accept the recommendation, run:

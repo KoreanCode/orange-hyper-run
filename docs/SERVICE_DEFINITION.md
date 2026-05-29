@@ -24,7 +24,7 @@ Hyper Run promises a small, repeatable project loop:
 4. Record validation evidence, changed files, decisions, reusable patterns, blockers, and next steps.
 5. Learn only durable signals that should influence future runs.
 6. Retrieve similar prior context when the next runtime packet is created.
-7. Measure service readiness across product, UX, persistence, validation, security, deployment, operations, and maintainability.
+7. Measure service readiness across product, UX, persistence, validation, security, deployment, operations, maintainability, benchmark fit, and product satisfaction.
 8. Grow toward generated skills, agents, validators, or harnesses only when the project has earned that structure.
 9. Keep the next command explicit in `.hyper/next-packet.md` so auto continuation remains packet-by-packet and reviewable.
 
@@ -36,7 +36,7 @@ Hyper Run promises a small, repeatable project loop:
 - A local evidence and learning layer backed by files and SQLite.
 - A service-readiness gate that keeps tiny MVP work moving toward usable, beta, and service-quality stages.
 - A finish gate that blocks the next packet until evidence and next-step notes are good enough or a real blocker is recorded.
-- A Self Review gate for Service Quality and Sustained Service Quality packets, so working code is not treated as enough when product satisfaction, core loop quality, or plan alignment is still weak.
+- A Self Review gate for Service Quality and Sustained Service Quality packets, so working code is not treated as enough when product satisfaction, core loop quality, no-drift, or plan alignment is still weak.
 - A harness-less starting point that can later create project-specific harnesses when the evidence shows they are useful.
 
 ## What Hyper Run Is Not
@@ -103,6 +103,8 @@ Readiness evidence is progressive. New evidence files include slots for every re
 
 Readiness evidence also has a basic quality bar. A vague label such as `Validation coverage: tested` is treated as emerging evidence, not covered evidence. Covered evidence should include the proof shape expected by the axis: commands or smoke tests for validation, browser or screenshot proof for UX, reload/restart/storage proof for persistence, hosted/build/release/artifact proof for deployment, and docs/runbook/rollback proof for operations.
 
+Product satisfaction is a readiness axis, not just a free-form opinion. It should prove that the result still fits the target user, the core loop feels coherent, visible or operational details are acceptable, and the packet did not drift away from `plan.md`.
+
 Runtime packets include a Proof Contract with three evidence boundaries: Functional Proof, Surface Proof, and Operational Proof. Surface Proof is required only when the packet changes a user-facing screen or flow. It should connect screenshots or browser smoke evidence to the affected surface, primary user action, checked states, viewport, and remaining surface gaps.
 
 Surface Proof is intentionally evidence-first. Repeated surface evidence can become visual-smoke, responsive-check, accessibility, Figma handoff, or design-system candidates, but those candidates are not required behavior until repeated proof promotes them.
@@ -136,6 +138,7 @@ Hyper Run should treat a project as Service Quality only when these criteria are
 | Operations | Setup, environment, smoke path, rollback, recovery, stop conditions, and handoff notes are documented. |
 | Maintainability | The next operator can identify the main code paths, known risks, active validators, and highest-friction follow-up. |
 | Reference benchmark | 3-5 comparable references define the category baseline; no core expectation is below baseline, and at least one strength is above baseline. |
+| Product satisfaction | The result is acceptable for the target user, core loop, visual or copy quality, and no-drift direction check. |
 
 Reference Benchmark Evidence should not be a generic scorecard. It should turn outside comparison into the next execution pressure:
 

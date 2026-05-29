@@ -160,6 +160,8 @@ flowchart TD
 
 Service Quality와 Sustained Service Quality packet에서는 Self Review도 필요합니다. Hyper Run은 agent가 plan alignment, core loop quality, product satisfaction, no drift, validation match를 직접 판단하고 `Verdict: pass`를 남기길 요구합니다. `fail`이면 같은 packet을 열어둔 채 재작업하게 됩니다.
 
+모든 packet에는 no-drift guard도 들어갑니다. 작업이 `plan.md`의 제품 방향, 대상 사용자, 핵심 loop, non-goal, constraint를 벗어나야 한다면 agent는 조용히 범위를 넓히지 않고 멈춰서 blocker로 기록해야 합니다.
+
 Codex Desktop에서 더 긴 세션을 돌릴 때는 목표 stage를 지정할 수 있습니다.
 
 ```bash
@@ -463,6 +465,7 @@ Tiny MVP -> Usable MVP -> Beta -> Service Quality
 - 배포
 - 문서
 - 유지보수성
+- 제품 만족도
 
 이 내용은 `evidence.md`에 이렇게 적습니다.
 
@@ -472,6 +475,7 @@ Tiny MVP -> Usable MVP -> Beta -> Service Quality
 Core UX: 브라우저 smoke test에서 생성과 완료 flow가 통과했다.
 Validation coverage: `go test ./...`가 통과했고 반복 실행 가능하다.
 Data persistence: SQLite로 저장한 records가 reload 뒤에도 유지된다.
+Product satisfaction: 대상 사용자 적합성, copy quality, coherent core loop, no drift가 확인되었고 verdict pass.
 ```
 
 evidence가 충분하면 `hyper status`에서 다음 stage로 올릴 준비가 됐는지 보여줍니다. Hyper Run은 stage 변경을 추천하지만, `plan.md`를 자동으로 수정하지는 않습니다.
