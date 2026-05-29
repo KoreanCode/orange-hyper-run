@@ -587,6 +587,10 @@ func readinessDashboardLines(state projectState, readiness readinessState) []str
 	}
 	if readiness.NextPressure.Axis == "stage_advancement" || readiness.StageGate.Advancement.Candidate {
 		lines = append(lines, "  Recommended action: hyper advance")
+		lines = append(lines, "  Stage advancement review:")
+		lines = append(lines, "    Plan change: "+firstNonBlank(readiness.StageGate.Advancement.PlanChange, "none"))
+		lines = append(lines, "    Required proof covered: "+stageAdvanceRequiredProofSummary(readiness))
+		lines = append(lines, "    User decision required: accept before running `hyper advance`")
 	} else if readiness.NextPressure.RecommendedGoal != "" {
 		lines = append(lines, "  Recommended run: "+nextRunCommand(state, compactText(readiness.NextPressure.RecommendedGoal, 120)))
 	}

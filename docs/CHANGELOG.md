@@ -9,6 +9,7 @@
 - Let `plan.md` define `Target Stage`, making plain `hyper run` default to guarded auto continuation toward that target.
 - Keep plan-target continuation commands as plain `hyper run`, while preserving `--auto --until` as an explicit override.
 - Keep stored auto targets synchronized when `plan.md` `Target Stage` changes or is removed.
+- Add explicit stage advancement review output for status, next-packet planning, and `hyper advance`.
 - Add Codex Desktop continuation guidance to `.hyper/next-packet.md` so auto mode clearly says when to run, repair, advance, or stop.
 - Include next-packet continuation instructions in auto-mode `hyper run` and `hyper resume` Codex Desktop payloads.
 

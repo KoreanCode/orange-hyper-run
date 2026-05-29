@@ -1337,6 +1337,16 @@ func TestStatusRefreshesReadinessFromLatestEvidence(t *testing.T) {
 	assertContains(t, status.Stdout, "Stage advancement:")
 	assertContains(t, status.Stdout, "Next action: hyper advance")
 	assertContains(t, status.Stdout, "Recommended action: hyper advance")
+	assertContains(t, status.Stdout, "Stage advancement review:")
+	assertContains(t, status.Stdout, "Plan change: Current Stage -> Usable MVP")
+	assertContains(t, status.Stdout, "Required proof covered: Product completeness (covered), Core UX (covered), Validation coverage (covered)")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "## Stage Advancement Review")
+	assertContains(t, nextPlan, "- Current stage: Tiny MVP")
+	assertContains(t, nextPlan, "- Recommended next stage: Usable MVP")
+	assertContains(t, nextPlan, "- Plan change: Current Stage -> Usable MVP")
+	assertContains(t, nextPlan, "- Blocking gaps: none")
+	assertContains(t, nextPlan, "- User decision required: accept before running `hyper advance`.")
 }
 
 func TestStatusShortShowsOnlyDecisionSurface(t *testing.T) {
@@ -3381,7 +3391,11 @@ func TestAdvanceUpdatesPlanWhenGateReady(t *testing.T) {
 		t.Fatalf("advance failed: %v", err)
 	}
 	assertContains(t, out.Stdout, "Stage advanced: Tiny MVP -> Usable MVP")
+	assertContains(t, out.Stdout, "Accepted gate: Tiny MVP -> Usable MVP (ready)")
 	assertContains(t, out.Stdout, "Updated: plan.md Current Stage -> Usable MVP")
+	assertContains(t, out.Stdout, "Plan change: Current Stage -> Usable MVP")
+	assertContains(t, out.Stdout, "Required proof covered: Product completeness (covered), Core UX (covered), Validation coverage (covered)")
+	assertContains(t, out.Stdout, "Run target after advance: single packet")
 	assertContains(t, out.Stdout, "Readiness gate: Usable MVP -> Beta")
 	assertContains(t, out.Stdout, "Next packet plan: .hyper/next-packet.md")
 	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Current Stage\n\nUsable MVP")
@@ -3470,6 +3484,7 @@ func TestAdvanceStopsAutoPlanWhenRunUntilTargetReached(t *testing.T) {
 		t.Fatalf("advance failed: %v", err)
 	}
 	assertContains(t, advance.Stdout, "Stage advanced: Beta -> Service Quality")
+	assertContains(t, advance.Stdout, "Run target after advance: Service Quality")
 	assertContains(t, advance.Stdout, "Next action: hyper status --short")
 	assertContains(t, advance.Stdout, "Why: Auto target Service Quality is reached; review status before choosing a new target or manual next run.")
 	if strings.Count(advance.Stdout, "  hyper status --short") != 1 {
@@ -3590,6 +3605,8 @@ func TestAdvanceRejectsWhenGateNotReady(t *testing.T) {
 	}
 	assertContains(t, err.Message, "Stage gate is not ready")
 	assertContains(t, err.Message, "Core UX")
+	assertContains(t, err.Message, "Required proof:")
+	assertContains(t, err.Message, "Recommendation: Do not advance stage yet. Close the blocking readiness gaps first.")
 }
 
 func TestBetaStageGeneratesValidatorCandidates(t *testing.T) {

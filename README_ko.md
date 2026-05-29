@@ -114,6 +114,7 @@ Service Quality benchmark 예시는 [Reference Benchmark Evidence 예시](docs/e
 - `hyper complete`는 packet을 학습하기 전에 finish gate를 실행합니다. evidence가 약하면 `review.md`에 보강할 내용을 남기고 같은 packet에 머무릅니다.
 - `hyper run --auto --until <stage>`는 명시적인 override로 계속 사용할 수 있습니다. stage를 몰래 올리지는 않습니다.
 - `hyper advance`는 `hyper status`가 gate ready라고 말하고 사용자가 stage 변경을 받아들였을 때만 적용합니다.
+- Stage advancement 출력과 `.hyper/next-packet.md`는 accepted gate, 정확한 plan change, 충족된 proof, user-decision guard를 보여줍니다.
 - Service Quality에서는 reference benchmark evidence가 필요할 수 있습니다. 해당 category의 기본 기대치를 충족하고, 구체적인 강점 하나가 있어야 합니다.
 - installer와 `hyper update`는 release checksum을 검증합니다. `cosign`이 설치되어 있으면 signature 검증도 실행합니다.
 - `hyper doctor`는 설치 상태, 프로젝트 상태, SQLite, Codex routing, signature 검증 가능 여부, `.hyper/next-packet.md`의 최신성을 확인합니다.

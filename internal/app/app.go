@@ -237,6 +237,7 @@ func commandUsage(command string) string {
 			"  hyper advance",
 			"",
 			"Updates `plan.md` to the next stage only when the readiness gate is ready and the user accepts the change.",
+			"Shows the accepted gate, exact plan change, covered proof, run target, and next action after advancement.",
 		},
 		"version": {
 			"Usage:",

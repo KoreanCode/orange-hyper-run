@@ -123,7 +123,11 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Hyper Run Stage Advance",
 		"",
 		"Stage advanced: " + previousStage + " -> " + nextStage,
+		"Accepted gate: " + previousStage + " -> " + nextStage + " (ready)",
 		"Updated: plan.md Current Stage -> " + nextStage,
+		"Plan change: " + readiness.StageGate.Advancement.PlanChange,
+		"Required proof covered: " + stageAdvanceRequiredProofSummary(readiness),
+		"Run target after advance: " + stageAdvanceRunTargetSummary(state),
 	}
 	if repaired {
 		lines = append(lines, "State repaired: "+firstNonBlank(oldStatus, "unknown")+" -> "+state.Status)
@@ -157,6 +161,10 @@ func stageAdvanceNotReadyMessage(readiness readinessState) string {
 		for _, gap := range readiness.StageGate.BlockingGaps {
 			lines = append(lines, "  - "+gap)
 		}
+	}
+	lines = append(lines, "Required proof: "+stageAdvanceRequiredProofSummary(readiness))
+	if readiness.StageGate.Advancement.Recommendation != "" {
+		lines = append(lines, "Recommendation: "+readiness.StageGate.Advancement.Recommendation)
 	}
 	if readiness.NextPressure.RecommendedGoal != "" {
 		lines = append(lines, "", "Next:", "  hyper run \""+compactText(readiness.NextPressure.RecommendedGoal, 120)+"\"")

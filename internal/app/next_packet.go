@@ -68,7 +68,7 @@ func renderNextPacketPlan(state projectState, readiness readinessState, plan pla
 			mode += " until " + state.RunUntil
 		}
 	}
-	return strings.Join([]string{
+	lines := []string{
 		"# Next Packet Plan",
 		"",
 		"Mode: " + mode,
@@ -78,6 +78,12 @@ func renderNextPacketPlan(state projectState, readiness readinessState, plan pla
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
 		"",
+	}
+	if plan.Action == "advance" {
+		lines = append(lines, stageAdvancementReviewLines(readiness)...)
+		lines = append(lines, "")
+	}
+	lines = append(lines,
 		"## Guard",
 		"",
 		nextPacketGuard(plan),
@@ -86,7 +92,8 @@ func renderNextPacketPlan(state projectState, readiness readinessState, plan pla
 		"",
 		nextPacketCodexContinuation(plan),
 		"",
-	}, "\n")
+	)
+	return strings.Join(lines, "\n")
 }
 
 func nextPacketGuard(plan plannedNextPacket) string {

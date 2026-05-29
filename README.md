@@ -114,6 +114,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 - `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
 - `hyper run --auto --until <stage>` still works as an explicit override. It does not silently advance stages.
 - `hyper advance` applies a stage change only after `hyper status` says the gate is ready and the user accepts it.
+- Stage advancement output and `.hyper/next-packet.md` show the accepted gate, exact plan change, covered proof, and user-decision guard.
 - Service Quality can require reference benchmark evidence: the project must meet its category baseline and show one concrete strength.
 - Installers and `hyper update` verify release checksums. If `cosign` is installed, signature verification also runs.
 - `hyper doctor` checks install state, project state, SQLite, Codex routing, signature capability, and whether `.hyper/next-packet.md` matches current state.
