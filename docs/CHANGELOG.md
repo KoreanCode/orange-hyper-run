@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.6.4 - 2026-06-05
+
 - Split canonical stage vocabulary, target aliases, and stage ordering into `internal/stage` so plan parsing, auto targets, readiness, and status share one package boundary.
 - Accept slug-style stage values such as `service-quality` and `sustained-service-quality` consistently when normalizing Current Stage values.
 - Pin CI and release builds to Go `1.26.4` so govulncheck runs against the patched standard library.

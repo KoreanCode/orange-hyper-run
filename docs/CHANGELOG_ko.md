@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.6.4 - 2026-06-05
+
 - canonical stage vocabulary, target alias, stage ordering을 `internal/stage`로 분리해서 plan parsing, auto target, readiness, status가 같은 package boundary를 공유하게 했습니다.
 - `service-quality`, `sustained-service-quality` 같은 slug-style stage 값을 Current Stage 정규화에서도 일관되게 받게 했습니다.
 - govulncheck가 패치된 standard library 기준으로 실행되도록 CI와 release build를 Go `1.26.4`로 고정했습니다.
