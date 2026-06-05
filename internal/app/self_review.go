@@ -56,7 +56,7 @@ func selfReviewFinishGateFinding(stage string, readiness readinessState, evidenc
 	}
 	verdict := selfReviewLabelValue(body, "Verdict")
 	if selfReviewVerdict(verdict) == "fail" {
-		return "Self Review verdict is fail; fix the listed quality gaps in this same packet before completing."
+		return "Self Review verdict is fail; fix the listed quality gaps in this same packet before completing." + selfReviewFailureDetail(body)
 	}
 	for _, field := range []string{"Plan alignment", "Core loop quality", "Product satisfaction", "No drift", "Validation match"} {
 		value := selfReviewLabelValue(body, field)
@@ -64,17 +64,36 @@ func selfReviewFinishGateFinding(stage string, readiness readinessState, evidenc
 			return "Complete Self Review `" + field + "` with a concrete judgment, not a pending placeholder."
 		}
 		if selfReviewValueNegative(value) {
-			return "Self Review `" + field + "` records an unresolved quality gap; keep this packet open and fix it before completing."
+			return "Self Review `" + field + "` records an unresolved quality gap: " + oneLine(value) + "; keep this packet open and fix it before completing."
 		}
 	}
 	switch selfReviewVerdict(verdict) {
 	case "pass":
 		return ""
 	case "fail":
-		return "Self Review verdict is fail; fix the listed quality gaps in this same packet before completing."
+		return "Self Review verdict is fail; fix the listed quality gaps in this same packet before completing." + selfReviewFailureDetail(body)
 	default:
 		return "Set Self Review `Verdict: pass` or `Verdict: fail`; do not complete Service Quality packets without an explicit self judgment."
 	}
+}
+
+func selfReviewFailureDetail(body string) string {
+	details := []string{}
+	for _, field := range []string{"Plan alignment", "Core loop quality", "Product satisfaction", "No drift", "Validation match"} {
+		value := selfReviewLabelValue(body, field)
+		if value == "" || selfReviewValuePending(value) || !selfReviewValueNegative(value) {
+			continue
+		}
+		details = append(details, field+": "+oneLine(value))
+	}
+	verdict := selfReviewLabelValue(body, "Verdict")
+	if selfReviewVerdict(verdict) == "fail" && strings.TrimSpace(verdict) != "" {
+		details = append(details, "Verdict: "+oneLine(verdict))
+	}
+	if len(details) == 0 {
+		return ""
+	}
+	return " Gaps: " + strings.Join(details, "; ")
 }
 
 func selfReviewLabelValue(body, label string) string {
@@ -108,8 +127,14 @@ func selfReviewValueNegative(value string) bool {
 		"failed",
 		"failure remains",
 		"fails",
+		"incomplete",
+		"insufficient",
 		"not acceptable",
 		"not accepted",
+		"not enough",
+		"not ready",
+		"not service quality",
+		"not service-quality",
 		"not satisfying",
 		"unsatisfied",
 		"needs work",

@@ -26,7 +26,7 @@ Hyper Run promises a small, repeatable project loop:
 6. Retrieve similar prior context when the next runtime packet is created.
 7. Measure service readiness across product, UX, persistence, validation, security, deployment, operations, maintainability, benchmark fit, and product satisfaction.
 8. Grow toward generated skills, agents, validators, or harnesses only when the project has earned that structure.
-9. Keep the next command explicit in `.hyper/next-packet.md` so auto continuation remains packet-by-packet and reviewable.
+9. Keep the next command and progress guard explicit in `.hyper/next-packet.md` so auto continuation remains packet-by-packet, reviewable, and able to stop on repeated no-progress loops.
 
 ## What Hyper Run Is
 
@@ -67,7 +67,7 @@ plan.md
 
 ## Run Contract
 
-One CLI invocation of `hyper run` creates at most one runtime packet. If `plan.md` has `Target Stage`, plain `hyper run` enters guarded auto mode and writes the planned continuation command after each completed packet. When that target comes from `plan.md`, the continuation command stays plain `hyper run`; `--auto --until` is reserved for explicit command-line overrides. The packet is complete when the executing agent has:
+One CLI invocation of `hyper run` creates at most one runtime packet. If `plan.md` has `Target Stage`, plain `hyper run` enters guarded auto mode and writes the planned continuation command after each completed packet. The target means "complete the readiness proof for this stage", not merely "enter this stage". For example, `Target Stage: Service Quality` continues into Service Quality packets until the Service Quality gate has complete proof. When that target comes from `plan.md`, the continuation command stays plain `hyper run`; `--auto --until` is reserved for explicit command-line overrides. The packet is complete when the executing agent has:
 
 - Read `plan.md`, `goal.md`, and `tasks.md`.
 - Checked the packet's `Stage Gate` and selected readiness pressure.
@@ -78,7 +78,7 @@ One CLI invocation of `hyper run` creates at most one runtime packet. If `plan.m
 - Run `hyper complete` so Learn, Growth, and Readiness refresh from the completed packet.
 - Stopped before destructive actions, missing credentials, unclear product scope, or repeated validation failure.
 
-`hyper run` should not be treated as an unchecked background loop. The long-running part is packet-by-packet continuation: create one packet, execute it, check evidence, learn, then follow `.hyper/next-packet.md` only if the guard allows it. That file includes both the next command and Codex Desktop continuation guidance. A new `hyper run` is blocked while the previous active packet still has pending evidence.
+`hyper run` should not be treated as an unchecked background loop. The long-running part is packet-by-packet continuation: create one packet, execute it, check evidence, learn, then follow `.hyper/next-packet.md` only if the guard allows it. That file includes the next command, Codex Desktop continuation guidance, and a progress guard that tells the agent to stop when the same command or review finding repeats without new evidence, stage movement, or a changed next-packet plan. A new `hyper run` is blocked while the previous active packet still has pending evidence. If a packet closes as `blocked` or `waiting_user`, a plain `hyper run` using the plan target also stops instead of creating another packet; a deliberate follow-up needs an explicit focus after the blocker or user decision is resolved.
 
 ## Learn Role
 
@@ -111,7 +111,7 @@ Surface Proof is intentionally evidence-first. Repeated surface evidence can bec
 
 When all required axes for the current gate are covered, Hyper Run creates a stage advancement candidate. It recommends the exact `plan.md` `Current Stage` change but does not apply it automatically. This keeps stage movement human-reviewed while still making the project state explicit.
 
-Beta and Service Quality stages can generate quiet validator candidates for repeatable smoke, security, deployment, and operations checks. They remain candidates until repeated evidence promotes them to active validators.
+Beta and Service Quality stages can generate quiet validator candidates for repeatable smoke, security, deployment, and operations checks. They remain candidates until repeated evidence promotes them to active validators. The lifecycle is explicit in `.hyper/growth/state.json` and each capability file: repeated evidence creates a candidate, promotion-level evidence marks it reviewable, and activation-level evidence or a maintainer-installed active file makes it required behavior in future finish gates.
 
 The default readiness path is:
 
@@ -154,7 +154,7 @@ Reference Benchmark Evidence should not be a generic scorecard. It should turn o
 - Decision: Service Quality can proceed when the project-specific release, install, and validation evidence also pass
 ```
 
-Hyper Run treats this evidence as covered only when the benchmark has a category, 3-5 named references, baseline expectations, a current below/meets/above-baseline comparison, no critical below-baseline gap, one above-baseline strength, and a decision. `hyper status` shows the benchmark line whenever it is required by the current gate.
+Hyper Run treats this evidence as covered only when the benchmark has a category, 3-5 named references, baseline expectations, a current below/meets/above-baseline comparison, no critical below-baseline gap, one above-baseline strength, and a decision that explicitly allows Service Quality to proceed. A decision such as "blocked", "not ready", or "allowed only after more work" keeps the packet open. `hyper status` shows the benchmark line whenever it is required by the current gate.
 
 Service Quality is blocked when any of these are true:
 
@@ -164,6 +164,7 @@ Service Quality is blocked when any of these are true:
 - The next operator must infer hidden agent decisions that are not in `plan.md`, `.hyper/`, docs, or code.
 - The next recommended packet is broad feature work while validation, security, deployment, operations, or maintainability gaps remain.
 - Reference Benchmark Evidence has a below-baseline gap in a core user or operator expectation.
+- Reference Benchmark Evidence says Service Quality is blocked, not ready, or allowed only after more work.
 - The project has no concrete above-baseline strength compared with its references.
 
 Once Service Quality is reached, the next stage is not "add everything." It is Sustained Service Quality: monitoring repeated failures, promoting proven validators, reducing operational friction, and only then expanding product breadth.
@@ -211,7 +212,7 @@ The current product should stay focused on:
 - Similar signal clustering and noisy signal filtering.
 - Capability lifecycle from repeated pressure to active structure.
 - Growth-informed runtime packet compilation.
-- Quiet validator, skill, and harness candidates behind thresholds.
+- Quiet validator, skill, and harness candidates behind threshold-based activation policy.
 - Similar-context retrieval.
 - Reference benchmark evidence for Service Quality gates.
 - Checksum-verified install/update and optional cosign signature verification.

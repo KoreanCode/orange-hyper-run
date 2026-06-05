@@ -53,26 +53,55 @@ func updateGrowthState(root string, db *sql.DB) (growthState, *hyperError) {
 	if err != nil {
 		return growthState{}, err
 	}
+	thresholds := defaultGrowthThresholds()
 	state := growthState{
-		Version:         growthStateVersion,
-		UpdatedAt:       nowISO(),
-		PressureLedger:  pressureLedgerFor(pressures, candidates),
-		Pressures:       pressures,
-		RuntimeBehavior: runtimeBehavior,
-		Candidates:      candidates,
-		Thresholds: growthThresholds{
-			RepeatedSignalGoals:      growthRepeatedSignalGoals,
-			PromotableSignalGoals:    growthPromotableSignalGoals,
-			ActiveSignalGoals:        growthActiveSignalGoals,
-			HarnessStablePressures:   growthHarnessStablePressures,
-			HarnessPromotableSignals: growthHarnessPromotableSignals,
-			HarnessActiveSignals:     growthHarnessActiveSignals,
-		},
+		Version:          growthStateVersion,
+		UpdatedAt:        nowISO(),
+		PressureLedger:   pressureLedgerFor(pressures, candidates),
+		Pressures:        pressures,
+		RuntimeBehavior:  runtimeBehavior,
+		Candidates:       candidates,
+		Thresholds:       thresholds,
+		ActivationPolicy: growthActivationPolicyFor(candidates, thresholds),
 	}
 	if err := writeJSON(filepath.Join(root, hyperDir, "growth", "state.json"), state); err != nil {
 		return growthState{}, err
 	}
 	return state, nil
+}
+
+func defaultGrowthThresholds() growthThresholds {
+	return growthThresholds{
+		RepeatedSignalGoals:      growthRepeatedSignalGoals,
+		PromotableSignalGoals:    growthPromotableSignalGoals,
+		ActiveSignalGoals:        growthActiveSignalGoals,
+		HarnessStablePressures:   growthHarnessStablePressures,
+		HarnessPromotableSignals: growthHarnessPromotableSignals,
+		HarnessActiveSignals:     growthHarnessActiveSignals,
+	}
+}
+
+func normalizeGrowthThresholds(thresholds growthThresholds) growthThresholds {
+	defaults := defaultGrowthThresholds()
+	if thresholds.RepeatedSignalGoals == 0 {
+		thresholds.RepeatedSignalGoals = defaults.RepeatedSignalGoals
+	}
+	if thresholds.PromotableSignalGoals == 0 {
+		thresholds.PromotableSignalGoals = defaults.PromotableSignalGoals
+	}
+	if thresholds.ActiveSignalGoals == 0 {
+		thresholds.ActiveSignalGoals = defaults.ActiveSignalGoals
+	}
+	if thresholds.HarnessStablePressures == 0 {
+		thresholds.HarnessStablePressures = defaults.HarnessStablePressures
+	}
+	if thresholds.HarnessPromotableSignals == 0 {
+		thresholds.HarnessPromotableSignals = defaults.HarnessPromotableSignals
+	}
+	if thresholds.HarnessActiveSignals == 0 {
+		thresholds.HarnessActiveSignals = defaults.HarnessActiveSignals
+	}
+	return thresholds
 }
 
 func readGrowthStateIfExists(root string) growthState {
@@ -1158,6 +1187,54 @@ func growthCandidateForActiveCapability(capability activeCapability) growthCandi
 	}
 }
 
+func growthActivationPolicyFor(candidates []growthCandidate, thresholds growthThresholds) growthActivationPolicy {
+	thresholds = normalizeGrowthThresholds(thresholds)
+	policy := growthActivationPolicy{
+		Method:         "Threshold-based lifecycle: repeated evidence creates a candidate, promotable evidence asks for review, and active evidence becomes required behavior.",
+		CandidateRule:  fmt.Sprintf("Candidate after %d independent runtime packet(s) show the same pressure.", thresholds.RepeatedSignalGoals),
+		PromotableRule: fmt.Sprintf("Promotable after %d independent runtime packet(s); review it, but do not require it yet.", thresholds.PromotableSignalGoals),
+		ActiveRule:     fmt.Sprintf("Active after %d independent runtime packet(s), or when a maintainer installs an explicit active capability file.", thresholds.ActiveSignalGoals),
+	}
+	active := 0
+	promotable := 0
+	repeated := 0
+	for _, candidate := range candidates {
+		switch candidate.Status {
+		case "active":
+			active++
+		case "promotable":
+			promotable++
+		case "repeated":
+			repeated++
+		}
+	}
+	switch {
+	case active > 0:
+		policy.NextAction = fmt.Sprintf("Run or explicitly block %s before closing each packet.", growthCountNoun(active, "active capability", "active capabilities"))
+	case promotable > 0:
+		policy.NextAction = fmt.Sprintf("Review %s; keep %s out of finish gates until activation evidence or manual install.", growthCountNoun(promotable, "promotable capability candidate", "promotable capability candidates"), growthPronoun(promotable))
+	case repeated > 0:
+		policy.NextAction = fmt.Sprintf("Keep collecting evidence for %s; do not treat %s as required behavior yet.", growthCountNoun(repeated, "repeated candidate", "repeated candidates"), growthPronoun(repeated))
+	default:
+		policy.NextAction = "No capability activation pressure yet."
+	}
+	return policy
+}
+
+func growthCountNoun(count int, singular string, plural string) string {
+	if count == 1 {
+		return fmt.Sprintf("1 %s", singular)
+	}
+	return fmt.Sprintf("%d %s", count, plural)
+}
+
+func growthPronoun(count int) string {
+	if count == 1 {
+		return "it"
+	}
+	return "them"
+}
+
 func capabilityStatusForEvidence(goalCount int) string {
 	switch {
 	case goalCount >= growthActiveSignalGoals:
@@ -1321,6 +1398,10 @@ func writeGrowthCandidate(root string, candidate growthCandidate, pressure growt
 		"",
 		candidateActivationRule(candidate),
 		"",
+		"## Activation Decision",
+		"",
+		candidateActivationDecision(candidate),
+		"",
 	}, "\n")
 	if err := removeConflictingLifecycleCopies(root, candidate); err != nil {
 		return err
@@ -1425,6 +1506,21 @@ func candidateActivationRule(candidate growthCandidate) string {
 		return "This capability is active because it crossed the activation threshold. Keep it active only while future evidence continues to support it."
 	}
 	return "Do not treat this file as active behavior yet. Promote it only after future runtime packets keep confirming the same pressure and the project needs a stable structure."
+}
+
+func candidateActivationDecision(candidate growthCandidate) string {
+	switch candidate.Status {
+	case "active":
+		return fmt.Sprintf("Active: evidence count %d reached activation threshold %d. Future packets must run this capability or explicitly record why it is blocked before `hyper complete`.", candidate.EvidenceCount, candidate.ActivationThreshold)
+	case "promotable":
+		return fmt.Sprintf("Promotable: evidence count %d reached promotion threshold %d. Review the candidate, but keep it out of finish gates until it reaches activation threshold %d or is manually installed as active.", candidate.EvidenceCount, candidate.PromotionThreshold, candidate.ActivationThreshold)
+	case "repeated":
+		return fmt.Sprintf("Candidate: evidence count %d reached repeated threshold %d. Keep collecting independent packet evidence; do not require this behavior yet.", candidate.EvidenceCount, candidate.RepeatedThreshold)
+	case "retired":
+		return "Retired: source pressure no longer appears in current growth state. Do not use this as active behavior unless new evidence recreates it."
+	default:
+		return "Observed only: keep this as context until repeated evidence proves it should become a candidate."
+	}
 }
 
 func firstBacktickCommand(value string) string {

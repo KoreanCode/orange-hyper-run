@@ -17,7 +17,7 @@ Learn role: Learn is not a summary. It extracts what the project repeatedly need
 
 Required workflow:
 
-1. Run `hyper run [focus]` only when a new runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target and continuation command.
+1. Run `hyper run [focus]` only when a new runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target until that stage's readiness proof is complete.
 2. Read the generated runtime packet path from the CLI output, or read `.hyper/state.json` and use `current_goal_path`.
 3. Read `.hyper/goals/<GOAL-ID>/goal.md` and `.hyper/goals/<GOAL-ID>/tasks.md`.
 4. Implement the smallest coherent step that satisfies the current episode.
@@ -25,7 +25,7 @@ Required workflow:
 6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
 7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.
 8. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.
-9. In auto mode, read `.hyper/next-packet.md` after completion and continue only through the planned next command.
+9. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.
 10. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.
 
 Use `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.
@@ -34,9 +34,9 @@ Use `hyper status --short` when the user wants the current stage, gate, proof, a
 
 Use `hyper migrate` when project state, growth rules, or generated candidates need to be refreshed after a CLI update.
 
-Use `hyper run --auto --until <stage> [focus]` only to override the `plan.md` target. Auto mode still requires finish-gate evidence and does not silently advance stages.
+Use `hyper run --auto --until <stage> [focus]` only to override the `plan.md` target. Auto mode still requires finish-gate evidence and target-stage readiness proof; if `.hyper/next-packet.md` says `advance`, continue only after the Stage Advancement Review shows ready proof and no blocking gaps.
 
-Use `hyper advance` only when `hyper status` says the stage gate is ready and the user accepts the stage change.
+Use `hyper advance` only when `hyper status` says the stage gate is ready and either `.hyper/next-packet.md` is continuing an active auto target or the user accepts the stage change.
 
 Use `hyper doctor` when install, PATH, project state, SQLite, or Codex routing looks wrong.
 <!-- hyper-run:end -->

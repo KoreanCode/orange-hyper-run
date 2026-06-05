@@ -2,7 +2,7 @@ package app
 
 import "strings"
 
-func stageAdvancementReviewLines(readiness readinessState) []string {
+func stageAdvancementReviewLines(readiness readinessState, state projectState) []string {
 	if readiness.Version == 0 {
 		return []string{
 			"## Stage Advancement Review",
@@ -21,7 +21,11 @@ func stageAdvancementReviewLines(readiness readinessState) []string {
 		"- Blocking gaps: " + stageAdvanceBlockingGapSummary(readiness),
 	}
 	if readiness.StageGate.Advancement.Candidate {
-		lines = append(lines, "- User decision required: accept before running `hyper advance`.")
+		if stageAdvanceAutoAuthorized(state) {
+			lines = append(lines, "- Auto continuation: active target "+state.RunUntil+" authorizes `hyper advance` after this review.")
+		} else {
+			lines = append(lines, "- User decision required: accept before running `hyper advance`.")
+		}
 	} else {
 		lines = append(lines, "- User decision required: keep working until blocking gaps are closed.")
 	}
@@ -58,4 +62,8 @@ func stageAdvanceRunTargetSummary(state projectState) string {
 		return state.RunUntil
 	}
 	return state.RunUntil + " (" + state.RunTargetSource + ")"
+}
+
+func stageAdvanceAutoAuthorized(state projectState) bool {
+	return state.AutoContinue && strings.TrimSpace(state.RunUntil) != ""
 }

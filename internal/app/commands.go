@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -8,14 +9,18 @@ import (
 
 func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	root := fsys.root()
+	planResult, err := ensurePlanForInit(root)
+	if err != nil {
+		return commandOutput{}, err
+	}
+	plan := parsePlan(planResult.Body)
+	if err := validatePlanStageFields(plan); err != nil {
+		return commandOutput{}, err
+	}
 	if err := ensureProjectLayout(root); err != nil {
 		return commandOutput{}, err
 	}
 	if err := ensureCodexDesktopRules(root); err != nil {
-		return commandOutput{}, err
-	}
-	planResult, err := ensurePlanForInit(root)
-	if err != nil {
 		return commandOutput{}, err
 	}
 	planCandidatePath, err := maybeWritePlanImportCandidates(root, planResult.Body)
@@ -43,7 +48,7 @@ func initHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
-	episode := compileGoalEpisode("GOAL-0000", "", planResult.Body, nil, growth, readiness)
+	episode := compileGoalEpisode("GOAL-0000", "", planResult.Body, runOptions{}, nil, growth, readiness)
 	now := nowISO()
 	planHash := hashText(planResult.Body)
 	stage := firstNonBlank(episode.Stage, "Tiny MVP")
@@ -135,6 +140,9 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 		return commandOutput{}, err
 	}
 	plan := parsePlan(planResult.Body)
+	if err := validatePlanStageFields(plan); err != nil {
+		return commandOutput{}, err
+	}
 	if err := ensureProjectLayout(root); err != nil {
 		return commandOutput{}, err
 	}
@@ -179,6 +187,44 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
+	if opts.AutoContinue && strings.TrimSpace(focus) == "" && terminalPacketState(previous.Status) && strings.TrimSpace(previous.CurrentGoalID) != "" {
+		derived := deriveCurrentGoalState(root, previous.CurrentGoalID)
+		if terminalPacketState(derived.State) {
+			stopState := runUntilStopState(previous, opts, planResult.Body, readiness)
+			if err := writeJSON(filepath.Join(root, hyperDir, "state.json"), stopState); err != nil {
+				return commandOutput{}, err
+			}
+			nextPlan, err := writeNextPacketPlan(root, stopState, derived, readiness, growth)
+			if err != nil {
+				return commandOutput{}, err
+			}
+			if err := recordNoPacketRun(root, db, stopState, "terminal_packet_stop", nextPlan, readiness, autoLearn); err != nil {
+				return commandOutput{}, err
+			}
+			return stdout(strings.Join(compactNonEmptyLines([]string{
+				"Runtime packet stopped: " + previous.CurrentGoalID,
+				"State: " + derived.State,
+				"Reason: " + derived.Reason,
+				"Run mode: " + formatRunMode(opts),
+				runTargetSourceLine(opts),
+				"Auto learn: " + formatAutoLearn(autoLearn),
+				"Readiness gate: " + readinessGateSummary(readiness),
+				"Readiness pressure: " + readinessPressureSummary(readiness),
+				"Planned action: " + nextPlan.Action,
+				"Next action: " + nextPlan.Command,
+				"Why: " + nextPlan.Reason,
+				"Continuation guard: " + compactText(nextPacketGuard(stopState, nextPlan), 220),
+				nextPacketProgressGuardLine(stopState, nextPlan),
+				"Next packet plan: " + displayRelPath(hyperDir, "next-packet.md"),
+				"",
+				"No runtime packet created.",
+				"",
+				"Next:",
+				"  " + nextPlan.Command,
+				"",
+			}), "\n")), nil
+		}
+	}
 	if opts.AutoContinue && strings.TrimSpace(opts.RunUntil) != "" {
 		stopState := runUntilStopState(previous, opts, planResult.Body, readiness)
 		if runUntilReached(stopState, readiness) {
@@ -189,16 +235,59 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 			if err != nil {
 				return commandOutput{}, err
 			}
+			if err := recordNoPacketRun(root, db, stopState, "auto_target_reached", nextPlan, readiness, autoLearn); err != nil {
+				return commandOutput{}, err
+			}
 			return stdout(strings.Join(compactNonEmptyLines([]string{
-				"Run-until target already reached: " + opts.RunUntil,
+				"Run-until target proof complete: " + opts.RunUntil,
 				"Stage: " + normalizeRuntimeStage(firstNonBlank(readiness.Stage, stopState.Stage)),
 				"Run mode: " + formatRunMode(opts),
 				runTargetSourceLine(opts),
 				"Auto learn: " + formatAutoLearn(autoLearn),
 				"Readiness gate: " + readinessGateSummary(readiness),
 				"Readiness pressure: " + readinessPressureSummary(readiness),
+				"Planned action: " + nextPlan.Action,
 				"Next action: " + nextPlan.Command,
 				"Why: " + nextPlan.Reason,
+				"Continuation guard: " + compactText(nextPacketGuard(stopState, nextPlan), 220),
+				nextPacketProgressGuardLine(stopState, nextPlan),
+				"Next packet plan: " + displayRelPath(hyperDir, "next-packet.md"),
+				"",
+				"No runtime packet created.",
+				"",
+				"Next:",
+				"  " + nextPlan.Command,
+				"",
+			}), "\n")), nil
+		}
+		if readiness.NextPressure.Axis == "stage_advancement" || readiness.StageGate.Advancement.Candidate {
+			advanceState := runUntilStopState(previous, opts, planResult.Body, readiness)
+			if err := writeJSON(filepath.Join(root, hyperDir, "state.json"), advanceState); err != nil {
+				return commandOutput{}, err
+			}
+			derived := currentStateConsistency(root, advanceState).Derived
+			if strings.TrimSpace(derived.State) == "" {
+				derived = goalState{State: firstNonBlank(advanceState.Status, "completed"), Reason: "Stage gate is ready."}
+			}
+			nextPlan, err := writeNextPacketPlan(root, advanceState, derived, readiness, growth)
+			if err != nil {
+				return commandOutput{}, err
+			}
+			if err := recordNoPacketRun(root, db, advanceState, "stage_gate_ready", nextPlan, readiness, autoLearn); err != nil {
+				return commandOutput{}, err
+			}
+			return stdout(strings.Join(compactNonEmptyLines([]string{
+				"Stage gate ready: " + readinessGateSummary(readiness),
+				"Stage: " + normalizeRuntimeStage(firstNonBlank(readiness.Stage, advanceState.Stage)),
+				"Run mode: " + formatRunMode(opts),
+				runTargetSourceLine(opts),
+				"Auto learn: " + formatAutoLearn(autoLearn),
+				"Readiness pressure: " + readinessPressureSummary(readiness),
+				"Planned action: " + nextPlan.Action,
+				"Next action: " + nextPlan.Command,
+				"Why: " + nextPlan.Reason,
+				"Continuation guard: " + compactText(nextPacketGuard(advanceState, nextPlan), 220),
+				nextPacketProgressGuardLine(advanceState, nextPlan),
 				"Next packet plan: " + displayRelPath(hyperDir, "next-packet.md"),
 				"",
 				"No runtime packet created.",
@@ -219,12 +308,12 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 		return commandOutput{}, err
 	}
 	now := nowISO()
-	episode := compileGoalEpisode(goalID, focus, planResult.Body, nil, growth, readiness)
+	episode := compileGoalEpisode(goalID, focus, planResult.Body, opts, nil, growth, readiness)
 	similar, err := findSimilarContext(db, buildSimilarityQuery(episode.Plan, episode, focus), 5)
 	if err != nil {
 		return commandOutput{}, err
 	}
-	episode = compileGoalEpisode(goalID, focus, planResult.Body, similar, growth, readiness)
+	episode = compileGoalEpisode(goalID, focus, planResult.Body, opts, similar, growth, readiness)
 	summary := fmt.Sprintf("Created %s for %s", goalID, episode.Stage)
 
 	goalDir := filepath.Join(root, hyperDir, "goals", goalID)
@@ -355,10 +444,34 @@ func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	readiness := readinessStateForStatus(root, growth)
 	refresh := statusRefreshFor(root, state)
 	if short {
-		return stdout(strings.Join(statusShortLinesWithRefresh(state, derived, readiness, growth, refresh), "\n")), nil
+		lines := statusShortLinesWithRefresh(state, derived, readiness, growth, refresh)
+		lines = appendStatusReviewFindings(lines, root, state.CurrentGoalID, derived)
+		return stdout(strings.Join(lines, "\n")), nil
 	}
 	lines := statusDashboardLinesWithRefresh(state, derived, readiness, growth, runs, goals, refresh)
+	lines = appendStatusReviewFindings(lines, root, state.CurrentGoalID, derived)
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func appendStatusReviewFindings(lines []string, root, goalID string, derived goalState) []string {
+	if !isFailedFinishGateReason(derived.Reason) {
+		return lines
+	}
+	findings := finishGateReviewFindings(root, goalID)
+	if len(findings) == 0 {
+		return lines
+	}
+	if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	lines = append(lines, "Review findings:")
+	for _, finding := range findings {
+		lines = append(lines, "  - "+finding)
+	}
+	if note := finishGateReviewRepeatNote(root, goalID); note != "" {
+		lines = append(lines, "  - "+note)
+	}
+	return append(lines, "")
 }
 
 func statusDBCounts(root string) (int, int) {
@@ -399,12 +512,49 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		goalDir := strings.TrimSuffix(state.CurrentGoalPath, "goal.md")
 		return commandOutput{}, newError("Current runtime packet is still active.\n\nUpdate "+goalDir+"evidence.md and "+goalDir+"next.md, or run `hyper resume` to continue it.", 2)
 	}
+	if planBody := readIfExists(filepath.Join(root, planFile)); strings.TrimSpace(planBody) != "" {
+		plan := parsePlan(planBody)
+		if err := validatePlanStageFields(plan); err != nil {
+			return commandOutput{}, err
+		}
+		state = applyPlanTargetToState(state, plan)
+	}
 	readinessForGate := readReadinessStateIfExists(root)
 	if readinessForGate.Version == 0 {
 		readinessForGate = readinessStateForStatus(root, growthStateForStatus(root))
 	}
 	finishGate, finishErr := runFinishGate(root, state, derived, readinessForGate)
 	if finishErr != nil {
+		if finishGate.Status == "failed" {
+			var failedDerived goalState
+			if failed, ok := failedFinishGateGoalState(root, state.CurrentGoalID); ok {
+				failedDerived = failed
+			} else {
+				failedDerived = goalState{
+					State:  "active",
+					Reason: "Finish gate failed. Fix review.md findings, then run `hyper complete` again.",
+				}
+			}
+			growthForPlan := growthStateForStatus(root)
+			readinessForPlan := readinessStateForStatus(root, growthForPlan)
+			if readinessForPlan.Version == 0 {
+				readinessForPlan = readinessForGate
+			}
+			nextPlan, nextErr := writeNextPacketPlan(root, state, failedDerived, readinessForPlan, growthForPlan)
+			if nextErr != nil {
+				return commandOutput{}, nextErr
+			}
+			if !strings.Contains(finishErr.Message, "Next packet plan:") {
+				finishErr.Message += strings.Join([]string{
+					"",
+					"",
+					"Planned action: " + nextPlan.Action,
+					"Continuation guard: " + compactText(nextPacketGuard(state, nextPlan), 220),
+					nextPacketProgressGuardLine(state, nextPlan),
+					"Next packet plan: " + displayRelPath(hyperDir, "next-packet.md"),
+				}, "\n")
+			}
+		}
 		return commandOutput{}, finishErr
 	}
 
@@ -477,7 +627,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	nextCommand := nextPlan.Command
 	nextReason := nextPlan.Reason
-	return stdout(strings.Join([]string{
+	lines := []string{
 		"Completed runtime packet: " + state.CurrentGoalID,
 		"State: " + derived.State,
 		"Reason: " + derived.Reason,
@@ -491,16 +641,22 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Pressure ledger: " + growthLoopStateSummary(growth),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
+		"Planned action: " + nextPlan.Action,
 		"Next action: " + nextCommand,
 		"Why: " + nextReason,
-		"Next packet plan: " + displayRelPath(hyperDir, "next-packet.md"),
+		"Continuation guard: " + compactText(nextPacketGuard(state, nextPlan), 220),
+	}
+	if progressLine := nextPacketProgressGuardLine(state, nextPlan); progressLine != "" {
+		lines = append(lines, progressLine)
+	}
+	lines = append(lines,
+		"Next packet plan: "+displayRelPath(hyperDir, "next-packet.md"),
 		line,
 		"",
-		"Next:",
-		"  " + nextCommand,
-		"  hyper status --short",
-		"",
-	}, "\n")), nil
+	)
+	lines = append(lines, nextCommandBlock(nextCommand, "hyper status --short")...)
+	lines = append(lines, "")
+	return stdout(strings.Join(lines, "\n")), nil
 }
 
 func resumeHyper(fsys fsRoot) (commandOutput, *hyperError) {
@@ -513,17 +669,53 @@ func resumeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
-	state = applyPlanTargetFromRoot(root, state)
+	if planBody := readIfExists(filepath.Join(root, planFile)); strings.TrimSpace(planBody) != "" {
+		plan := parsePlan(planBody)
+		if err := validatePlanStageFields(plan); err != nil {
+			return commandOutput{}, err
+		}
+		state = applyPlanTargetToState(state, plan)
+	}
 	if strings.TrimSpace(state.CurrentGoalID) == "" {
 		return stdout("No active runtime packet found. Start with `hyper run`.\n"), nil
 	}
 	handoff := createExecutionHandoff(state.ActiveRunID, state.CurrentGoalID, state.AutoContinue)
-	return stdout(strings.Join([]string{
+	lines := []string{
 		fmt.Sprintf("Resuming %s at %s.", state.ActiveRunID, state.CurrentGoalID),
 		"",
 		renderExecutionHandoff(handoff),
 		"",
-	}, "\n")), nil
+	}
+	if failed, ok := failedFinishGateGoalState(root, state.CurrentGoalID); ok {
+		lines = append(lines, renderFailedFinishGateResumeBlock(root, state.CurrentGoalID, failed)...)
+	}
+	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func renderFailedFinishGateResumeBlock(root, goalID string, failed goalState) []string {
+	lines := []string{
+		"Finish gate failed. Fix this same runtime packet before starting new work.",
+		"Reason: " + failed.Reason,
+		"Review file: " + displayRelPath(hyperDir, "goals", goalID, "review.md"),
+	}
+	if findings := finishGateReviewFindings(root, goalID); len(findings) > 0 {
+		lines = append(lines, "", "Current review findings:")
+		for _, finding := range findings {
+			lines = append(lines, "  - "+finding)
+		}
+		if note := finishGateReviewRepeatNote(root, goalID); note != "" {
+			lines = append(lines, "  - "+note)
+		}
+	}
+	lines = append(lines,
+		"",
+		"Next:",
+		"  update "+displayRelPath(hyperDir, "goals", goalID, "evidence.md"),
+		"  update "+displayRelPath(hyperDir, "goals", goalID, "next.md"),
+		"  hyper complete",
+		"",
+	)
+	return lines
 }
 
 func blockingActiveGoal(root string, state projectState) string {
@@ -531,15 +723,27 @@ func blockingActiveGoal(root string, state projectState) string {
 		return ""
 	}
 	if failed, ok := failedFinishGateGoalState(root, state.CurrentGoalID); ok {
-		return strings.Join([]string{
+		lines := []string{
 			"Current runtime packet has failed the finish gate: " + state.CurrentGoalID,
 			"Reason: " + failed.Reason,
+		}
+		if findings := finishGateReviewFindings(root, state.CurrentGoalID); len(findings) > 0 {
+			lines = append(lines, "", "Current review findings:")
+			for _, finding := range findings {
+				lines = append(lines, "  - "+finding)
+			}
+			if note := finishGateReviewRepeatNote(root, state.CurrentGoalID); note != "" {
+				lines = append(lines, "  - "+note)
+			}
+		}
+		lines = append(lines,
 			"",
 			"Fix the same packet before creating another one:",
-			"  update " + displayRelPath(hyperDir, "goals", state.CurrentGoalID, "evidence.md"),
-			"  update " + displayRelPath(hyperDir, "goals", state.CurrentGoalID, "next.md"),
+			"  update "+displayRelPath(hyperDir, "goals", state.CurrentGoalID, "evidence.md"),
+			"  update "+displayRelPath(hyperDir, "goals", state.CurrentGoalID, "next.md"),
 			"  hyper complete",
-		}, "\n")
+		)
+		return strings.Join(lines, "\n")
 	}
 	derived := deriveCurrentGoalState(root, state.CurrentGoalID)
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(derived.State) != "" && state.Status != "active" && state.Status != derived.State {
@@ -603,8 +807,49 @@ func runUntilStopState(previous projectState, opts runOptions, planBody string, 
 func runUntilStopDerived(state projectState) goalState {
 	return goalState{
 		State:  firstNonBlank(state.Status, "completed"),
-		Reason: "Run-until target is already reached.",
+		Reason: "Run-until target proof is complete.",
 	}
+}
+
+func nextCommandBlock(commands ...string) []string {
+	lines := []string{"Next:"}
+	seen := map[string]bool{}
+	for _, command := range commands {
+		command = strings.TrimSpace(command)
+		if command == "" || seen[command] {
+			continue
+		}
+		seen[command] = true
+		lines = append(lines, "  "+command)
+	}
+	return lines
+}
+
+func recordNoPacketRun(root string, db *sql.DB, state projectState, reason string, nextPlan plannedNextPacket, readiness readinessState, autoLearn learnResult) *hyperError {
+	event := map[string]any{
+		"type":                "run_skipped",
+		"run_id":              nullableString(state.ActiveRunID),
+		"goal_id":             nullableString(state.CurrentGoalID),
+		"reason":              reason,
+		"stage":               state.Stage,
+		"auto_continue":       state.AutoContinue,
+		"run_until":           nullableString(state.RunUntil),
+		"run_target_source":   nullableString(state.RunTargetSource),
+		"next_action":         nextPlan.Action,
+		"next_command":        nextPlan.Command,
+		"readiness_gate":      readinessGateSummary(readiness),
+		"readiness_pressure":  readinessPressureSummary(readiness),
+		"auto_learn_state":    autoLearn.State,
+		"auto_learn_inserted": autoLearn.Inserted,
+		"created_at":          nowISO(),
+	}
+	if err := insertEvent(db, event); err != nil {
+		return err
+	}
+	if err := appendJSONL(filepath.Join(root, hyperDir, "logs", "project.jsonl"), event); err != nil {
+		return err
+	}
+	return nil
 }
 
 func learnCurrentGoal(fsys fsRoot) (commandOutput, *hyperError) {

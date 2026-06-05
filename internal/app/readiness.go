@@ -396,7 +396,7 @@ func weakReadinessEvidence(normalized string) bool {
 			return true
 		}
 	}
-	if strings.Contains(normalized, "blocked") && !hasAny(normalized, "not blocked", "none blocking", "no blocker") {
+	if strings.Contains(normalized, "blocked") && !hasAny(normalized, "not blocked", "unblocked", "none blocking", "no blocker", "no blocking") {
 		return true
 	}
 	if strings.Contains(normalized, "failed") && !hasAny(normalized, "failed before", "previously failed", "failure state") {
@@ -712,8 +712,8 @@ func referenceBenchmarkMissingRequirements(fields referenceBenchmarkEvidence) []
 	if !specificBenchmarkField(fields.AboveBaselineStrength) {
 		missing = append(missing, "above-baseline strength")
 	}
-	if !specificBenchmarkField(fields.Decision) {
-		missing = append(missing, "decision")
+	if !benchmarkDecisionAllowsServiceQuality(fields.Decision) {
+		missing = append(missing, "decision that allows Service Quality to proceed")
 	}
 	return missing
 }
@@ -784,6 +784,48 @@ func noCriticalBelowBaselineGap(value string) bool {
 		)
 	}
 	return hasAny(normalized, "none", "no critical", "no core", "no below baseline", "no below-baseline", "not blocked", "none blocking")
+}
+
+func benchmarkDecisionAllowsServiceQuality(value string) bool {
+	normalized := normalizeSentence(value)
+	if !specificBenchmarkField(value) {
+		return false
+	}
+	if benchmarkDecisionBlocksServiceQuality(normalized) {
+		return false
+	}
+	return hasAny(normalized,
+		"allow",
+		"allowed",
+		"can continue",
+		"can proceed",
+		"covered",
+		"acceptable",
+		"pass",
+		"passes",
+		"ready",
+		"proceed",
+		"not blocked",
+		"unblocked",
+	)
+}
+
+func benchmarkDecisionBlocksServiceQuality(normalized string) bool {
+	if hasAny(normalized,
+		"cannot proceed",
+		"can't proceed",
+		"do not proceed",
+		"not allowed",
+		"not acceptable",
+		"not ready",
+		"only after",
+		"until",
+		"fail",
+		"fails",
+	) {
+		return true
+	}
+	return strings.Contains(normalized, "blocked") && !hasAny(normalized, "not blocked", "unblocked", "no blocker", "no blocking", "none blocking")
 }
 
 func securityBaselineEvidenceCovered(normalized string) bool {

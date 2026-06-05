@@ -3,17 +3,67 @@
 ## Unreleased
 
 - Service Quality Self Review gate를 추가했습니다. packet 완료 전에 plan alignment, core loop quality, product satisfaction, no drift, validation match, pass/fail verdict를 요구합니다.
-- Self Review verdict가 `fail`이면 Service Quality packet을 닫지 않고 같은 packet에서 재작업하게 합니다.
+- Self Review verdict가 `fail`이면 Service Quality packet을 닫지 않고 같은 packet에서 보강하게 합니다.
+- 실패한 Self Review의 구체적인 field와 verdict 내용을 finish-gate finding, next-packet correction plan, `hyper resume`에 포함하게 했습니다.
+- Beta와 Service Quality finish gate에서 이미 충족된 경우가 아니면 Reference Benchmark Evidence를 요구하게 했습니다.
+- 현재 readiness pressure가 reference benchmark인 경우에도 Reference Benchmark Evidence를 요구하고, 중복된 generic readiness finding은 만들지 않게 했습니다.
+- Service Quality packet 완료 전에 Self Review, Reference Benchmark Evidence, active validator proof를 모두 만족해야 하는 테스트를 추가했습니다.
 - Product satisfaction을 Beta, Service Quality, Sustained Service Quality gate의 readiness axis로 추가했습니다.
 - agent가 제품 방향을 조용히 넓히지 않고 blocker로 기록하도록 runtime packet의 work boundary와 stop condition에 no-drift guard를 추가했습니다.
+- candidate, promotable candidate, active required behavior가 구분되도록 threshold 기반 capability activation policy를 growth state, capability file, status output에 명시하게 했습니다.
 - `plan.md`에 `Target Stage`를 정의하면 plain `hyper run`이 그 목표까지 guarded auto continuation으로 동작하게 했습니다.
+- `Target Stage`는 해당 target stage의 readiness proof가 완료된 뒤에만 완료로 보게 했습니다. 그래서 `Target Stage: Service Quality`는 stage 진입 직후 멈추지 않고 Service Quality packet 안에서도 계속 진행합니다.
 - plan target에서 온 continuation 명령은 plain `hyper run`으로 유지하고, `--auto --until`은 명시적인 override로 남겼습니다.
+- 명시적인 `--until`을 runtime target source로 기록해 CLI 출력, `state.json`, 생성된 `goal.md`가 실수로 `plan.md` target을 설명하지 않게 했습니다.
+- 이후 `hyper run --auto`가 이전 command-line target을 이어갈 때도 명시적인 `--until` source를 유지하게 했습니다.
+- plain `hyper run`은 `plan.md` target으로 돌아가고, 생성된 `--auto --until` 명령은 명시 override를 유지한다는 규칙을 문서와 테스트로 고정했습니다.
+- 활성 명시 `--until` override가 `plan.md` target과 다를 때 `hyper status`가 둘을 같이 보여주게 했습니다.
 - `plan.md`의 `Target Stage`가 바뀌거나 제거되면 저장된 auto target도 함께 맞추게 했습니다.
 - status, next-packet planning, `hyper advance`에 명시적인 stage advancement review 출력을 추가했습니다.
+- active auto target에서는 Stage Advancement Review가 ready proof와 blocking gap 없음 상태를 보여준 뒤 `hyper advance`까지 이어갈 수 있게 했습니다.
+- `plan.md Target Stage`가 잘못된 값이면 `hyper run`, `hyper doctor`와 동일하게 `hyper advance`도 stage 변경을 막게 했습니다.
+- active auto target에서 stage gate가 ready일 때 불필요한 filler runtime packet을 만들지 않고, `hyper run`이 검토된 `hyper advance`로 다시 안내하게 했습니다.
+- target-proof-complete, gate-ready advancement처럼 runtime packet을 만들지 않는 auto 판단도 project log와 SQLite event에 기록하게 했습니다.
+- finish gate가 실패하면 `.hyper/next-packet.md`를 `complete-current`로 갱신하고, 오래된 실패 packet 상태도 migration으로 복구하게 했습니다.
+- finish gate 실패 handoff를 쓸 때도 최신 `plan.md Target Stage` 변경 또는 제거를 반영하게 했습니다.
+- `plan.md Target Stage`가 잘못된 값이면 `hyper complete`도 completion handoff를 쓰지 않고 먼저 막게 했습니다.
+- `plan.md Target Stage`가 잘못된 값이면 `hyper status`가 migrate 대신 plan 수정으로 안내하게 했습니다.
+- `plan.md Target Stage`가 잘못된 값이면 `hyper migrate`, `hyper repair`, `hyper resume`도 stale auto-continuation 상태를 쓰거나 보여주지 않게 막았습니다.
+- 알 수 없는 stage 이름이 Tiny MVP로 조용히 fallback되지 않도록 `plan.md Current Stage`도 init, run, status, doctor, complete, advance, migrate, repair, resume 전체에서 검증하게 했습니다.
+- 기존 `plan.md` stage field가 잘못된 경우 `hyper init`이 `.hyper/` routing state를 쓰기 전에 막히게 해서 실패한 초기화가 부작용을 남기지 않게 했습니다.
+- CLI 업데이트 이후 다시 `hyper init`을 할 필요가 없도록 `hyper migrate`가 Codex Desktop routing file, generated command guide, 빠진 Hyper Run directory를 갱신하게 했습니다.
+- active runtime packet이 있어도 `plan.md` stage field가 잘못되어 있으면 `hyper status`가 plan 수정을 우선 안내하게 했습니다. plan이 잘못된 상태에서는 completion과 continuation이 막히기 때문입니다.
+- `hyper complete`, runtime packet을 만들지 않는 auto-run stop, `hyper advance`, `hyper repair` 출력에 next-packet planned action과 continuation guard를 함께 보여주게 했습니다.
+- 같은 packet 재작업을 바로 시작할 수 있도록 `hyper status`와 `hyper status --short`에 현재 finish-gate review finding을 표시하게 했습니다.
+- finish gate 실패 때문에 `hyper run`이 막힐 때도 현재 review finding을 함께 보여줘 loop가 같은 packet 재작업으로 향하게 했습니다.
+- finish-gate 실패 에러에도 `Planned action: complete-current`와 continuation guard를 포함해 `.hyper/next-packet.md`를 열기 전에도 같은 packet 재작업이 필요하다는 점을 알 수 있게 했습니다.
+- `not ready`, `insufficient`, `incomplete`, `not service-quality` 같은 Self Review verdict를 `ready` 단어가 들어 있다는 이유로 통과시키지 않고 finish-gate 실패로 처리하게 했습니다.
+- Reference Benchmark decision이 Service Quality 진행을 명시적으로 허용해야 통과하게 했습니다. blocked, not ready, only after 같은 결정은 finish-gate 실패로 남습니다.
+- Service Quality가 진행 가능하다고 함께 말하는 `not blocked`, `unblocked` benchmark/readiness 문구는 긍정 표현으로 처리해 blocker 관련 false failure가 나지 않게 했습니다.
+- `complete-current` next-packet plan과 `hyper resume` 출력에 현재 `review.md` finding을 직접 표시하게 했습니다.
+- `review.md`에 finish-gate evidence, next-note, finding hash를 기록하고, 같은 finding이 반복되면 auto continuation이 멈춰야 한다는 반복 실패 경고를 표시하게 했습니다.
+- finish-gate 실패부터 같은 packet 보강, stage advancement, 다음 runtime packet 생성까지 이어지는 correction loop end-to-end 테스트를 추가했습니다.
+- plain `hyper run`이 `--auto --until` 없이도 plan target 기준으로 Tiny MVP부터 Service Quality까지 stage를 올리고, Service Quality에서 Sustained Service Quality까지 이어간 뒤 목표에서 멈추는 multi-stage 테스트를 추가했습니다.
+- finish gate가 실패한 상태에서는 `hyper status --short`가 새 작업 대신 `review.md` 보강과 같은 packet 재완료를 안내하게 했습니다.
+- finish gate가 실패한 상태에서는 `hyper doctor`의 next action도 `review.md` 보강을 우선 안내하게 했습니다.
+- `hyper status`와 `hyper status --short`에 다음 next-packet action을 표시하게 했습니다.
+- `hyper status`와 `hyper status --short`에 `.hyper/next-packet.md` handoff 경로를 표시하게 했습니다.
+- 일반 active packet이 아직 완료되지 않은 상태에서는 `.hyper/next-packet.md`가 이미 있는 것처럼 보이지 않게 했습니다.
+- `hyper repair` 이후 갱신된 planned action과 `.hyper/next-packet.md` 경로를 출력하게 했습니다.
+- `hyper migrate` 이후에도 갱신된 planned action과 next action을 출력하게 했습니다.
+- 아직 끝나지 않은 active packet에서 `hyper migrate`가 evidence/next notes 작성 전 `hyper complete`를 바로 안내하지 않게 했습니다.
 - `.hyper/next-packet.md`에 필요한 guard, continuation, stage advancement review section이 빠지면 `hyper doctor`가 경고하게 했습니다.
+- auto target 변경 이후 `.hyper/next-packet.md`에 오래된 guard, continuation, advancement review 문구가 남아 있으면 `hyper doctor`가 경고하게 했습니다.
+- `hyper doctor`가 `.hyper/next-packet.md`의 mode, reason, readiness gate, readiness pressure metadata 최신성도 검증하게 했습니다.
+- 첫 runtime packet이 아직 없을 때는 `hyper doctor`가 `.hyper/next-packet.md`를 요구하지 않게 했습니다.
 - Reference Benchmark Evidence의 below-baseline gap은 non-critical, deferred, out of scope, non-goal이 명시된 경우에만 통과하게 더 엄격하게 했습니다.
-- `.hyper/next-packet.md`에 Codex Desktop continuation 안내를 추가해 auto mode가 run, repair, advance, stop 중 무엇을 해야 하는지 더 명확하게 했습니다.
+- `.hyper/next-packet.md`에 Codex Desktop continuation 안내를 추가해 auto mode가 run, 같은 packet 보강, advance, stop 중 무엇을 해야 하는지 더 명확하게 했습니다.
+- `.hyper/next-packet.md`와 `hyper doctor`에 auto-mode Progress Guard를 추가해 진전 없는 반복 명령이나 반복 fix finding이 valid progress처럼 이어지지 않고 멈추게 했습니다.
 - auto mode의 `hyper run`과 `hyper resume` Codex Desktop payload에 next-packet continuation 안내를 포함했습니다.
+- Codex router skill에서 `run`, `advance`, `complete-current`, `stop` next-packet action별 행동을 더 명확하게 했습니다.
+- `complete-current` handoff가 `hyper repair` 명령과 혼동되지 않도록 review/evidence/next notes를 고치는 흐름으로 명확히 했습니다.
+- `blocked`와 `waiting_user` packet을 auto continuation의 terminal stop 상태로 처리해 blocker나 사용자 결정을 기다리게 하고, 다음 `hyper run`으로 이어가지 않게 했습니다.
+- terminal blocked/waiting stop 이후 plan target을 쓰는 plain `hyper run`이 새 packet을 만들지 않게 하고, 명시적인 follow-up focus가 있을 때만 다음 packet을 시작하게 했습니다.
 
 ## v0.6.3 - 2026-05-29
 

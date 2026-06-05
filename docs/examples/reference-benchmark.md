@@ -62,7 +62,7 @@ Why this is emerging:
 - The baseline is too vague.
 - Current comparison does not say below/meets/above baseline.
 - Below-baseline gaps are still pending.
-- The decision does not create clear next pressure.
+- The decision does not explicitly allow Service Quality to proceed.
 
 ## Blocked Example
 
@@ -81,6 +81,7 @@ Why this is emerging:
 Why this blocks Service Quality:
 
 - The evidence is useful, but it names a critical below-baseline gap.
+- The decision says Service Quality is blocked until more work is done.
 - Hyper Run should turn that gap into the next runtime pressure instead of advancing the stage.
 
 ## Category Templates

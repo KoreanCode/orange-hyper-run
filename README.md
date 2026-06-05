@@ -68,7 +68,7 @@ For example:
 - if every UI change needs a browser screenshot, it may suggest a visual check
 - if the project repeatedly hits the same failure mode, it may turn that into a stop condition
 
-Those suggestions are not forced immediately. They stay as candidates until repeated evidence proves they are useful.
+Those suggestions are not forced immediately. They stay as candidates until repeated evidence proves they are useful. Hyper Run also records an activation policy: repeated evidence creates a candidate, stronger repeated evidence makes it promotable, and only activation-level evidence makes it required in future packet finish gates.
 
 ## Terms You May See
 
@@ -83,6 +83,7 @@ Hyper Run has internal terms, but you do not need to memorize them.
 | Pressure Ledger | A list of repeated needs, gaps, or failures the project keeps showing. |
 | Readiness pressure | The next missing proof needed to move the project forward. |
 | Capability candidate | A suggested validator, skill, agent, or harness. It is not active yet. |
+| Capability policy | The threshold rule that says whether a candidate is only observed, ready for review, or active required behavior. |
 | Growth without a harness | Start light; add structure only after the project proves it needs it. |
 
 The short version:
@@ -109,13 +110,17 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 ## What Is Current
 
 - `plan.md` can set `Target Stage`, so plain `hyper run` defaults to packet-by-packet continuation toward that target.
-- When the target comes from `plan.md`, the planned continuation command stays plain `hyper run`; `--auto --until` is only needed for an explicit one-off override.
+- When the target comes from `plan.md`, the planned continuation command stays plain `hyper run`; `--auto --until` is only needed for an explicit command-line override.
+- If you used `--auto --until` and want to keep that override, follow the generated `--until` command; use plain `hyper run` to return to the `plan.md` target.
+- While an explicit override is active, `hyper status` shows both the active override target and the `plan.md` target when they differ.
 - If you change or remove `Target Stage`, the next status/run/migrate cycle follows the updated plan target.
 - `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
-- `hyper run --auto --until <stage>` still works as an explicit override. It does not silently advance stages.
-- `hyper advance` applies a stage change only after `hyper status` says the gate is ready and the user accepts it.
-- Stage advancement output and `.hyper/next-packet.md` show the accepted gate, exact plan change, covered proof, and user-decision guard.
-- Service Quality can require reference benchmark evidence: the project must meet its category baseline and show one concrete strength.
+- If the same finish-gate findings repeat, Hyper Run records the repeat count and warns the agent to stop the auto loop unless the next fix directly addresses those findings.
+- `hyper run --auto --until <stage>` still works as an explicit override. It still requires ready proof before stage advancement.
+- `hyper advance` applies a stage change only after `hyper status` says the gate is ready. In an active auto target, `.hyper/next-packet.md` can carry that advancement after the Stage Advancement Review; outside auto mode, user acceptance is still required.
+- Stage advancement output and `.hyper/next-packet.md` show the accepted gate, exact plan change, covered proof, continuation guard, and progress guard.
+- If an auto target is active and the stage gate is already ready, another `hyper run` does not create a filler packet; it points back to the reviewed `hyper advance`.
+- Beta and Service Quality packets require reference benchmark evidence unless it was already covered: the project must meet its category baseline and show one concrete strength.
 - Installers and `hyper update` verify release checksums. If `cosign` is installed, signature verification also runs.
 - `hyper doctor` checks install state, project state, SQLite, Codex routing, signature capability, and whether `.hyper/next-packet.md` matches current state and required handoff sections.
 - `hyper status` and `hyper doctor` detect when `state.json` has an old stage that no longer matches `plan.md`; `hyper migrate` refreshes it.
@@ -132,7 +137,7 @@ hyper run
 
 hyper complete
 hyper status --short
-hyper advance   # only when the stage gate is ready and you accept the stage change
+hyper advance   # when the stage gate is ready after review or an active auto target
 hyper doctor
 hyper run "Next improvement"
 ```
@@ -152,17 +157,17 @@ flowchart TD
   G -- "Yes" --> I["Save reusable lessons<br/>refresh project state"]
   I --> J["Prepare next command<br/>write .hyper/next-packet.md"]
   J --> K{"Ready for next stage?"}
-  K -- "Yes, user accepts" --> L["hyper advance<br/>update plan.md stage"]
+  K -- "Yes, accepted or active auto target" --> L["hyper advance<br/>update plan.md stage"]
   K -- "No or not accepted" --> M["hyper status --short<br/>review next action"]
-  L --> N{"Auto until target reached?"}
+  L --> N{"Auto target proof complete?"}
   M --> N
   N -- "No" --> C
   N -- "Yes" --> O["Stop and review<br/>choose the next service target"]
 ```
 
-`hyper complete` checks the packet before saving lessons. If validation, stage evidence, active checks, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps you in the same packet.
+`hyper complete` checks the packet before saving lessons. If validation, stage evidence, active checks, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps you in the same packet. The same findings are also surfaced in `.hyper/next-packet.md` and `hyper resume` so the next Codex step fixes the current packet instead of starting new work.
 
-For Service Quality and Sustained Service Quality packets, the evidence must also include a Self Review. Hyper Run expects the agent to judge plan alignment, core loop quality, product satisfaction, no drift, validation match, and an explicit `Verdict: pass`. A `fail` verdict keeps the same packet open for repair.
+For Service Quality and Sustained Service Quality packets, the evidence must also include a Self Review. Hyper Run expects the agent to judge plan alignment, core loop quality, product satisfaction, no drift, validation match, and an explicit `Verdict: pass`. A `fail` verdict keeps the same packet open for correction and carries the concrete quality gaps into `review.md`, `.hyper/next-packet.md`, and `hyper resume`.
 
 Every packet also carries a no-drift guard. If the work would move outside `plan.md` product direction, target user, core loop, non-goals, or constraints, the agent should stop and record the blocker instead of widening the project silently.
 
@@ -182,9 +187,19 @@ hyper run --auto --until service-quality "Keep upgrading this service"
 
 Use `Target Stage: Sustained Service Quality` or `--until sustained-service-quality` when the goal is to keep planning packets after Service Quality and focus on repeatable validators, operational handoff, and friction reduction.
 
-Auto mode does not skip proof or silently advance stages. It keeps the next packet command planned in `.hyper/next-packet.md`; stage changes still require explicit acceptance with `hyper advance`.
+`Current Stage` and `Target Stage` should use one of these stage names: `Tiny MVP`, `Usable MVP`, `Beta`, `Service Quality`, or `Sustained Service Quality`. If a stage value is unclear, Hyper Run stops and asks you to fix `plan.md` instead of guessing.
 
-`.hyper/next-packet.md` also tells Codex Desktop whether to continue with the next `run`, pause for `hyper advance`, repair the current packet, or stop because the target was reached.
+Auto mode does not skip proof. It keeps the next packet command planned in `.hyper/next-packet.md`; when a stage gate is ready, an active auto target can carry `hyper advance` after the Stage Advancement Review confirms ready proof and no blocking gaps. Outside auto mode, stage changes still require user acceptance with `hyper advance`.
+
+`.hyper/next-packet.md` also tells Codex Desktop whether to continue with the next `run`, apply a reviewed `hyper advance`, fix the current packet's review/evidence/next notes, or stop because the target proof is complete, the packet is blocked, or user input is required. In auto mode it also includes a Progress Guard: continue only when the next command produces a new packet, stage change, changed readiness pressure, changed action/command, or corrected evidence. If the same command or finding repeats without progress, stop and report the loop risk.
+
+After a blocked or waiting packet stops auto continuation, a plain `hyper run` using the plan target will not create another packet. Resolve the blocker, then start a deliberate follow-up with a clear focus such as `hyper run "Continue after API credentials are available"`.
+
+The same planned action and guard are printed in the CLI output after packet completion or stage advancement, so the next command is visible without opening the file first.
+
+`Target Stage` means Hyper Run keeps going until that stage's readiness proof is complete, not merely until `plan.md Current Stage` has that name. For example, `Target Stage: Service Quality` continues into Service Quality packets until validation, operations, benchmark, satisfaction, maintainability, and active-quality evidence are good enough for the Service Quality gate.
+
+When the target proof is complete, plain `hyper run` stops by design. To keep going, raise `Target Stage`, remove it for manual packets, or run an explicit higher `--until` target.
 
 In Codex Desktop you can use the same idea as a project command:
 
@@ -464,7 +479,7 @@ This closes the current packet and updates project memory:
 - constraints
 - readiness progress
 
-`hyper complete` also prints the next recommended action. If the gate is ready, it will tell you to run `hyper advance`. Otherwise it will point to the next smallest `hyper run` focus. The next `hyper run` uses the learned information to change the work boundary, validation signals, stop conditions, readiness pressure, and capability candidates.
+`hyper complete` also prints the next recommended action. If the gate is ready, it will tell you to run `hyper advance`. Otherwise it will point to the next smallest `hyper run` focus. The next `hyper run` uses the learned information to change the work boundary, validation signals, stop conditions, readiness pressure, capability candidates, and capability activation policy.
 
 ## Readiness In Simple Terms
 
@@ -498,13 +513,13 @@ Data persistence: Records survive reload using SQLite.
 Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass.
 ```
 
-When enough evidence exists, `hyper status` shows the next stage is ready. Hyper Run still does not change the stage silently. If you accept the recommendation, run:
+When enough evidence exists, `hyper status` shows the next stage is ready. Hyper Run still does not change the stage from inside a work packet. If you accept the recommendation, or if an active auto target already asked Hyper Run to continue after the Stage Advancement Review, run:
 
 ```bash
 hyper advance
 ```
 
-That updates `plan.md` from the current stage to the next stage, refreshes readiness, and then the next `hyper run` starts using the new stage behavior.
+That updates `plan.md` from the current stage to the next stage, refreshes readiness, and then the next planned command starts using the new stage behavior.
 
 ## Commands
 
@@ -514,7 +529,7 @@ hyper run [focus]           # create the next packet; uses plan.md Target Stage 
 hyper run --auto --until service-quality [focus]  # explicit target override
 hyper run --auto --until sustained-service-quality [focus]
 hyper complete              # run the finish gate, close the packet, and learn
-hyper advance               # apply an accepted stage change when the gate is ready
+hyper advance               # apply a ready stage change after review or active auto target
 hyper status                # show current stage, gaps, and readiness
 hyper status --short        # show only stage, gate, proof, and next action
 hyper doctor                # diagnose install, PATH, project state, and Codex routing

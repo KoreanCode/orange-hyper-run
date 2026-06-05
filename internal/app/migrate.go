@@ -12,12 +12,24 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if !exists(filepath.Join(root, hyperDir)) {
 		return commandOutput{}, newError("No Hyper Run project found. Start with `hyper init`.", 2)
 	}
+	planBody := readIfExists(filepath.Join(root, planFile))
+	if strings.TrimSpace(planBody) != "" {
+		if err := validatePlanStageFields(parsePlan(planBody)); err != nil {
+			return commandOutput{}, err
+		}
+	}
 	db, err := openDB(root)
 	if err != nil {
 		return commandOutput{}, err
 	}
 	defer db.Close()
 	if err := ensureSchema(db); err != nil {
+		return commandOutput{}, err
+	}
+	if err := ensureProjectLayout(root); err != nil {
+		return commandOutput{}, err
+	}
+	if err := ensureCodexDesktopRules(root); err != nil {
 		return commandOutput{}, err
 	}
 	refreshedMemories, err := refreshLegacyMemoryQuality(db)
@@ -39,7 +51,6 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		return commandOutput{}, err
 	}
 	readiness := readReadinessStateIfExists(root)
-	planBody := readIfExists(filepath.Join(root, planFile))
 	if strings.TrimSpace(planBody) != "" {
 		readiness, err = updateReadinessState(root, planBody, growth)
 		if err != nil {
@@ -47,6 +58,8 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		}
 	}
 	stateMessage := "not checked"
+	plannedAction := "not available"
+	nextAction := "hyper status"
 	nextPacketMessage := "not updated; no completed runtime packet state found"
 	if state, stateErr := readState(filepath.Join(root, hyperDir, "state.json")); stateErr == nil {
 		stageRefreshed := false
@@ -80,40 +93,50 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			if targetRefreshed {
 				stateMessage += "; run target refreshed to " + migrateTargetSummary(state)
 			}
-			if consistency.Derived.State == "active" {
+			if consistency.Derived.State == "active" && !isFailedFinishGateReason(consistency.Derived.Reason) {
+				plannedAction = "complete-current"
+				nextAction = statusNextCommandWithRefresh(state, consistency.Derived, readiness, statusRefresh{})
 				nextPacketMessage = "unchanged while the current runtime packet is active"
 			} else {
 				nextPlan, nextErr := writeNextPacketPlan(root, state, consistency.Derived, readiness, growth)
 				if nextErr != nil {
 					return commandOutput{}, nextErr
 				}
+				plannedAction = nextPlan.Action
+				nextAction = nextPlan.Command
 				nextPacketMessage = displayRelPath(hyperDir, "next-packet.md") + " (" + nextPlan.Action + ")"
 			}
 		} else if consistency.Repairable {
 			stateMessage = "state.json needs repair; run `hyper repair`"
+			plannedAction = "repair"
+			nextAction = "hyper repair"
 			nextPacketMessage = "not updated; run `hyper repair` first"
 		} else {
 			stateMessage = "state.json mismatch is not repairable while packet is active"
+			plannedAction = "blocked"
+			nextAction = "hyper status --short"
 			nextPacketMessage = "not updated while packet state is inconsistent"
 		}
 	}
-	return stdout(strings.Join([]string{
+	lines := []string{
 		"Hyper Run Migration",
 		"",
 		fmt.Sprintf("Learn quality gate: refreshed %d legacy memory quality value(s)", refreshedMemories),
 		fmt.Sprintf("Learn quality gate: staled %d noisy memory record(s)", staledMemories),
 		"Growth state: refreshed",
+		"Codex routing: refreshed",
 		fmt.Sprintf("Visible pressures: %d -> %d", visibleGrowthPressureCount(before.Pressures), visibleGrowthPressureCount(growth.Pressures)),
 		fmt.Sprintf("Visible candidates: %d -> %d", visibleGrowthCandidateCount(before.Candidates), visibleGrowthCandidateCount(growth.Candidates)),
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"State consistency: " + stateMessage,
+		"Planned action: " + plannedAction,
+		"Next action: " + nextAction,
 		"Next packet plan: " + nextPacketMessage,
 		"",
-		"Next:",
-		"  hyper doctor",
-		"  hyper status",
-		"",
-	}, "\n")), nil
+	}
+	lines = append(lines, nextCommandBlock(nextAction, "hyper doctor", "hyper status --short")...)
+	lines = append(lines, "")
+	return stdout(strings.Join(lines, "\n")), nil
 }
 
 func migrateTargetSummary(state projectState) string {
@@ -257,6 +280,9 @@ func rewriteMemoryMarkdownFiles(root string, db *sql.DB) *hyperError {
 }
 
 func growthMigrationNeeded(growth growthState) bool {
+	if strings.TrimSpace(growth.ActivationPolicy.Method) == "" {
+		return true
+	}
 	for _, pressure := range growth.Pressures {
 		if !visibleGrowthPressure(pressure) {
 			return true

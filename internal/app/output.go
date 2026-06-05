@@ -1,11 +1,16 @@
 package app
 
+import "strings"
+
 type commandOutput struct {
 	Stdout string
 	Stderr string
 }
 
 func stdout(value string) commandOutput {
+	if strings.TrimSpace(value) != "" && !strings.HasSuffix(value, "\n") {
+		value += "\n"
+	}
 	return commandOutput{Stdout: value}
 }
 

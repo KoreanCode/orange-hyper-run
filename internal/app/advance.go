@@ -15,6 +15,10 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
+	plan := parsePlan(planResult.Body)
+	if err := validatePlanStageFields(plan); err != nil {
+		return commandOutput{}, err
+	}
 	if err := ensureProjectLayout(root); err != nil {
 		return commandOutput{}, err
 	}
@@ -77,7 +81,7 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			return commandOutput{}, err
 		}
 	}
-	plan := parsePlan(updatedPlan)
+	plan = parsePlan(updatedPlan)
 	state.Project = firstNonBlank(readinessProductName(plan), state.Project, "Unknown project")
 	state.Stage = nextStage
 	state.PlanPath = planFile
@@ -135,8 +139,15 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	lines = append(lines,
 		"Readiness gate: "+readinessGateSummary(updatedReadiness),
 		"Readiness pressure: "+readinessPressureSummary(updatedReadiness),
+		"Planned action: "+nextPlan.Action,
 		"Next action: "+nextPlan.Command,
 		"Why: "+nextPlan.Reason,
+		"Continuation guard: "+compactText(nextPacketGuard(state, nextPlan), 220),
+	)
+	if progressLine := nextPacketProgressGuardLine(state, nextPlan); progressLine != "" {
+		lines = append(lines, progressLine)
+	}
+	lines = append(lines,
 		"Next packet plan: "+displayRelPath(hyperDir, "next-packet.md"),
 		"",
 		"Next:",

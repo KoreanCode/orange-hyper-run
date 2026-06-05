@@ -161,7 +161,7 @@ func usage() string {
 		"  Use `hyper run --auto --until service-quality [focus]` only when you need to override the plan target from the command line.",
 		"  After updating evidence.md and next.md, use `hyper complete` to turn evidence into pressure, candidates, and readiness.",
 		"  `hyper complete` runs the finish gate first; fix review.md findings in the same packet before continuing.",
-		"  When `hyper status` says the stage gate is ready, use `hyper advance` to apply the accepted stage change.",
+		"  When `hyper status` says the stage gate is ready, use `hyper advance` after user acceptance or an active auto-target review.",
 		"",
 		"Method:",
 		"  " + growthRuntimeDefinition,
@@ -236,7 +236,7 @@ func commandUsage(command string) string {
 			"Usage:",
 			"  hyper advance",
 			"",
-			"Updates `plan.md` to the next stage only when the readiness gate is ready and the user accepts the change.",
+			"Updates `plan.md` to the next stage only when the readiness gate is ready and the change is accepted by the user or active auto target.",
 			"Shows the accepted gate, exact plan change, covered proof, run target, and next action after advancement.",
 		},
 		"version": {

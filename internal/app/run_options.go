@@ -27,6 +27,7 @@ func parseRunOptions(args []string) (runOptions, *hyperError) {
 			}
 			opts.RunUntil = target
 			opts.AutoContinue = true
+			opts.RunTargetSource = "--until"
 		case strings.HasPrefix(arg, "--until="):
 			target, err := normalizeRunUntilTarget(strings.TrimPrefix(arg, "--until="))
 			if err != nil {
@@ -34,6 +35,7 @@ func parseRunOptions(args []string) (runOptions, *hyperError) {
 			}
 			opts.RunUntil = target
 			opts.AutoContinue = true
+			opts.RunTargetSource = "--until"
 		case strings.HasPrefix(arg, "--"):
 			return runOptions{}, newError("Unknown run option: "+arg+"\n\nUsage:\n  hyper run [--auto] [--until stage] [focus]", 2)
 		default:
@@ -60,10 +62,38 @@ func applyDefaultRunTarget(opts runOptions, plan map[string]string, previous pro
 	if opts.AutoContinue && previous.AutoContinue && strings.TrimSpace(previous.RunUntil) != "" {
 		opts.AutoContinue = true
 		opts.RunUntil = previous.RunUntil
-		opts.RunTargetSource = "previous auto target"
+		opts.RunTargetSource = previousRunTargetSource(previous)
 		return opts, nil
 	}
 	return opts, nil
+}
+
+func previousRunTargetSource(previous projectState) string {
+	source := strings.TrimSpace(previous.RunTargetSource)
+	if source != "" && source != planTargetStageSource {
+		return source
+	}
+	return "previous auto target"
+}
+
+func validatePlanStageFields(plan map[string]string) *hyperError {
+	if err := planCurrentStageError(plan); err != nil {
+		return err
+	}
+	_, _, err := planRunTarget(plan)
+	return err
+}
+
+func planCurrentStageError(plan map[string]string) *hyperError {
+	value := firstRuntimeValue(plan["Current Stage"])
+	if value == "" {
+		return nil
+	}
+	stage := normalizeRuntimeStage(value)
+	if knownRuntimeStage(stage) {
+		return nil
+	}
+	return newError("Invalid plan.md Current Stage: "+value+"\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
 }
 
 func applyPlanTargetToState(state projectState, plan map[string]string) projectState {

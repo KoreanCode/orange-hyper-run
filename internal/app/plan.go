@@ -442,7 +442,7 @@ func genericPlanTitle(value string) bool {
 	}
 }
 
-func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext, growth growthState, readiness readinessState) episode {
+func compileGoalEpisode(goalID, focus, planBody string, opts runOptions, similar []similarContext, growth growthState, readiness readinessState) episode {
 	plan := parsePlan(planBody)
 	stage := normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
 	buildStyle := firstRuntimeValue(plan["Build Style"], "Detect from project")
@@ -453,7 +453,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	scope := runtimeWorkBoundary(objective, stage, plan, growth, readiness)
 	nonGoals := firstRuntimeValue(plan["Non-goals"], "No explicit non-goals recorded in plan.md.")
 	docs := episodeDocs{
-		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
+		Goal:     buildGoalDoc(goalID, objective, focus, plan, opts, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
 		Tasks:    buildTasksDoc(goalID, buildStyle, stage, readiness, growth),
 		Evidence: buildEvidenceDoc(goalID, stage, readiness, growth),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
@@ -889,7 +889,7 @@ func validationForBuildStyle(buildStyle string) string {
 	return common + "\n- If validation cannot run, document the blocker in evidence.md."
 }
 
-func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage, buildStyle, workBoundary, validation, stopCondition string, similar []similarContext, growth growthState, readiness readinessState) string {
+func buildGoalDoc(goalID, objective, focus string, plan map[string]string, opts runOptions, stage, buildStyle, workBoundary, validation, stopCondition string, similar []similarContext, growth growthState, readiness readinessState) string {
 	currentFocus := firstRuntimeValue(strings.TrimSpace(focus), plan["Current Focus"], "Continue the current stage.")
 	product := firstRuntimeValue(plan["Product"], "the current project")
 	targetUsers := firstRuntimeValue(plan["Target Users"], "Not specified yet.")
@@ -926,6 +926,10 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 
 - Build style: %s
 - Current focus: %s
+
+## Run Target
+
+%s
 
 ## Stage Gate
 
@@ -981,7 +985,56 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), executionContractDoc(stage, readiness, growth), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), doneChecklistDoc(stage, readiness, growth), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, runTargetDoc(plan, opts, stage, readiness), buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), executionContractDoc(stage, readiness, growth), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), doneChecklistDoc(stage, readiness, growth), stopCondition)
+}
+
+func runTargetDoc(plan map[string]string, opts runOptions, stage string, readiness readinessState) string {
+	value := firstRuntimeValue(plan["Target Stage"])
+	source := ""
+	if opts.AutoContinue && strings.TrimSpace(opts.RunUntil) != "" && opts.RunTargetSource != planTargetStageSource {
+		value = opts.RunUntil
+		source = firstNonBlank(opts.RunTargetSource, "--until")
+	} else if value != "" {
+		source = planTargetStageSource
+	} else if opts.AutoContinue && strings.TrimSpace(opts.RunUntil) != "" {
+		value = opts.RunUntil
+		source = firstNonBlank(opts.RunTargetSource, "--until")
+	} else {
+		return "- Run target: not set."
+	}
+	target := normalizeRuntimeStage(value)
+	if !knownRuntimeStage(target) {
+		target = strings.TrimSpace(value)
+	}
+	current := normalizeRuntimeStage(firstNonBlank(readiness.Stage, stage))
+	lines := []string{}
+	if source == planTargetStageSource {
+		lines = append(lines, "- plan.md Target Stage: "+target)
+	} else {
+		lines = append(lines, "- Run target: "+target)
+		lines = append(lines, "- Run target source: "+source)
+	}
+	lines = append(lines,
+		"- Target meaning: complete "+target+" readiness proof, not merely enter the stage.",
+	)
+	currentRank := stageRank(current)
+	targetRank := stageRank(target)
+	switch {
+	case currentRank == 0 || targetRank == 0:
+		lines = append(lines, "- Target status: stage value needs validation before continuation can be trusted.")
+	case currentRank < targetRank:
+		lines = append(lines, "- Target status: not at target stage yet; continue packet-by-packet toward "+target+".")
+	case currentRank > targetRank:
+		lines = append(lines, "- Target status: current stage is past the target; stop automatic continuation and review plan.md.")
+	case readiness.StageGate.Status == "ready" && normalizeRuntimeStage(readiness.StageGate.CurrentStage) == target:
+		lines = append(lines, "- Target status: proof complete for "+target+"; the next plan should stop unless the target is raised.")
+	default:
+		lines = append(lines, "- Target status: target stage is active but proof is not complete.")
+		if readiness.NextPressure.AxisName != "" {
+			lines = append(lines, "- Current target pressure: "+readiness.NextPressure.AxisName+" - "+compactText(readiness.NextPressure.Reason, 180))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func executionContractDoc(stage string, readiness readinessState, growth growthState) string {
@@ -1222,11 +1275,17 @@ func serviceQualityStage(stage string) bool {
 }
 
 func referenceBenchmarkRequired(stage string, readiness readinessState) bool {
+	runtimeStage := firstNonBlank(readiness.Stage, stage)
+	normalized := normalizeLabel(runtimeStage)
 	if readiness.Version != 0 {
-		return readiness.NextPressure.Axis == "reference_benchmark"
+		if readiness.NextPressure.Axis == "reference_benchmark" {
+			return true
+		}
+		if readinessDimensionMap(readiness.Dimensions)["reference_benchmark"].Status == "covered" {
+			return false
+		}
 	}
-	normalized := normalizeLabel(stage)
-	if strings.Contains(normalized, "beta") || serviceQualityStage(stage) {
+	if strings.Contains(normalized, "beta") || serviceQualityStage(runtimeStage) {
 		return true
 	}
 	for _, axis := range readiness.StageGate.RequiredAxes {
@@ -1276,7 +1335,7 @@ func createExecutionHandoff(runID, goalID string, autoContinue bool) handoff {
 	nextPath := fmt.Sprintf(".hyper/goals/%s/next.md", goalID)
 	instructions := fmt.Sprintf("Read %s as a runtime packet and complete it checkpoint by checkpoint. Update %s, write %s, and stop early for destructive actions, missing credentials, unclear product scope, or repeated validation failure.", goalPath, evidencePath, nextPath)
 	if autoContinue {
-		instructions += " After `hyper complete` passes, read `.hyper/next-packet.md`; if Action is `run`, execute its Command and continue the next packet; if Action is `advance` or `stop`, pause and report it to the user; if Action is `complete-current`, repair the current packet before continuing."
+		instructions += " After `hyper complete` passes, read `.hyper/next-packet.md`; obey its Guard and Progress Guard; if Action is `run`, execute its Command and continue the next packet; if Action is `advance`, continue only when the Stage Advancement Review says the active auto target authorizes it, otherwise pause and report it; if Action is `complete-current`, stay in the same packet, fix review.md/evidence.md/next.md, and run `hyper complete` again; if Action is `stop`, report the stop reason from `.hyper/next-packet.md` and wait."
 	}
 	return handoff{
 		Adapter:           "prompt",
