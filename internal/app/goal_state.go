@@ -24,6 +24,9 @@ func deriveGoalState(evidenceText, nextText string) goalState {
 		return goalState{State: "blocked", Reason: firstNonBlank(blockers[0], "Blocker section is populated.")}
 	}
 	if hasNonPendingSection(nextText, "Recommended Next Goal") && hasNonPendingSection(evidenceText, "Validation") {
+		if surfaceProofFollowupRequiredFromEvidence(evidenceText) {
+			return goalState{State: "completed", Reason: "Evidence and next recommendation are populated; surface proof follow-up is needed."}
+		}
 		return goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
 	}
 	if len(waiting) > 0 {
@@ -201,6 +204,8 @@ func blockerSectionSignals(text string) ([]string, []string) {
 		switch blockerLineDisposition(line) {
 		case "non_blocking":
 			continue
+		case "surface_proof_followup":
+			continue
 		case "waiting_user":
 			waiting = append(waiting, line)
 		default:
@@ -214,6 +219,9 @@ func blockerLineDisposition(line string) string {
 	normalized := normalizeSentence(line)
 	if waitingUserBlockerLine(normalized) {
 		return "waiting_user"
+	}
+	if surfaceProofFollowupBlockerLine(normalized) {
+		return "surface_proof_followup"
 	}
 	if normalized == "" || isNoIssueText(normalized) || isPassiveNoChangeText(normalized) {
 		return "non_blocking"
@@ -244,6 +252,47 @@ func blockerLineDisposition(line string) string {
 		}
 	}
 	return "blocking"
+}
+
+func surfaceProofFollowupRequiredFromEvidence(text string) bool {
+	for _, line := range usefulSectionLines(text, "Blocker") {
+		if blockerLineDisposition(line) == "surface_proof_followup" {
+			return true
+		}
+	}
+	return false
+}
+
+func surfaceProofFollowupBlockerLine(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	hasSurfaceBlock := hasAny(normalized,
+		"surface proof",
+		"browser proof",
+		"browser surface",
+		"screenshot proof",
+		"browser url policy",
+		"browser use url policy",
+		"localhost browser access",
+	)
+	hasBlocked := hasAny(normalized,
+		"blocked",
+		"could not",
+		"cannot",
+		"unable",
+		"policy",
+	)
+	hasImplementationClear := hasAny(normalized,
+		"no implementation blocker",
+		"command validation passed",
+		"active command validation passed",
+		"validation passed",
+		"recorded as a surface-proof gap",
+		"surface-proof gap",
+		"surface proof gap",
+	)
+	return hasSurfaceBlock && hasBlocked && hasImplementationClear
 }
 
 func waitingUserBlockerLine(normalized string) bool {
