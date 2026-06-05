@@ -71,6 +71,49 @@ func applyDefaultRunTarget(opts runOptions, plan map[string]string, previous pro
 	return opts, nil
 }
 
+func missingTargetStageAdvisory(opts runOptions, plan map[string]string) []string {
+	if opts.AutoContinue || strings.TrimSpace(opts.RunUntil) != "" {
+		return nil
+	}
+	if _, ok, err := planRunTarget(plan); ok || err != nil {
+		return nil
+	}
+	if !longRunningFocus(opts.Focus) {
+		return nil
+	}
+	return []string{
+		"Run target notice: this is a single packet because plan.md has no Target Stage.",
+		"To continue packet by packet, add `Target Stage: Service Quality` to plan.md or run `hyper run --auto --until service-quality [focus]`.",
+	}
+}
+
+func longRunningFocus(focus string) bool {
+	normalized := normalizeSentence(focus)
+	if normalized == "" {
+		return false
+	}
+	return hasAny(normalized,
+		"service quality",
+		"service-quality",
+		"sustained service",
+		"sustained-service",
+		"service readiness",
+		"production quality",
+		"production-ready",
+		"until launch",
+		"keep going",
+		"continue until",
+		"finish the service",
+		"서비스 수준",
+		"서비스화",
+		"서비스 품질",
+		"완성형",
+		"끝까지",
+		"지속 개발",
+		"계속 개발",
+	)
+}
+
 func previousRunTargetSource(previous projectState) string {
 	source := strings.TrimSpace(previous.RunTargetSource)
 	if source != "" && source != planTargetStageSource {

@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -405,6 +406,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 		fmt.Sprintf("Similar context: %d", len(similar)),
 		"Runtime packet file: " + state.CurrentGoalPath,
 	}
+	lines = append(lines, missingTargetStageAdvisory(opts, plan)...)
 	if planCandidatePath != "" {
 		lines = append(lines, "Plan import candidates: "+planCandidatePath)
 	}
@@ -475,21 +477,49 @@ func appendStatusReviewFindings(lines []string, root, goalID string, derived goa
 }
 
 func statusDBCounts(root string) (int, int) {
+	fsRuns, fsGoals := statusFilesystemCounts(root)
 	if !exists(filepath.Join(root, hyperDir, "hyper.sqlite")) {
-		return 0, 0
+		return fsRuns, fsGoals
 	}
 	db, err := openDB(root)
 	if err != nil {
-		return 0, 0
+		return fsRuns, fsGoals
 	}
 	defer db.Close()
 	runs, runErr := countRows(db, "runs")
 	if runErr != nil {
-		runs = 0
+		runs = fsRuns
 	}
 	goals, goalErr := countRows(db, "goals")
 	if goalErr != nil {
-		goals = 0
+		goals = fsGoals
+	}
+	if fsRuns > runs {
+		runs = fsRuns
+	}
+	if fsGoals > goals {
+		goals = fsGoals
+	}
+	return runs, goals
+}
+
+func statusFilesystemCounts(root string) (int, int) {
+	runs := 0
+	if entries, err := os.ReadDir(filepath.Join(root, hyperDir, "logs")); err == nil {
+		for _, entry := range entries {
+			name := entry.Name()
+			if !entry.IsDir() && strings.HasPrefix(name, "RUN-") && strings.HasSuffix(name, ".jsonl") {
+				runs++
+			}
+		}
+	}
+	goals := 0
+	if entries, err := os.ReadDir(filepath.Join(root, hyperDir, "goals")); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(entry.Name(), "GOAL-") {
+				goals++
+			}
+		}
 	}
 	return runs, goals
 }

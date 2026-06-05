@@ -30,6 +30,13 @@ func buildNextPacketPlan(state projectState, derived goalState, readiness readin
 			Terminal: true,
 		}
 	}
+	if surfaceProofFollowupRequiredFromState(derived) {
+		return plannedNextPacket{
+			Action:  "run",
+			Command: nextRunCommand(state, "Run focused surface proof for the current packet using an allowed browser path or a repeatable fallback surface check."),
+			Reason:  "Command validation passed, but browser or screenshot proof was blocked; close the surface-proof gap before general quality work.",
+		}
+	}
 	if state.AutoContinue && runUntilReached(state, readiness) {
 		return plannedNextPacket{
 			Action:   "stop",
@@ -59,6 +66,16 @@ func buildNextPacketPlan(state projectState, derived goalState, readiness readin
 		Command: command,
 		Reason:  firstNonBlank(statusActionReason(state, derived, readiness, growth), "Continue with the next smallest runtime packet."),
 	}
+}
+
+func surfaceProofFollowupRequiredFromState(derived goalState) bool {
+	normalized := normalizeSentence(derived.Reason)
+	return derived.State == "completed" && hasAny(normalized,
+		"surface proof follow-up",
+		"surface-proof follow-up",
+		"surface proof gap",
+		"surface-proof gap",
+	)
 }
 
 func writeNextPacketPlan(root string, state projectState, derived goalState, readiness readinessState, growth growthState) (plannedNextPacket, *hyperError) {

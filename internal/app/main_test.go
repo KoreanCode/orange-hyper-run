@@ -85,6 +85,21 @@ func TestInitAcceptsSlugPlanStageValues(t *testing.T) {
 	assertContains(t, state, `"run_until": "Sustained Service Quality"`)
 }
 
+func TestRunWarnsWhenLongFocusHasNoTargetStage(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny service\n\n## Target Users\n\nEarly operators\n\n## MVP\n\nOne useful flow.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary flow validates.\n")
+
+	out, err := runCLI(args("run", "서비스 수준까지 지속 개발"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+
+	assertContains(t, out.Stdout, "Run mode: single packet")
+	assertContains(t, out.Stdout, "Run target notice: this is a single packet because plan.md has no Target Stage.")
+	assertContains(t, out.Stdout, "hyper run --auto --until service-quality")
+	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_until"`)
+}
+
 func TestOpenDBConfiguresBusyTimeout(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, hyperDir), 0755); err != nil {
@@ -110,6 +125,28 @@ func TestOpenDBConfiguresBusyTimeout(t *testing.T) {
 	}
 	if strings.ToLower(journalMode) != "wal" {
 		t.Fatalf("expected wal journal mode, got %s", journalMode)
+	}
+}
+
+func TestStatusDBCountsFallsBackToFilesystem(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, hyperDir, "logs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, hyperDir, "goals", "GOAL-0001"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, hyperDir, "goals", "GOAL-0002"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, hyperDir, "logs", "RUN-0001.jsonl"), "{}\n")
+	writeFile(t, filepath.Join(root, hyperDir, "logs", "RUN-0002.jsonl"), "{}\n")
+	writeFile(t, filepath.Join(root, hyperDir, "logs", "project.jsonl"), "{}\n")
+
+	runs, goals := statusDBCounts(root)
+
+	if runs != 2 || goals != 2 {
+		t.Fatalf("expected filesystem fallback counts 2/2, got runs=%d goals=%d", runs, goals)
 	}
 }
 
@@ -5298,6 +5335,49 @@ func TestLearnExtractsDurableSignals(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "constraints.md")), "external services")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "failures.md")), "WebSocket path failed")
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "memories", "decisions.md")), "Changed Files")
+}
+
+func TestSurfaceProofPolicyBlockCompletesAndPlansFollowup(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny map chat", "Build a tiny map chat MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), strings.Join([]string{
+		"# GOAL-0001 Evidence",
+		"",
+		"## Validation",
+		"",
+		"`npm run build` passed and `npm run smoke:api` passed.",
+		"",
+		"## Readiness Evidence",
+		"",
+		"Product completeness: Tiny map chat has one measurable create-and-read message flow.",
+		"Core UX: Returning users reach the map entry point without repeating setup.",
+		"Validation coverage: `npm run build` and `npm run smoke:api` passed with repeatable output.",
+		"",
+		"## Surface Proof Evidence",
+		"",
+		"- Browser surface proof was attempted but blocked by Browser URL policy before navigation.",
+		"- Surface risks or gaps: screenshot proof still needs an allowed browser path.",
+		"",
+		"## Blocker",
+		"",
+		"No implementation blocker remains. Browser surface proof was blocked by Browser URL policy for `127.0.0.1:5182`; active command validation passed and the blocker is recorded as a surface-proof gap.",
+	}, "\n"))
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRun focused surface QA for the primary entry flow.\n")
+
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	assertContains(t, out.Stdout, "State: completed")
+	assertContains(t, out.Stdout, "surface proof follow-up is needed")
+	assertContains(t, out.Stdout, "Planned action: run")
+	assertContains(t, out.Stdout, "Run focused surface proof")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: passed")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: run")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "surface-proof gap")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
 }
 
 func TestLearnDedupesOverlappingSectionAndLearnSignals(t *testing.T) {
