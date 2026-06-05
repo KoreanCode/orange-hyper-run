@@ -21,7 +21,7 @@ If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by pack
 
 The goal is simple: start from a tiny MVP and keep upgrading it until it can behave like a real service, without every AI session losing the project thread.
 
-Current release: `v0.6.4`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
+Current release: `v0.6.5`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
 
 ## First Run
 

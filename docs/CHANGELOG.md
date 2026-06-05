@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.5 - 2026-06-05
+
+- Warn when a long-running service-quality focus is used without `plan.md` `Target Stage`, so users know plain `hyper run` will create a single packet instead of continuing automatically.
+- Treat Browser URL policy surface-proof gaps as completed packets that need a focused follow-up when implementation and command validation already passed.
+- Plan the next packet toward allowed browser proof or a repeatable fallback surface check before general quality work resumes.
+- Fall back to `.hyper/logs` and `.hyper/goals` counts when SQLite status counts cannot be read cleanly, avoiding misleading `Runs recorded: 0` output.
+
 ## v0.6.4 - 2026-06-05
 
 - Split canonical stage vocabulary, target aliases, and stage ordering into `internal/stage` so plan parsing, auto targets, readiness, and status share one package boundary.

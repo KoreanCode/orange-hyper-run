@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.5 - 2026-06-05
+
+- 서비스 품질까지 계속 개발하려는 긴 focus를 쓰면서 `plan.md`에 `Target Stage`가 없으면, plain `hyper run`이 자동 continuation이 아니라 single packet만 만든다는 점을 안내합니다.
+- 구현과 command validation은 통과했지만 Browser URL policy 때문에 surface proof만 막힌 경우, 전체 packet을 blocked로 닫지 않고 focused follow-up이 필요한 completed packet으로 처리합니다.
+- 일반 품질 작업을 이어가기 전에 허용된 browser proof나 반복 가능한 fallback surface check로 다음 packet을 계획하게 했습니다.
+- SQLite status count를 깨끗하게 읽지 못할 때 `.hyper/logs`와 `.hyper/goals` 기준으로 fallback해서 `Runs recorded: 0` 같은 오해를 줄였습니다.
+
 ## v0.6.4 - 2026-06-05
 
 - canonical stage vocabulary, target alias, stage ordering을 `internal/stage`로 분리해서 plan parsing, auto target, readiness, status가 같은 package boundary를 공유하게 했습니다.
