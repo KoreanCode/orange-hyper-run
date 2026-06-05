@@ -7,56 +7,80 @@
 
 # Hyper Run
 
-Hyper Run은 AI 코딩 세션이 매번 처음부터 다시 시작하는 느낌을 줄여주는 CLI입니다.
+Hyper Run은 AI 코딩 세션이 리셋되지 않게 하는 프로젝트 진행 레일입니다.
 
-프로젝트 루트에 짧은 `plan.md`를 적어두면, `hyper run`이 그 계획과 이전 기록을 읽고 다음에 할 집중된 작업 packet을 만듭니다. `plan.md`에 `Target Stage`가 있으면 plain `hyper run`이 그 목표까지 packet 단위로 계속 이어가도록 계획합니다. 각 packet이 끝나면 `hyper complete`가 evidence를 확인하고 다음 단계를 준비합니다.
+Codex Desktop, CLI 에이전트, 다른 코딩 assistant가 매번 처음부터 다시 시작하지 않도록 합니다. 계획, 현재 작업, 검증 증거, review, 다음 행동이 채팅이 아니라 repo 안에 남습니다.
 
-목표는 단순합니다. 작은 MVP에서 시작해서, AI 세션이 바뀌어도 문맥을 잃지 않고 계속 서비스 수준까지 개선하는 것입니다.
-
-현재 릴리즈는 `v0.6.3`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
-
-기본 명령은 이것입니다.
+`plan.md`를 한 번 적고, 제품 명령은 하나만 씁니다.
 
 ```bash
 hyper run
 ```
 
-Hyper Run은 Codex Desktop, CLI 에이전트, Cursor 스타일 에이전트, 다른 코딩 assistant와 함께 쓸 수 있습니다. 작업 packet이 프로젝트 안의 파일로 저장되기 때문입니다.
+`plan.md`에 `Target Stage`가 있으면 plain `hyper run`이 그 목표까지 packet 단위로 계속 이어갑니다. 단, 무검토 자동 실행은 아닙니다. 각 packet은 evidence를 남기고, `hyper complete`를 통과해야 하며, 다음 packet으로 갈지, 같은 packet을 고칠지, stage를 올릴지, 멈출지 결정합니다.
 
-## 왜 필요한가요
+목표는 단순합니다. 작은 MVP에서 시작해, AI 세션이 바뀌어도 문맥을 잃지 않고 실제 서비스처럼 다룰 수 있는 수준까지 계속 개선하는 것입니다.
 
-AI 코딩을 오래 이어가다 보면 이런 문제가 생깁니다.
+현재 릴리즈는 `v0.6.3`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
+
+## 첫 실행
+
+```bash
+hyper init
+# plan.md를 한 번 채웁니다
+
+hyper run
+```
+
+Codex Desktop에서는 프로젝트 명령처럼 이렇게 씁니다.
+
+```text
+$hyper run
+```
+
+흐름은 이렇습니다.
+
+1. `hyper run`이 `plan.md`와 이전 기록을 읽습니다.
+2. `.hyper/goals/<GOAL-ID>/goal.md`와 `tasks.md`를 만듭니다.
+3. AI는 그 packet 하나만 구현합니다.
+4. `evidence.md`에 검증 증거를 남기고 `next.md`에 다음 추천 작업을 씁니다.
+5. `hyper complete`가 packet을 확인합니다.
+6. `.hyper/next-packet.md`가 계속할지, 같은 packet을 고칠지, stage를 올릴지, 멈출지 알려줍니다.
+
+## 왜 도움이 되나요
+
+AI 코딩을 오래 이어가면 이런 문제가 생깁니다.
 
 - 다음 작업이 너무 넓어짐
 - 이전 결정이 잊힘
 - 테스트나 브라우저 확인 기록이 채팅 안에 흩어짐
 - 작은 MVP가 안정적인 서비스로 자연스럽게 이어지지 않음
 
-Hyper Run은 이 문맥을 repo 안에 남깁니다.
+Hyper Run은 다음 AI 세션이 읽을 수 있도록 이 문맥을 파일로 남깁니다.
 
 복잡한 프로젝트 관리 도구가 아닙니다. 큰 프레임워크도 아닙니다. 다음 AI 작업 packet을 만들고, 검증 증거를 요구하고, 그 증거를 바탕으로 다음 packet을 더 정확하게 만드는 작은 CLI입니다.
 
-## 기본 루프
+## 짧은 루프
 
 ```text
 plan.md -> hyper run -> goal.md/tasks.md -> evidence.md/next.md -> hyper complete -> 다음 packet
 ```
 
-실제로 자주 보게 되는 것은 이 정도입니다.
+repo 안에 남는 것은 이 정도입니다.
 
 | 파일 또는 명령 | 의미 |
 | --- | --- |
-| `plan.md` | 제품 설명서입니다. 무엇을 만들고, 누구를 위한 것이고, 현재 단계, 목표 단계, 제약이 무엇인지 적습니다. |
-| `hyper run` | 다음에 할 집중된 작업 packet을 만듭니다. |
+| `plan.md` | 제품 방향, 현재 stage, 목표 stage, 제약을 적는 파일입니다. |
+| `hyper run` | 계획과 이전 evidence를 읽고 다음 packet을 만듭니다. |
 | `goal.md` / `tasks.md` | AI가 지금 해야 할 작업입니다. |
 | `evidence.md` | 무엇을 바꿨고 어떻게 확인했는지 남기는 파일입니다. |
-| `review.md` | `hyper complete`가 아직 부족하다고 판단하면 보강할 내용을 남기는 파일입니다. |
-| `next.md` | 다음에 할 작업 하나와 재사용 가능한 배운 점을 남기는 파일입니다. |
-| `hyper complete` | packet을 닫고, evidence를 확인하고, 다음 단계를 준비합니다. |
-| `.hyper/next-packet.md` | 다음에 실행할 명령과 Codex continuation 안내입니다. auto mode와 `hyper doctor`가 이 파일을 확인합니다. |
+| `review.md` | packet이 아직 부족하면 고칠 내용을 남기는 파일입니다. |
+| `next.md` | 다음 작업 하나와 재사용 가능한 배운 점을 남기는 파일입니다. |
+| `hyper complete` | packet을 확인하고 다음 행동을 준비합니다. |
+| `.hyper/next-packet.md` | 다음에 허용된 명령과 계속/중단 조건입니다. |
 | `hyper status --short` | 현재 단계, 막힌 이유, 다음 행동을 짧게 보여줍니다. |
 
-## 어떻게 성장하나요
+## 하네스 없이 어떻게 성장하나요
 
 Hyper Run은 첫날부터 하네스를 만들라고 하지 않습니다.
 
@@ -68,11 +92,11 @@ Hyper Run은 첫날부터 하네스를 만들라고 하지 않습니다.
 - UI 변경마다 브라우저 screenshot이 필요하면 visual check 후보를 제안할 수 있습니다.
 - 같은 실패가 반복되면 그 실패를 stop condition으로 만들 수 있습니다.
 
-이 제안들은 바로 강제되지 않습니다. 반복 evidence가 충분할 때까지 candidate로 남습니다. Hyper Run은 activation policy도 함께 기록합니다. 반복 evidence가 생기면 candidate, 더 강한 반복 evidence가 쌓이면 promotable, activation 수준의 evidence가 쌓였을 때만 future packet finish gate에서 필수 행동이 됩니다.
+이 제안들은 바로 강제되지 않습니다. 반복 evidence가 충분할 때까지 candidate로 남습니다.
 
-## 자주 보이는 용어
+## 내부 용어를 쉽게 보면
 
-Hyper Run에는 내부 용어가 있지만 외울 필요는 없습니다.
+시작할 때 외울 필요는 없습니다. 다만 Hyper Run이 하는 일을 설명하면 이렇습니다.
 
 | 용어 | 쉽게 말하면 |
 | --- | --- |
@@ -83,10 +107,9 @@ Hyper Run에는 내부 용어가 있지만 외울 필요는 없습니다.
 | Pressure Ledger | 프로젝트가 반복해서 보여준 필요, gap, 실패를 모아둔 목록입니다. |
 | Readiness pressure | 다음 단계로 가기 위해 지금 가장 부족한 증거입니다. |
 | Capability candidate | validator, skill, agent, harness 제안입니다. 아직 활성화된 것은 아닙니다. |
-| Capability policy | candidate가 관찰 단계인지, 검토할 단계인지, active 필수 행동인지 정하는 threshold rule입니다. |
 | 하네스 없이 성장 | 가볍게 시작하고, 필요가 증명될 때만 구조를 추가하는 방식입니다. |
 
-짧게 말하면:
+규칙은 이렇습니다.
 
 - 반복 필요가 있기 전에는 구조를 만들지 않습니다.
 - evidence 없이 stage를 올리지 않습니다.
