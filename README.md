@@ -7,60 +7,84 @@
 
 # Hyper Run
 
-Hyper Run helps AI coding sessions keep project memory between runs.
+Hyper Run is a project rail for AI coding sessions.
 
-You keep a short `plan.md` in your project. `hyper run` turns that plan and the project history into the next focused work packet. If `plan.md` has a `Target Stage`, plain `hyper run` keeps planning packet by packet toward that target. After each packet, `hyper complete` reads the evidence and prepares the next step.
+It keeps Codex Desktop, CLI agents, and other coding assistants from restarting from zero every time. The plan, current task, proof, review notes, and next step live inside your repo, not only in chat.
 
-The goal is simple: start from a small MVP and keep improving it without every AI session feeling like a reset.
-
-Current release: `v0.6.3`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
-
-The basic command is:
+You write `plan.md` once, then use one product command:
 
 ```bash
 hyper run
 ```
 
-Hyper Run works with Codex Desktop, CLI agents, Cursor-style agents, and other coding assistants because the work packet is just files inside the project.
+If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by packet toward that target. It does not run unchecked. Each packet must leave evidence, pass `hyper complete`, and either continue, fix the same packet, advance stage after review, or stop.
 
-## Why Use It
+The goal is simple: start from a tiny MVP and keep upgrading it until it can behave like a real service, without every AI session losing the project thread.
 
-AI coding sessions often lose project context:
+Current release: `v0.6.3`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
+
+## First Run
+
+```bash
+hyper init
+# fill in plan.md once
+
+hyper run
+```
+
+In Codex Desktop, use the same command as a project instruction:
+
+```text
+$hyper run
+```
+
+What happens:
+
+1. `hyper run` reads `plan.md` and project history.
+2. It creates `.hyper/goals/<GOAL-ID>/goal.md` and `tasks.md`.
+3. The AI implements only that packet.
+4. The AI records proof in `evidence.md` and the next recommendation in `next.md`.
+5. `hyper complete` checks the packet.
+6. `.hyper/next-packet.md` tells Codex whether to continue, fix the same packet, advance stage, or stop.
+
+## Why It Helps
+
+Long AI coding sessions often drift:
 
 - the next task becomes too broad
 - previous decisions are forgotten
 - test or browser proof is scattered across chat
 - a small MVP does not naturally grow into a reliable service
 
-Hyper Run keeps that context in your repo.
+Hyper Run keeps the working context in files the next AI session can read.
 
-It is not a project manager. It is not a big framework. It is a small CLI that creates the next focused AI work packet, asks for proof, and uses that proof to make the next packet better.
+It is not a project manager and not a big framework. It is a small CLI that creates the next focused AI work packet, asks for proof, and uses that proof to make the next packet sharper.
 
-## The Loop
+## The Short Loop
 
 ```text
 plan.md -> hyper run -> goal.md/tasks.md -> evidence.md/next.md -> hyper complete -> next packet
 ```
 
-What you actually touch:
+What stays in your repo:
 
 | File or command | What it means |
 | --- | --- |
-| `plan.md` | A plain product brief: what you are building, who it is for, current stage, target stage, and constraints. |
-| `hyper run` | Creates the next focused work packet. |
+| `plan.md` | Product direction, current stage, target stage, constraints. |
+| `hyper run` | Creates the next focused packet from the plan and prior evidence. |
 | `goal.md` / `tasks.md` | What the AI should do now. |
 | `evidence.md` | What changed and how it was checked. |
-| `review.md` | What must be fixed if `hyper complete` decides the packet is not done yet. |
-| `next.md` | The one next recommended step and reusable lessons. |
-| `hyper complete` | Closes the packet, checks the evidence, and prepares the next step. |
-| `.hyper/next-packet.md` | The planned next command plus Codex continuation guidance, used by auto mode and checked by `hyper doctor`. |
+| `review.md` | What must be fixed if the packet is not good enough yet. |
+| `next.md` | One next step and reusable lessons. |
+| `hyper complete` | Checks the packet and prepares the next action. |
+| `.hyper/next-packet.md` | The next allowed command and stop/continue guard. |
 | `hyper status --short` | Shows the current stage, blocker, and next action. |
 
-## How It Grows
+## How It Grows Without A Harness
 
 Hyper Run does not ask you to build a harness on day one.
 
-It starts light: one plan, one focused packet, one evidence file. If the same need keeps appearing, Hyper Run can suggest project-specific structure later, such as a validator, skill, agent, or harness.
+It starts light: one plan, one packet, one evidence file. If the same need keeps appearing, Hyper Run can suggest project-specific structure later, such as a validator, skill, agent, or harness.
 
 For example:
 
@@ -68,11 +92,11 @@ For example:
 - if every UI change needs a browser screenshot, it may suggest a visual check
 - if the project repeatedly hits the same failure mode, it may turn that into a stop condition
 
-Those suggestions are not forced immediately. They stay as candidates until repeated evidence proves they are useful. Hyper Run also records an activation policy: repeated evidence creates a candidate, stronger repeated evidence makes it promotable, and only activation-level evidence makes it required in future packet finish gates.
+Those suggestions are not forced immediately. They stay as candidates until repeated evidence proves they are useful.
 
-## Terms You May See
+## Internal Terms In Plain Words
 
-Hyper Run has internal terms, but you do not need to memorize them.
+You do not need these terms to start, but they explain what Hyper Run is doing:
 
 | Term | Plain meaning |
 | --- | --- |
@@ -83,10 +107,9 @@ Hyper Run has internal terms, but you do not need to memorize them.
 | Pressure Ledger | A list of repeated needs, gaps, or failures the project keeps showing. |
 | Readiness pressure | The next missing proof needed to move the project forward. |
 | Capability candidate | A suggested validator, skill, agent, or harness. It is not active yet. |
-| Capability policy | The threshold rule that says whether a candidate is only observed, ready for review, or active required behavior. |
 | Growth without a harness | Start light; add structure only after the project proves it needs it. |
 
-The short version:
+The rules:
 
 - no structure before repeated need
 - no stage advancement without evidence
