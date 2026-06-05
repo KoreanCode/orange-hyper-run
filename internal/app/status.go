@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	runtimeStage "github.com/KoreanCode/orange-hyper-run/internal/stage"
 )
 
 func parseStatusOptions(args []string) (bool, *hyperError) {
@@ -330,12 +332,7 @@ func planRuntimeStage(root string) string {
 }
 
 func knownRuntimeStage(stage string) bool {
-	switch normalizeRuntimeStage(stage) {
-	case "Tiny MVP", "Usable MVP", "Beta", "Service Quality", "Sustained Service Quality":
-		return true
-	default:
-		return false
-	}
+	return runtimeStage.Known(stage)
 }
 
 func proofStatusSummary(derived goalState, readiness readinessState) string {

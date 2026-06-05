@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Split canonical stage vocabulary, target aliases, and stage ordering into `internal/stage` so plan parsing, auto targets, readiness, and status share one package boundary.
+- Accept slug-style stage values such as `service-quality` and `sustained-service-quality` consistently when normalizing Current Stage values.
+- Pin CI and release builds to Go `1.26.4` so govulncheck runs against the patched standard library.
 - Add a Service Quality Self Review gate that requires plan alignment, core loop quality, product satisfaction, no drift, validation match, and an explicit pass/fail verdict before packet completion.
 - Keep Service Quality packets open for correction when the Self Review verdict is `fail`.
 - Include concrete failed Self Review fields and verdict text in finish-gate findings, next-packet correction plans, and `hyper resume`.
