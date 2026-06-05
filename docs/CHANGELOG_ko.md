@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- canonical stage vocabulary, target alias, stage ordering을 `internal/stage`로 분리해서 plan parsing, auto target, readiness, status가 같은 package boundary를 공유하게 했습니다.
+- `service-quality`, `sustained-service-quality` 같은 slug-style stage 값을 Current Stage 정규화에서도 일관되게 받게 했습니다.
+- govulncheck가 패치된 standard library 기준으로 실행되도록 CI와 release build를 Go `1.26.4`로 고정했습니다.
 - Service Quality Self Review gate를 추가했습니다. packet 완료 전에 plan alignment, core loop quality, product satisfaction, no drift, validation match, pass/fail verdict를 요구합니다.
 - Self Review verdict가 `fail`이면 Service Quality packet을 닫지 않고 같은 packet에서 보강하게 합니다.
 - 실패한 Self Review의 구체적인 field와 verdict 내용을 finish-gate finding, next-packet correction plan, `hyper resume`에 포함하게 했습니다.

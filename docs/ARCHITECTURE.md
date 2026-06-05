@@ -9,12 +9,13 @@ Hyper Run now keeps the executable entrypoint separate from product runtime logi
 | `cmd/hyper` | Thin native executable entrypoint. It only passes process arguments to the app package and exits with the returned code. |
 | `internal/app` | Current Hyper Run application runtime: command routing, project state, runtime packets, finish gate, Learn, Growth, Readiness, SQLite storage, repair, update, next-packet planning, and doctor checks. |
 | `internal/buildinfo` | Release build metadata injected by the release workflow and displayed by `hyper version`. |
+| `internal/stage` | Canonical stage vocabulary, target-stage aliases, and stage ordering used by plan parsing, auto targets, readiness, and status output. |
 
 ## Direction
 
 This is the first package boundary. It removes product logic from `cmd/hyper` without changing behavior.
 
-As of `v0.6.3`, most domain behavior still lives in `internal/app`. That is intentional until repeated maintenance pressure proves the next stable package boundary.
+Most domain behavior still lives in `internal/app`, but stage vocabulary is now separated because target-stage behavior is used across plan parsing, readiness, auto continuation, and status checks. Further splits should stay this small and pressure-driven.
 
 Future package splits should happen only around proven pressure:
 

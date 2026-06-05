@@ -545,6 +545,8 @@ hyper internal learn        # debug/manual learning command
 
 From this repository:
 
+Use the latest Go patch release available for this project. CI and releases currently use Go `1.26.4` so `govulncheck` runs against the patched standard library.
+
 ```bash
 go test -count=1 ./...
 go vet ./...

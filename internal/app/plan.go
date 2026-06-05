@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	runtimeStage "github.com/KoreanCode/orange-hyper-run/internal/stage"
 )
 
 func requirePlanForRun(root string) (planResult, *hyperError) {
@@ -652,33 +654,7 @@ func normalizeRuntimeStage(stage string) string {
 	if stage == "" {
 		return ""
 	}
-	normalized := normalizeLabel(stage)
-	type stagePattern struct {
-		name     string
-		patterns []string
-	}
-	patterns := []stagePattern{
-		{name: "Tiny MVP", patterns: []string{"tiny mvp"}},
-		{name: "Usable MVP", patterns: []string{"usable mvp"}},
-		{name: "Beta", patterns: []string{"beta"}},
-		{name: "Sustained Service Quality", patterns: []string{"sustained service quality", "sustained quality"}},
-		{name: "Service Quality", patterns: []string{"service quality", "production"}},
-	}
-	bestName := ""
-	bestIndex := len(normalized) + 1
-	for _, candidate := range patterns {
-		for _, pattern := range candidate.patterns {
-			index := strings.Index(normalized, pattern)
-			if index >= 0 && index < bestIndex {
-				bestIndex = index
-				bestName = candidate.name
-			}
-		}
-	}
-	if bestName != "" {
-		return bestName
-	}
-	return stage
+	return runtimeStage.Normalize(stage)
 }
 
 func runtimeWorkBoundary(objective, stage string, plan map[string]string, growth growthState, readiness readinessState) string {

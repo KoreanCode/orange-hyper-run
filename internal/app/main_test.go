@@ -70,6 +70,21 @@ func TestInitRejectsInvalidPlanTargetStageBeforeStateWrite(t *testing.T) {
 	}
 }
 
+func TestInitAcceptsSlugPlanStageValues(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nStage Slug CRM\n\n## Current Stage\n\nservice-quality\n\n## Target Stage\n\nsustained-service-quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nStage slugs are accepted consistently.\n")
+
+	out, err := runCLI(args("init"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("init with slug stage values failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Stage: Service Quality")
+	assertContains(t, out.Stdout, "Target: Sustained Service Quality (plan.md Target Stage)")
+	state := readFile(t, filepath.Join(root, hyperDir, "state.json"))
+	assertContains(t, state, `"stage": "Service Quality"`)
+	assertContains(t, state, `"run_until": "Sustained Service Quality"`)
+}
+
 func TestOpenDBConfiguresBusyTimeout(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, hyperDir), 0755); err != nil {

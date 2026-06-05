@@ -546,6 +546,8 @@ hyper internal learn        # 디버그/수동 학습 명령
 
 이 repository에서:
 
+이 프로젝트에서 사용할 수 있는 최신 Go patch release를 사용하세요. 현재 CI와 release는 Go `1.26.4`를 사용해 `govulncheck`가 패치된 standard library 기준으로 실행되게 합니다.
+
 ```bash
 go test -count=1 ./...
 go vet ./...

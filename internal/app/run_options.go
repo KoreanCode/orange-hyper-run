@@ -1,7 +1,10 @@
 package app
 
 import (
+	"errors"
 	"strings"
+
+	runtimeStage "github.com/KoreanCode/orange-hyper-run/internal/stage"
 )
 
 const planTargetStageSource = "plan.md Target Stage"
@@ -93,7 +96,7 @@ func planCurrentStageError(plan map[string]string) *hyperError {
 	if knownRuntimeStage(stage) {
 		return nil
 	}
-	return newError("Invalid plan.md Current Stage: "+value+"\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
+	return newError("Invalid plan.md Current Stage: "+value+"\n\nUse one of: "+runtimeStage.AllowedTargets+".", 2)
 }
 
 func applyPlanTargetToState(state projectState, plan map[string]string) projectState {
@@ -122,31 +125,20 @@ func planRunTarget(plan map[string]string) (string, bool, *hyperError) {
 	}
 	target, err := normalizeRunUntilTarget(value)
 	if err != nil {
-		return "", true, newError("Invalid plan.md Target Stage: "+value+"\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
+		return "", true, newError("Invalid plan.md Target Stage: "+value+"\n\nUse one of: "+runtimeStage.AllowedTargets+".", 2)
 	}
 	return target, true, nil
 }
 
 func normalizeRunUntilTarget(value string) (string, *hyperError) {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	normalized = strings.ReplaceAll(normalized, "-", " ")
-	normalized = strings.ReplaceAll(normalized, "_", " ")
-	normalized = strings.Join(strings.Fields(normalized), " ")
-	switch normalized {
-	case "", "none":
-		return "", newError("Missing value for --until.\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
-	case "tiny", "tiny mvp":
-		return "Tiny MVP", nil
-	case "usable", "usable mvp":
-		return "Usable MVP", nil
-	case "beta":
-		return "Beta", nil
-	case "service", "service quality", "production", "production quality":
-		return "Service Quality", nil
-	case "sustained", "sustained quality", "sustained service", "sustained service quality":
-		return "Sustained Service Quality", nil
+	target, err := runtimeStage.ParseTarget(value)
+	switch {
+	case err == nil:
+		return target, nil
+	case errors.Is(err, runtimeStage.ErrMissingTarget):
+		return "", newError("Missing value for --until.\n\nUse one of: "+runtimeStage.AllowedTargets+".", 2)
 	default:
-		return "", newError("Unknown --until stage: "+value+"\n\nUse one of: tiny-mvp, usable-mvp, beta, service-quality, sustained-service-quality.", 2)
+		return "", newError("Unknown --until stage: "+value+"\n\nUse one of: "+runtimeStage.AllowedTargets+".", 2)
 	}
 }
 

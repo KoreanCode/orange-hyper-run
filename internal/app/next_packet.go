@@ -3,6 +3,8 @@ package app
 import (
 	"path/filepath"
 	"strings"
+
+	runtimeStage "github.com/KoreanCode/orange-hyper-run/internal/stage"
 )
 
 type plannedNextPacket struct {
@@ -276,20 +278,7 @@ func targetStageProofComplete(target string, readiness readinessState) bool {
 }
 
 func stageRank(stage string) int {
-	switch normalizeRuntimeStage(stage) {
-	case "Tiny MVP":
-		return 1
-	case "Usable MVP":
-		return 2
-	case "Beta":
-		return 3
-	case "Service Quality":
-		return 4
-	case "Sustained Service Quality":
-		return 5
-	default:
-		return 0
-	}
+	return runtimeStage.Rank(stage)
 }
 
 func quoteCommandArg(value string) string {
