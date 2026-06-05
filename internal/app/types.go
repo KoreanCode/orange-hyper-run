@@ -18,13 +18,16 @@ type projectState struct {
 	Focus            string `json:"focus"`
 	AutoContinue     bool   `json:"auto_continue,omitempty"`
 	RunUntil         string `json:"run_until,omitempty"`
+	RunTargetSource  string `json:"run_target_source,omitempty"`
+	PlanTarget       string `json:"-"`
 	UpdatedAt        string `json:"updated_at"`
 }
 
 type runOptions struct {
-	Focus        string
-	AutoContinue bool
-	RunUntil     string
+	Focus           string
+	AutoContinue    bool
+	RunUntil        string
+	RunTargetSource string
 }
 
 type episode struct {
@@ -88,13 +91,14 @@ type similarContext struct {
 }
 
 type growthState struct {
-	Version         int               `json:"version"`
-	UpdatedAt       string            `json:"updated_at"`
-	PressureLedger  pressureLedger    `json:"pressure_ledger"`
-	Pressures       []growthPressure  `json:"pressures"`
-	RuntimeBehavior growthBehavior    `json:"runtime_behavior"`
-	Candidates      []growthCandidate `json:"candidates"`
-	Thresholds      growthThresholds  `json:"thresholds"`
+	Version          int                    `json:"version"`
+	UpdatedAt        string                 `json:"updated_at"`
+	PressureLedger   pressureLedger         `json:"pressure_ledger"`
+	Pressures        []growthPressure       `json:"pressures"`
+	RuntimeBehavior  growthBehavior         `json:"runtime_behavior"`
+	Candidates       []growthCandidate      `json:"candidates"`
+	Thresholds       growthThresholds       `json:"thresholds"`
+	ActivationPolicy growthActivationPolicy `json:"activation_policy"`
 }
 
 type pressureLedger struct {
@@ -148,6 +152,14 @@ type growthThresholds struct {
 	HarnessStablePressures   int `json:"harness_stable_pressures"`
 	HarnessPromotableSignals int `json:"harness_promotable_signals"`
 	HarnessActiveSignals     int `json:"harness_active_signals"`
+}
+
+type growthActivationPolicy struct {
+	Method         string `json:"method"`
+	CandidateRule  string `json:"candidate_rule"`
+	PromotableRule string `json:"promotable_rule"`
+	ActiveRule     string `json:"active_rule"`
+	NextAction     string `json:"next_action"`
 }
 
 type readinessState struct {

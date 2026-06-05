@@ -53,6 +53,10 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		} else {
 			checks = append(checks, doctorCheck{"plan.md", "OK", "product brief is present"})
 		}
+		if check, ok := doctorPlanCurrentStageCheck(plan); ok {
+			checks = append(checks, check)
+		}
+		checks = append(checks, doctorPlanTargetCheck(plan))
 	}
 
 	hyperPath := filepath.Join(root, hyperDir)
@@ -87,6 +91,30 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	lines = append(lines, "")
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func doctorPlanTargetCheck(plan map[string]string) doctorCheck {
+	value := firstRuntimeValue(plan["Target Stage"])
+	if value == "" {
+		return doctorCheck{"Target Stage", "OK", "not set; plain `hyper run` uses single-packet mode unless an explicit auto target is provided"}
+	}
+	target, err := normalizeRunUntilTarget(value)
+	if err != nil {
+		return doctorCheck{"Target Stage", "FAIL", "invalid `" + value + "`; use tiny-mvp, usable-mvp, beta, service-quality, or sustained-service-quality"}
+	}
+	return doctorCheck{"Target Stage", "OK", target + " from plan.md"}
+}
+
+func doctorPlanCurrentStageCheck(plan map[string]string) (doctorCheck, bool) {
+	value := firstRuntimeValue(plan["Current Stage"])
+	if value == "" {
+		return doctorCheck{}, false
+	}
+	stage := normalizeRuntimeStage(value)
+	if !knownRuntimeStage(stage) {
+		return doctorCheck{"Current Stage", "FAIL", "invalid `" + value + "`; use tiny-mvp, usable-mvp, beta, service-quality, or sustained-service-quality"}, true
+	}
+	return doctorCheck{"Current Stage", "OK", stage + " from plan.md"}, true
 }
 
 func doctorSignatureCheck() doctorCheck {
@@ -196,37 +224,140 @@ func doctorNextPacketPlanCheck(root string) doctorCheck {
 	if err != nil {
 		return doctorCheck{"Next packet plan", "WARN", "cannot inspect state.json: " + err.Message}
 	}
+	state = applyPlanTargetFromRoot(root, state)
 	consistency := currentStateConsistency(root, state)
 	if !consistency.Consistent {
 		return doctorCheck{"Next packet plan", "WARN", "cannot verify until state.json is repaired"}
 	}
-	if consistency.Derived.State == "active" {
-		return doctorCheck{"Next packet plan", "OK", "not required while the current runtime packet is active"}
+	derived := consistency.Derived
+	failedFinishGate := false
+	if derived.State == "active" {
+		if failed, ok := failedFinishGateGoalState(root, state.CurrentGoalID); ok {
+			derived = failed
+			failedFinishGate = true
+		} else {
+			return doctorCheck{"Next packet plan", "OK", "not required while the current runtime packet is active"}
+		}
 	}
-	if refresh := statusRefreshFor(root, state); statusRefreshActionable(state, consistency.Derived, refresh) {
+	if refresh := statusRefreshFor(root, state); !failedFinishGate && statusRefreshActionable(state, derived, refresh) {
 		return doctorCheck{"Next packet plan", "WARN", "cannot trust next-packet until refresh completes: " + refresh.Reason}
-	}
-	if !exists(path) {
-		return doctorCheck{"Next packet plan", "WARN", "missing; run `hyper migrate` or complete the current packet again"}
 	}
 	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
-	expected := buildNextPacketPlan(state, consistency.Derived, readiness, growth)
-	actual := nextPacketPlanCommand(readIfExists(path))
+	if !exists(path) {
+		if strings.TrimSpace(state.CurrentGoalID) == "" && !hasNoPacketRunEvent(root) {
+			return doctorCheck{"Next packet plan", "OK", "not required before the first runtime packet"}
+		}
+		return doctorCheck{"Next packet plan", "WARN", "missing; run `hyper migrate` or complete the current packet again"}
+	}
+	expected := buildNextPacketPlan(state, derived, readiness, growth)
+	body := readIfExists(path)
+	actualAction := nextPacketPlanAction(body)
+	if actualAction == "" {
+		return doctorCheck{"Next packet plan", "WARN", "missing Action; run `hyper migrate`"}
+	}
+	if actualAction != expected.Action {
+		return doctorCheck{"Next packet plan", "WARN", "expected action `" + expected.Action + "`, found `" + actualAction + "`; run `hyper migrate`"}
+	}
+	actual := nextPacketPlanCommand(body)
 	if actual == "" {
 		return doctorCheck{"Next packet plan", "WARN", "missing Command; run `hyper migrate`"}
 	}
 	if actual != expected.Command {
 		return doctorCheck{"Next packet plan", "WARN", "expected `" + expected.Command + "`, found `" + actual + "`; run `hyper migrate`"}
 	}
+	if issue := nextPacketPlanShapeIssue(root, state, readiness, expected, body); issue != "" {
+		return doctorCheck{"Next packet plan", "WARN", issue + "; run `hyper migrate`"}
+	}
 	return doctorCheck{"Next packet plan", "OK", displayRelPath(hyperDir, "next-packet.md") + " matches current state"}
 }
 
+func hasNoPacketRunEvent(root string) bool {
+	body := readIfExists(filepath.Join(root, hyperDir, "logs", "project.jsonl"))
+	return strings.Contains(body, `"type":"run_skipped"`)
+}
+
 func nextPacketPlanCommand(body string) string {
+	return nextPacketPlanField(body, "Command:")
+}
+
+func nextPacketPlanAction(body string) string {
+	return nextPacketPlanField(body, "Action:")
+}
+
+func nextPacketPlanField(body, name string) string {
 	for _, line := range strings.Split(body, "\n") {
-		if _, value, ok := strings.Cut(strings.TrimSpace(line), "Command:"); ok {
+		if _, value, ok := strings.Cut(strings.TrimSpace(line), name); ok {
 			return strings.TrimSpace(value)
 		}
+	}
+	return ""
+}
+
+func nextPacketPlanShapeIssue(root string, state projectState, readiness readinessState, expected plannedNextPacket, body string) string {
+	if !strings.Contains(body, "## Guard") {
+		return "missing Guard section"
+	}
+	if !strings.Contains(body, "## Codex Desktop Continuation") {
+		return "missing Codex Desktop Continuation"
+	}
+	if expected.Action == "advance" && !strings.Contains(body, "## Stage Advancement Review") {
+		return "missing Stage Advancement Review"
+	}
+	if expectedGuard := strings.TrimSpace(nextPacketGuard(state, expected)); expectedGuard != "" && !strings.Contains(body, expectedGuard) {
+		return "stale Guard section"
+	}
+	if expectedProgress := strings.TrimSpace(nextPacketProgressGuard(state, expected)); expectedProgress != "" && !strings.Contains(body, "## Progress Guard") {
+		return "missing Progress Guard"
+	} else if expectedProgress != "" && !strings.Contains(body, expectedProgress) {
+		return "stale Progress Guard"
+	} else if expectedProgress == "" && strings.Contains(body, "## Progress Guard") {
+		return "stale Progress Guard"
+	}
+	if expectedContinuation := strings.TrimSpace(nextPacketCodexContinuation(state, expected)); expectedContinuation != "" && !strings.Contains(body, expectedContinuation) {
+		return "stale Codex Desktop Continuation"
+	}
+	if expected.Action == "advance" {
+		for _, line := range stageAdvancementReviewLines(readiness, state) {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "## ") {
+				continue
+			}
+			if !strings.Contains(body, line) {
+				return "stale Stage Advancement Review"
+			}
+		}
+	}
+	if expected.Action == "complete-current" {
+		findings := finishGateReviewFindings(root, state.CurrentGoalID)
+		if len(findings) > 0 && !strings.Contains(body, "## Current Review Findings") {
+			return "missing Current Review Findings"
+		}
+		for _, finding := range findings {
+			if !strings.Contains(body, finding) {
+				return "stale Current Review Findings"
+			}
+		}
+	}
+	if actualMode := nextPacketPlanField(body, "Mode:"); actualMode == "" {
+		return "missing Mode"
+	} else if actualMode != nextPacketMode(state) {
+		return "expected mode `" + nextPacketMode(state) + "`, found `" + actualMode + "`"
+	}
+	if actualReason := nextPacketPlanField(body, "Reason:"); actualReason == "" {
+		return "missing Reason"
+	} else if actualReason != expected.Reason {
+		return "stale Reason"
+	}
+	if actualGate := nextPacketPlanField(body, "Readiness gate:"); actualGate == "" {
+		return "missing Readiness gate"
+	} else if actualGate != readinessGateSummary(readiness) {
+		return "stale Readiness gate"
+	}
+	if actualPressure := nextPacketPlanField(body, "Readiness pressure:"); actualPressure == "" {
+		return "missing Readiness pressure"
+	} else if actualPressure != readinessPressureSummary(readiness) {
+		return "stale Readiness pressure"
 	}
 	return ""
 }
@@ -361,6 +492,8 @@ func doctorActionForCheck(check doctorCheck) string {
 			return "Run `hyper init`, fill in plan.md, then run `hyper doctor` again."
 		}
 		return "Fill the missing plan.md fields, then run `hyper status --short`."
+	case "current stage", "target stage":
+		return "Edit `plan.md` " + check.Name + " to tiny-mvp, usable-mvp, beta, service-quality, or sustained-service-quality, then run `hyper status --short`."
 	case ".hyper":
 		return "Run `hyper init` to recreate project-local Hyper Run files."
 	case "state.json":
@@ -371,6 +504,9 @@ func doctorActionForCheck(check doctorCheck) string {
 	case "stage source":
 		return "Run `hyper migrate`, then run `hyper doctor` again."
 	case "current packet":
+		if strings.Contains(detail, "finish gate failed") {
+			return "Fix review.md findings in the same packet, then run `hyper complete` again."
+		}
 		return "Finish the current packet: update evidence.md and next.md, then run `hyper complete`."
 	case "growth migration", "readiness state":
 		return "Run `hyper migrate`, then run `hyper doctor` again."

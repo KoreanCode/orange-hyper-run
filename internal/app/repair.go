@@ -90,6 +90,12 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		}
 		return stdout(strings.Join(lines, "\n")), nil
 	}
+	planBody := readIfExists(filepath.Join(root, planFile))
+	if strings.TrimSpace(planBody) != "" {
+		if err := validatePlanStageFields(parsePlan(planBody)); err != nil {
+			return commandOutput{}, err
+		}
+	}
 
 	db, err := openDB(root)
 	if err != nil {
@@ -131,18 +137,22 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		return commandOutput{}, growthErr
 	}
 	readiness := readReadinessStateIfExists(root)
-	if planBody := readIfExists(filepath.Join(root, planFile)); strings.TrimSpace(planBody) != "" {
+	if strings.TrimSpace(planBody) != "" {
 		var readinessErr *hyperError
 		readiness, readinessErr = updateReadinessState(root, planBody, growth)
 		if readinessErr != nil {
 			return commandOutput{}, readinessErr
 		}
+		state = applyPlanTargetToState(state, parsePlan(planBody))
+	}
+	if err := writeJSON(statePath, state); err != nil {
+		return commandOutput{}, err
 	}
 	nextPlan, nextErr := writeNextPacketPlan(root, state, consistency.Derived, readiness, growth)
 	if nextErr != nil {
 		return commandOutput{}, nextErr
 	}
-	return stdout(strings.Join([]string{
+	lines := []string{
 		"Hyper Run Repair",
 		"",
 		"State: repaired",
@@ -152,11 +162,18 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Reason: " + consistency.Derived.Reason,
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
+		"Planned action: " + nextPlan.Action,
 		"Next action: " + nextPlan.Command,
+		"Continuation guard: " + compactText(nextPacketGuard(state, nextPlan), 220),
+	}
+	if progressLine := nextPacketProgressGuardLine(state, nextPlan); progressLine != "" {
+		lines = append(lines, progressLine)
+	}
+	lines = append(lines,
+		"Next packet plan: "+displayRelPath(hyperDir, "next-packet.md"),
 		"",
-		"Next:",
-		"  " + nextPlan.Command,
-		"  hyper status --short",
-		"",
-	}, "\n")), nil
+	)
+	lines = append(lines, nextCommandBlock(nextPlan.Command, "hyper status --short")...)
+	lines = append(lines, "")
+	return stdout(strings.Join(lines, "\n")), nil
 }

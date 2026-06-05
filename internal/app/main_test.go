@@ -20,7 +20,10 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, out.Stdout, "$hyper run")
 	assertContains(t, out.Stdout, "Fill in plan.md")
 	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "# Product Plan")
+	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Target Stage\n\nService Quality")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), "initialized")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_until": "Service Quality"`)
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_target_source": "plan.md Target Stage"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl")), "project_initialized")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper run")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper status --short")
@@ -37,6 +40,34 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"pressure_ledger"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"No structure before pressure."`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "readiness", "state.json")), `"version": 1`)
+}
+
+func TestInitRejectsInvalidPlanCurrentStageBeforeStateWrite(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nEnterprise Launch\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary flow works.\n")
+
+	_, err := runCLI(args("init"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid current stage to block init")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Current Stage: Enterprise Launch")
+	if exists(filepath.Join(root, hyperDir)) {
+		t.Fatal("init must not create .hyper when current stage is invalid")
+	}
+}
+
+func TestInitRejectsInvalidPlanTargetStageBeforeStateWrite(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nEnterprise Launch\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary flow works.\n")
+
+	_, err := runCLI(args("init"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid target stage to block init")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+	if exists(filepath.Join(root, hyperDir)) {
+		t.Fatal("init must not create .hyper when target stage is invalid")
+	}
 }
 
 func TestOpenDBConfiguresBusyTimeout(t *testing.T) {
@@ -144,6 +175,27 @@ func TestInitRepairsLegacySkillFiles(t *testing.T) {
 	assertContains(t, agents, "Keep this custom note.")
 }
 
+func TestMigrateRefreshesLegacyCodexRoutingFiles(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	legacyPath := filepath.Join(root, ".agents", "skills", "hyper-run", "SKILL.md")
+	writeFile(t, legacyPath, "name hyper-run\ndescription legacy invalid skill\n")
+	writeFile(t, filepath.Join(root, ".hyper", "commands", "hyper-run.md"), "legacy command guide\n")
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "# Project Instructions\n\n<!-- hyper-run:start -->\n## Hyper Run\n\nWhen the user writes `$hyper run`, use old rules.\n<!-- hyper-run:end -->\n\nKeep this custom note.\n")
+
+	out, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Codex routing: refreshed")
+	assertContains(t, readFile(t, legacyPath), "---\nname: hyper-run")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "commands", "hyper-run.md")), "Required flow")
+	agents := readFile(t, filepath.Join(root, "AGENTS.md"))
+	assertContains(t, agents, "$hyper-run")
+	assertContains(t, agents, "thin Codex Desktop router")
+	assertContains(t, agents, "Keep this custom note.")
+}
+
 func TestRunCreatesGoalAfterInit(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny CRM", "Build a tiny CRM MVP")
@@ -154,6 +206,7 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, out.Stdout, "GOAL-0001")
 	assertContains(t, out.Stdout, "Auto learn: skipped")
 	assertContains(t, out.Stdout, "Codex Desktop payload:")
+	assertNotContains(t, out.Stdout, "After `hyper complete` passes")
 	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
 	assertContains(t, goal, "# GOAL-0001 Runtime Packet")
 	assertContains(t, goal, "## Continue From")
@@ -162,6 +215,8 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, goal, "Stage contract: Existence proof")
 	assertContains(t, goal, "Growth loop: Execution -> Evidence -> Pressure Ledger -> Candidate -> Structure when proven.")
 	assertContains(t, goal, "No structure before pressure.")
+	assertContains(t, goal, "## Run Target")
+	assertContains(t, goal, "- Run target: not set.")
 	assertContains(t, goal, "## Stage Gate")
 	assertContains(t, goal, "Gate requirement:")
 	assertNotContains(t, goal, "Gate evidence:")
@@ -191,6 +246,20 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, next, "Write only durable signals")
 	assertContains(t, next, "- Decision: Pending.")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "RUN-0001.jsonl")), "goal_created")
+}
+
+func TestAutoRunHandoffExplainsCompleteCurrentWithoutRepairCommandConfusion(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny notes\n\n## Target Users\n\nSolo builders\n\n## MVP\n\nBuild a tiny notes MVP.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nCLI\n\n## Success Criteria\n\nCreate and list one note.\n")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "After `hyper complete` passes")
+	assertContains(t, out.Stdout, "if Action is `complete-current`, stay in the same packet, fix review.md/evidence.md/next.md, and run `hyper complete` again")
+	assertNotContains(t, out.Stdout, "if Action is `complete-current`, repair the current packet before continuing")
 }
 
 func TestRunRequiresInit(t *testing.T) {
@@ -259,6 +328,43 @@ func TestDoctorReportsProjectState(t *testing.T) {
 	assertContains(t, out.Stdout, "Finish the current packet: update evidence.md and next.md, then run `hyper complete`.")
 }
 
+func TestDoctorDoesNotRequireNextPacketBeforeFirstRuntimePacket(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny Target Probe\n\n## Target Users\n\nSolo developers\n\n## MVP\n\nA tiny command flow.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nTiny MVP\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nThe first runtime packet can be created when work starts.\n")
+	mustRun(t, root, "init")
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[OK] Next packet plan: not required before the first runtime packet")
+	assertNotContains(t, out.Stdout, "[WARN] Next packet plan: missing")
+}
+
+func TestDoctorWarnsWhenNoPacketRunHandoffIsMissing(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nAuto Target Guard\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nOne command flow is already usable.\n\n## Current Stage\n\nUsable MVP\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nAuto run-until does not create work after the target stage proof is complete.\n")
+	mustRun(t, root, "init")
+	goalDir := filepath.Join(root, ".hyper", "goals", "GOAL-0001")
+	if err := os.MkdirAll(goalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(goalDir, "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed for create, reload, and error-state smoke.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified the primary flow without manual edits.\nData persistence: Records survive reload using local storage.\nError handling: Empty and failure states are handled with clear output.\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	if _, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Should not start"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run at complete target proof failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, ".hyper", "next-packet.md")); err != nil {
+		t.Fatalf("remove next packet plan failed: %v", err)
+	}
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: missing; run `hyper migrate` or complete the current packet again")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
+}
+
 func TestDoctorWarnsWhenStoredReadinessIsStale(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
@@ -298,7 +404,133 @@ func TestDoctorWarnsWhenNextPacketPlanIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doctor failed: %v", err)
 	}
-	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected `hyper run 'Implement the smallest usable A tiny notes API core flow: the primary user flow'`, found `hyper advance`; run `hyper migrate`")
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: expected action `run`, found `advance`; run `hyper migrate`")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
+}
+
+func TestDoctorWarnsWhenNextPacketAdvanceReviewIsMissing(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+	writeFile(t, filepath.Join(root, ".hyper", "next-packet.md"), strings.Join([]string{
+		"# Next Packet Plan",
+		"",
+		"Mode: single packet",
+		"Action: advance",
+		"Command: hyper advance",
+		"Reason: Tiny MVP gate is ready.",
+		"Readiness gate: Tiny MVP -> Usable MVP (ready)",
+		"Readiness pressure: Stage advancement: Tiny MVP gate is ready.",
+		"",
+		"## Guard",
+		"",
+		"Do not run `hyper advance` unless the user accepts the stage change.",
+		"",
+		"## Codex Desktop Continuation",
+		"",
+		"Pause here.",
+		"",
+	}, "\n"))
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: missing Stage Advancement Review; run `hyper migrate`")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
+}
+
+func TestDoctorWarnsWhenNextPacketGuardIsStale(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	planWithTarget := "# Product Plan\n\n## Product\n\nTiny tasks\n\n## Target Users\n\nSolo builders\n\n## MVP\n\nBuild a tiny task list MVP.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nCLI\n\n## Success Criteria\n\nCreate and complete one task.\n"
+	writeFile(t, filepath.Join(root, "plan.md"), planWithTarget)
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: advance")
+	assertContains(t, nextPlan, "Auto continuation: active target Service Quality authorizes `hyper advance` after this review.")
+
+	planWithoutTarget := strings.Replace(planWithTarget, "\n## Target Stage\n\nService Quality\n", "\n", 1)
+	writeFile(t, filepath.Join(root, "plan.md"), planWithoutTarget)
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[OK] Target Stage: not set")
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: stale Guard section; run `hyper migrate`")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
+}
+
+func TestDoctorWarnsWhenNextPacketProgressGuardIsMissing(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny tasks\n\n## Target Users\n\nSolo builders\n\n## MVP\n\nBuild a tiny task list MVP.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nCLI\n\n## Success Criteria\n\nCreate and complete one task.\n")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke passed for create and complete flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+	nextPlanPath := filepath.Join(root, ".hyper", "next-packet.md")
+	nextPlan := readFile(t, nextPlanPath)
+	assertContains(t, nextPlan, "## Progress Guard")
+	writeFile(t, nextPlanPath, removeMarkdownSection(nextPlan, "Progress Guard"))
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: missing Progress Guard; run `hyper migrate`")
+	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
+}
+
+func TestDoctorWarnsWhenNextPacketProgressGuardIsStale(t *testing.T) {
+	root := t.TempDir()
+	readiness := readinessState{
+		Stage: "Tiny MVP",
+		StageGate: readinessStageGate{
+			CurrentStage: "Tiny MVP",
+			NextStage:    "Usable MVP",
+			Status:       "not_ready",
+		},
+		NextPressure: readinessPressure{
+			Axis:   "core_ux",
+			Reason: "Core UX evidence is missing.",
+		},
+	}
+	expected := plannedNextPacket{Action: "run", Command: "hyper run", Reason: "Core UX evidence is missing."}
+	body := renderNextPacketPlan(projectState{AutoContinue: true, RunUntil: "Service Quality"}, readiness, expected)
+	body = replaceLinePrefix(body, "Mode:", "Mode: single packet")
+	body = strings.Replace(body, nextPacketProgressGuard(projectState{AutoContinue: true, RunUntil: "Service Quality"}, expected), "Old auto progress guard.", 1)
+
+	issue := nextPacketPlanShapeIssue(root, projectState{}, readiness, expected, body)
+	if issue != "stale Progress Guard" {
+		t.Fatalf("expected stale Progress Guard issue, got %q", issue)
+	}
+}
+
+func TestDoctorWarnsWhenNextPacketMetadataIsStale(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary task flow.\n\n## Readiness Evidence\n\nProduct completeness: The tiny task list can create one task.\nCore UX: Browser smoke verified the create and complete task flow.\nValidation coverage: `npm run build` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nImprove the primary task interaction.\n")
+	mustRun(t, root, "complete")
+	nextPlanPath := filepath.Join(root, ".hyper", "next-packet.md")
+	nextPlan := readFile(t, nextPlanPath)
+	assertContains(t, nextPlan, "Action: advance")
+	stale := replaceLinePrefix(nextPlan, "Readiness pressure:", "Readiness pressure: stale pressure from an older packet")
+	writeFile(t, nextPlanPath, stale)
+
+	out, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "[WARN] Next packet plan: stale Readiness pressure; run `hyper migrate`")
 	assertContains(t, out.Stdout, "Run `hyper migrate`, then run `hyper doctor` again.")
 }
 
@@ -402,7 +634,9 @@ func TestRepairRefreshesReadinessAndNextPacketPlan(t *testing.T) {
 	}
 	assertContains(t, out.Stdout, "State: repaired")
 	assertContains(t, out.Stdout, "Readiness gate: Tiny MVP -> Usable MVP (ready)")
+	assertContains(t, out.Stdout, "Planned action: advance")
 	assertContains(t, out.Stdout, "Next action: hyper advance")
+	assertContains(t, out.Stdout, "Next packet plan: .hyper/next-packet.md")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: advance")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Command: hyper advance")
 }
@@ -427,6 +661,8 @@ func TestStatusShowsTopPressuresAndCandidateNames(t *testing.T) {
 	assertContains(t, out, "repeated/repeated_validation")
 	assertContains(t, out, "Candidate structures:")
 	assertContains(t, out, "validator-npm-run-build")
+	assertContains(t, out, "Capability policy: Review 1 promotable capability candidate")
+	assertContains(t, out, "Activation policy: Review 1 promotable capability candidate")
 	assertNotContains(t, out, "validator-validation-pattern-npm-run-build-passed-vite-emitted-the-existing")
 	assertNotContains(t, out, "skill-error-handling-proof-corrupted-saved-state-fallback-remains")
 }
@@ -446,7 +682,9 @@ func TestStatusShowsActionGuidance(t *testing.T) {
 	}
 	out := strings.Join(statusDashboardLines(state, derived, readiness, growthState{}, 1, 1), "\n")
 	assertContains(t, out, "Action:")
-	assertContains(t, out, "Next action: hyper run \"Prove the primary flow.\"")
+	assertContains(t, out, "Planned action: run")
+	assertContains(t, out, "Next packet plan: .hyper/next-packet.md")
+	assertContains(t, out, "Next action: hyper run 'Prove the primary flow.'")
 	assertContains(t, out, "Why now: Core UX is emerging.")
 	assertContains(t, out, "Do not do yet: Do not advance Tiny MVP until blocking readiness gaps are closed.")
 }
@@ -524,7 +762,7 @@ func TestStatusDoesNotShowFutureReferenceBenchmarkBeforeRequired(t *testing.T) {
 		NextPressure: readinessPressure{Axis: "stage_advancement", AxisName: "Stage advancement", Status: "candidate", Reason: "Tiny MVP gate is ready."},
 	}
 
-	dashboard := strings.Join(readinessDashboardLines(readiness), "\n")
+	dashboard := strings.Join(readinessDashboardLines(projectState{}, readiness), "\n")
 	assertNotContains(t, dashboard, "Reference benchmark")
 	assertNotContains(t, dashboard, "Benchmark:")
 	assertNotContains(t, dashboard, "Emerging axes: Reference benchmark")
@@ -557,6 +795,7 @@ func TestStatusShortPrioritizesActivePacketGuard(t *testing.T) {
 	}
 
 	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Plan file: pending until `hyper complete`")
 	assertContains(t, short, "Next: update .hyper/goals/GOAL-0012/evidence.md and next.md, then run `hyper complete`")
 	assertContains(t, short, "Guard: Do not start another `hyper run` until this packet is completed or blocked.")
 	assertNotContains(t, short, "Guard: accept the stage change before running `hyper advance`")
@@ -651,6 +890,20 @@ func TestRepairDoesNotBypassFailedFinishGate(t *testing.T) {
 	}
 	assertContains(t, status.Stdout, "Finish gate failed")
 	assertNotContains(t, status.Stdout, "Next: hyper repair")
+	if err := os.Remove(filepath.Join(root, ".hyper", "next-packet.md")); err != nil {
+		t.Fatalf("remove legacy next-packet failed: %v", err)
+	}
+	migrate, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate after failed finish gate failed: %v", err)
+	}
+	assertContains(t, migrate.Stdout, "Planned action: complete-current")
+	assertContains(t, migrate.Stdout, "Next action: hyper complete")
+	assertContains(t, migrate.Stdout, "Next packet plan: .hyper/next-packet.md (complete-current)")
+	nextPacketAfterMigrate := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacketAfterMigrate, "Action: complete-current")
+	assertContains(t, nextPacketAfterMigrate, "Command: hyper complete")
+	assertContains(t, nextPacketAfterMigrate, "Stay in the current runtime packet")
 
 	repair, err := runCLI(args("repair"), testRoot(root), fakeUpdater{})
 	if err != nil {
@@ -671,6 +924,7 @@ func TestRepairDoesNotBypassFailedFinishGate(t *testing.T) {
 		t.Fatal("expected failed finish gate to block another run")
 	}
 	assertContains(t, err.Message, "failed the finish gate")
+	assertContains(t, err.Message, "Current review findings:")
 
 	state.Status = "completed"
 	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), state); err != nil {
@@ -688,7 +942,9 @@ func TestRepairDoesNotBypassFailedFinishGate(t *testing.T) {
 	}
 	assertContains(t, repair.Stdout, "State: repaired")
 	assertContains(t, repair.Stdout, "To: active")
+	assertContains(t, repair.Stdout, "Planned action: complete-current")
 	assertContains(t, repair.Stdout, "Next action: hyper complete")
+	assertContains(t, repair.Stdout, "Next packet plan: .hyper/next-packet.md")
 	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPacket, "Action: complete-current")
 	assertContains(t, nextPacket, "Command: hyper complete")
@@ -704,6 +960,22 @@ func TestRepairDoesNotBypassFailedFinishGate(t *testing.T) {
 		t.Fatal("expected failed finish gate to block another run even when state was marked completed")
 	}
 	assertContains(t, err.Message, "failed the finish gate")
+}
+
+func TestRepairRejectsInvalidPlanTargetStageBeforeMutatingState(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke passed for create and complete flow.\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	writeFile(t, filepath.Join(root, "plan.md"), readFile(t, filepath.Join(root, "plan.md"))+"\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("repair"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid plan target to block repair")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "active"`)
 }
 
 func TestCompleteLearnsAndRefreshesReadiness(t *testing.T) {
@@ -722,8 +994,10 @@ func TestCompleteLearnsAndRefreshesReadiness(t *testing.T) {
 	assertContains(t, out.Stdout, "Memory quality:")
 	assertContains(t, out.Stdout, "Proof: functional covered, surface covered, operational covered")
 	assertContains(t, out.Stdout, "Readiness gate: Tiny MVP -> Usable MVP (ready)")
+	assertContains(t, out.Stdout, "Planned action: advance")
 	assertContains(t, out.Stdout, "Next action: hyper advance")
 	assertContains(t, out.Stdout, "Why: Tiny MVP gate is ready.")
+	assertContains(t, out.Stdout, "Continuation guard: Do not run `hyper advance` unless the user accepts the stage change.")
 	assertContains(t, out.Stdout, "  hyper advance")
 	assertContains(t, out.Stdout, "  hyper status --short")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
@@ -766,10 +1040,416 @@ func TestCompleteRunsFinishGateBeforeLearning(t *testing.T) {
 	}
 	assertContains(t, err.Message, "Finish gate failed for GOAL-0001")
 	assertContains(t, err.Message, "Record active capability evidence for: validator-smoke")
+	assertContains(t, err.Message, "Planned action: complete-current")
+	assertContains(t, err.Message, "Continuation guard: Do not create a new runtime packet; fix the current packet evidence, next notes, and review findings before running `hyper complete`.")
+	assertContains(t, err.Message, "Next packet plan: .hyper/next-packet.md")
 	review := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
 	assertContains(t, review, "Status: failed")
 	assertContains(t, review, "Stay in the same runtime packet")
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Action: complete-current")
+	assertContains(t, nextPacket, "Command: hyper complete")
+	assertContains(t, nextPacket, "## Current Review Findings")
+	assertContains(t, nextPacket, "Record active capability evidence for: validator-smoke")
+	assertContains(t, nextPacket, "Stay in the current runtime packet")
+	doctor, doctorErr := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if doctorErr != nil {
+		t.Fatalf("doctor after finish gate failure failed: %v", doctorErr)
+	}
+	assertContains(t, doctor.Stdout, "[OK] Next packet plan: .hyper/next-packet.md matches current state")
+	assertContains(t, doctor.Stdout, "Fix review.md findings in the same packet, then run `hyper complete` again.")
+	assertNotContains(t, doctor.Stdout, "Finish the current packet: update evidence.md and next.md")
+	status, statusErr := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if statusErr != nil {
+		t.Fatalf("status after finish gate failure failed: %v", statusErr)
+	}
+	assertContains(t, status.Stdout, "Plan: complete-current")
+	assertContains(t, status.Stdout, "Next: fix .hyper/goals/GOAL-0001/review.md, then run `hyper complete`")
+	assertContains(t, status.Stdout, "Do: Fix review.md findings in this same packet, then run `hyper complete` again.")
+	assertContains(t, status.Stdout, "Review findings:")
+	assertContains(t, status.Stdout, "Record active capability evidence for: validator-smoke")
+	assertNotContains(t, status.Stdout, "Refresh:")
+	fullStatus, fullStatusErr := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if fullStatusErr != nil {
+		t.Fatalf("full status after finish gate failure failed: %v", fullStatusErr)
+	}
+	assertContains(t, fullStatus.Stdout, "Review findings:")
+	assertContains(t, fullStatus.Stdout, "Record active capability evidence for: validator-smoke")
+	assertNotContains(t, fullStatus.Stdout, "State refresh:")
+	resume, resumeErr := runCLI(args("resume"), testRoot(root), fakeUpdater{})
+	if resumeErr != nil {
+		t.Fatalf("resume after finish gate failure failed: %v", resumeErr)
+	}
+	assertContains(t, resume.Stdout, "Finish gate failed. Fix this same runtime packet before starting new work.")
+	assertContains(t, resume.Stdout, "Current review findings:")
+	assertContains(t, resume.Stdout, "Record active capability evidence for: validator-smoke")
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
+}
+
+func TestCompleteRepeatedFinishGateFailureSurfacesLoopRisk(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-smoke.md"), "# validator-smoke\n\nStatus: active\nKind: validator\nSignal: Run npm run smoke before completing packets.\n")
+	evidencePath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md")
+	nextPath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md")
+	writeFile(t, evidencePath, "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke passed for create and complete flow.\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, nextPath, "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd the next slice.\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected first finish gate failure")
+	}
+	assertNotContains(t, err.Message, "Repeated failure:")
+	review := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
+	assertContains(t, review, "Evidence hash:")
+	assertContains(t, review, "Next hash:")
+	assertContains(t, review, "Findings hash:")
+	assertContains(t, review, "Failure repeat count: 1")
+	assertContains(t, review, "Repeated findings: no")
+
+	writeFile(t, evidencePath, readFile(t, evidencePath)+"\n## Notes\n\nTried to address the failure, but did not record validator-smoke evidence yet.\n")
+	_, err = runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected repeated finish gate failure")
+	}
+	assertContains(t, err.Message, "Repeated failure: same finish-gate findings repeated 2 times after evidence or next.md changed.")
+	review = readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
+	assertContains(t, review, "Failure repeat count: 2")
+	assertContains(t, review, "Repeated findings: yes")
+	assertContains(t, review, "Input changed since previous failure: yes")
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Repeated finish-gate failure: same findings repeated 2 times after evidence or next.md changed")
+	status, statusErr := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if statusErr != nil {
+		t.Fatalf("status failed: %v", statusErr)
+	}
+	assertContains(t, status.Stdout, "Repeated finish-gate failure: same findings repeated 2 times after evidence or next.md changed")
+}
+
+func TestCompleteBlockedPacketStopsAutoContinuation(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nBlocked Billing CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nCreate and list one billing record.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nBilling smoke passes with required credentials.\n")
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\nStatus: blocked\nReason: Missing billing API key for the required smoke test.\n")
+
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("blocked complete should close cleanly: %v", err)
+	}
+	assertContains(t, out.Stdout, "State: blocked")
+	assertContains(t, out.Stdout, "Finish gate: blocked")
+	assertContains(t, out.Stdout, "Planned action: stop")
+	assertContains(t, out.Stdout, "Next action: hyper status --short")
+	assertContains(t, out.Stdout, "Continuation guard: Runtime packet is blocked. Stop automatic continuation")
+	if strings.Count(out.Stdout, "\n  hyper status --short") != 1 {
+		t.Fatalf("blocked complete output should list status once in Next block, got:\n%s", out.Stdout)
+	}
+	review := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
+	assertContains(t, review, "Status: blocked")
+	assertContains(t, review, "Packet closed as blocked")
+	assertContains(t, review, "Packet closed as blocked. Record the blocker in status and follow `.hyper/next-packet.md` before starting more work.")
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Action: stop")
+	assertContains(t, nextPacket, "Command: hyper status --short")
+	assertContains(t, nextPacket, "Runtime packet is blocked. Stop automatic continuation")
+	assertContains(t, nextPacket, "Report the blocked packet state")
+	assertNotContains(t, nextPacket, "Report the target-proof-complete state")
+	assertContains(t, nextPacket, "Report the blocked runtime packet state")
+	status, statusErr := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if statusErr != nil {
+		t.Fatalf("status failed: %v", statusErr)
+	}
+	assertContains(t, status.Stdout, "Plan: stop")
+	assertContains(t, status.Stdout, "Proof: functional blocked")
+	assertContains(t, status.Stdout, "Next: hyper status --short")
+	assertContains(t, status.Stdout, "Do: Resolve the blocked packet state, then choose a deliberate manual follow-up.")
+	assertContains(t, status.Stdout, "Guard: Do not continue automatically while the runtime packet is blocked")
+}
+
+func TestCompleteWaitingUserPacketStopsAutoContinuation(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nApproval Notes CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nCreate one approval note.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nApproval flow is clear.\n")
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\nStatus: waiting_user\nReason: Waiting for owner approval before changing the product stage.\n")
+
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("waiting-user complete should close cleanly: %v", err)
+	}
+	assertContains(t, out.Stdout, "State: waiting_user")
+	assertContains(t, out.Stdout, "Finish gate: waiting_user")
+	assertContains(t, out.Stdout, "Planned action: stop")
+	assertContains(t, out.Stdout, "Continuation guard: Runtime packet is waiting_user. Stop automatic continuation")
+	review := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
+	assertContains(t, review, "Status: waiting_user")
+	assertContains(t, review, "Packet is waiting for user input")
+	assertContains(t, review, "Report the waiting reason")
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Action: stop")
+	assertContains(t, nextPacket, "Command: hyper status --short")
+	assertContains(t, nextPacket, "Report the waiting_user packet state")
+	assertNotContains(t, nextPacket, "Report the target-proof-complete state")
+	status, statusErr := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if statusErr != nil {
+		t.Fatalf("status failed: %v", statusErr)
+	}
+	assertContains(t, status.Stdout, "Plan: stop")
+	assertContains(t, status.Stdout, "Proof: functional waiting")
+	assertContains(t, status.Stdout, "Next: hyper status --short")
+	assertContains(t, status.Stdout, "Do: Resolve the waiting_user packet state, then choose a deliberate manual follow-up.")
+	assertContains(t, status.Stdout, "Guard: Do not continue automatically while the runtime packet is waiting_user")
+}
+
+func TestMigrateRefreshesTerminalStopPlan(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nApproval Notes CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nCreate one approval note.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nApproval flow is clear.\n")
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\nStatus: waiting_user\nReason: Waiting for owner approval before changing the product stage.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, ".hyper", "next-packet.md")); err != nil {
+		t.Fatalf("remove next-packet failed: %v", err)
+	}
+
+	out, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "State consistency: state.json is consistent")
+	assertContains(t, out.Stdout, "Planned action: stop")
+	assertContains(t, out.Stdout, "Next action: hyper status --short")
+	assertContains(t, out.Stdout, "Next packet plan: .hyper/next-packet.md (stop)")
+	if strings.Count(out.Stdout, "\n  hyper status --short") != 1 {
+		t.Fatalf("migrate output should list status once in Next block, got:\n%s", out.Stdout)
+	}
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Action: stop")
+	assertContains(t, nextPacket, "Reason: Waiting for owner approval before changing the product stage.")
+	assertContains(t, nextPacket, "Report the waiting_user packet state")
+	assertNotContains(t, nextPacket, "Report the target-proof-complete state")
+}
+
+func TestPlainAutoRunStopsAfterTerminalPacketUntilFocusIsExplicit(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nBlocked Billing CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nCreate and list one billing record.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nBilling smoke passes with required credentials.\n")
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\nStatus: blocked\nReason: Missing billing API key for the required smoke test.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	stopped, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("terminal auto run stop should be clean: %v", err)
+	}
+	assertContains(t, stopped.Stdout, "Runtime packet stopped: GOAL-0001")
+	assertContains(t, stopped.Stdout, "State: blocked")
+	assertContains(t, stopped.Stdout, "Planned action: stop")
+	assertContains(t, stopped.Stdout, "Next action: hyper status --short")
+	assertContains(t, stopped.Stdout, "No runtime packet created.")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("plain plan-target run must not create a new packet after terminal stop")
+	}
+	projectLog := readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl"))
+	assertContains(t, projectLog, `"reason":"terminal_packet_stop"`)
+
+	continued, err := runCLI(args("run", "Continue after billing credentials are available"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("explicit follow-up focus should create the next packet: %v", err)
+	}
+	assertContains(t, continued.Stdout, "Runtime packet: GOAL-0002")
+	assertContains(t, continued.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, continued.Stdout, "Run target source: plan.md Target Stage")
+}
+
+func TestCompleteRejectsInvalidPlanTargetStageBeforeWritingNextPacket(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed and primary CLI smoke passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke passed for create and complete flow.\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	writeFile(t, filepath.Join(root, "plan.md"), readFile(t, filepath.Join(root, "plan.md"))+"\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid plan target to block completion handoff")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
+	if exists(filepath.Join(root, ".hyper", "next-packet.md")) {
+		assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Enterprise Launch")
+	}
+}
+
+func TestCompletePrioritizesActivePacketBeforeInvalidPlanTarget(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, "plan.md"), readFile(t, filepath.Join(root, "plan.md"))+"\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected active packet to block complete")
+	}
+	assertContains(t, err.Message, "Current runtime packet is still active")
+	assertNotContains(t, err.Message, "Invalid plan.md Target Stage")
+}
+
+func TestDoctorWarnsWhenCompleteCurrentReviewFindingsAreMissing(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-smoke.md"), "# validator-smoke\n\nStatus: active\nKind: validator\nSignal: Run npm run smoke before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke passed for create and complete flow.\nValidation coverage: `go test ./...` passed and is repeatable.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd the next slice.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err == nil {
+		t.Fatal("expected finish gate failure")
+	}
+	nextPath := filepath.Join(root, ".hyper", "next-packet.md")
+	nextPacket := readFile(t, nextPath)
+	writeFile(t, nextPath, removeMarkdownSection(nextPacket, "Current Review Findings"))
+
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[WARN] Next packet plan: missing Current Review Findings; run `hyper migrate`")
+
+	migrated, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	assertContains(t, migrated.Stdout, "Next packet plan: .hyper/next-packet.md (complete-current)")
+	refreshed := readFile(t, nextPath)
+	assertContains(t, refreshed, "## Current Review Findings")
+	assertContains(t, refreshed, "Record active capability evidence for: validator-smoke")
+
+	writeFile(t, nextPath, replaceLinePrefix(refreshed, "Reason:", "Reason: stale finish gate reason"))
+	doctor, err = runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor after stale complete-current reason failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[WARN] Next packet plan: stale Reason; run `hyper migrate`")
+}
+
+func TestCompleteFailureNextPacketFollowsRemovedPlanTarget(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	planWithTarget := "# Product Plan\n\n## Product\n\nTiny notes\n\n## Target Users\n\nSolo builders\n\n## MVP\n\nBuild a tiny notes MVP.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nCLI\n\n## Success Criteria\n\nCreate and list one note.\n"
+	writeFile(t, filepath.Join(root, "plan.md"), planWithTarget)
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-smoke.md"), "# validator-smoke\n\nStatus: active\nKind: validator\nSignal: Run npm run smoke before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke passed for create and list flow.\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nAdd the next slice.\n")
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Replace(planWithTarget, "\n## Target Stage\n\nService Quality\n", "\n", 1))
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected finish gate failure")
+	}
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Action: complete-current")
+	assertContains(t, nextPacket, "Mode: single packet")
+	assertNotContains(t, nextPacket, "Mode: auto until Service Quality")
+
+	doctor, doctorErr := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if doctorErr != nil {
+		t.Fatalf("doctor after removed target complete failure failed: %v", doctorErr)
+	}
+	assertContains(t, doctor.Stdout, "[OK] Target Stage: not set")
+	assertContains(t, doctor.Stdout, "[OK] Next packet plan: .hyper/next-packet.md matches current state")
+}
+
+func TestAutoRunRepairsFailedFinishGateAndContinuesToNextPacket(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nRepair Loop CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	run, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, run.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, run.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, run.Stdout, "Run target source: plan.md Target Stage")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-smoke.md"), "# validator-smoke\n\nStatus: active\nKind: validator\nSignal: Run npm run smoke before completing packets.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary notes flow.\n\n## Readiness Evidence\n\nProduct completeness: Repair Loop CRM has a measurable create-and-revisit notes flow.\nCore UX: Browser smoke verified create and revisit customer notes flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n\n## Learn Notes\n\n- Pattern: Browser smoke should cover the primary customer notes flow before stage advancement.\n")
+
+	_, err = runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected finish gate failure before active validator evidence is recorded")
+	}
+	assertContains(t, err.Message, "Record active capability evidence for: validator-smoke")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: complete-current")
+	assertContains(t, nextPlan, "## Current Review Findings")
+	assertContains(t, nextPlan, "Record active capability evidence for: validator-smoke")
+	assertContains(t, nextPlan, "Record active capability evidence for: validator-smoke\n\n## Guard")
+	resume, err := runCLI(args("resume"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("resume after finish gate failure failed: %v", err)
+	}
+	assertContains(t, resume.Stdout, "Finish gate failed. Fix this same runtime packet before starting new work.")
+	assertContains(t, resume.Stdout, "Record active capability evidence for: validator-smoke")
+	_, err = runCLI(args("run", "Start a new packet too early"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("failed finish gate must block a new runtime packet")
+	}
+	assertContains(t, err.Message, "failed the finish gate")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("new runtime packet must not be created while the failed packet needs correction")
+	}
+
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary notes flow.\n`npm run smoke` passed for the primary notes flow.\n\n## Readiness Evidence\n\nProduct completeness: Repair Loop CRM has a measurable create-and-revisit notes flow.\nCore UX: Browser smoke verified create and revisit customer notes flow.\nValidation coverage: `npm run build` and `npm run smoke` passed and primary browser smoke is repeatable.\n\n## Active Capability Evidence\n\nvalidator-smoke: `npm run smoke` passed for the primary notes flow.\n\n## Blocker\n\nNone blocking.\n")
+	complete, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete after correction failed: %v", err)
+	}
+	assertContains(t, complete.Stdout, "Finish gate: passed")
+	assertContains(t, complete.Stdout, "Next action: hyper advance")
+	passedReview := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
+	assertContains(t, passedReview, "Status: passed")
+	assertContains(t, passedReview, "Packet passed the finish gate. Follow `.hyper/next-packet.md` for the next planned action.")
+	assertNotContains(t, passedReview, "Stay in the same runtime packet")
+	nextPlan = readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: advance")
+	assertNotContains(t, nextPlan, "## Current Review Findings")
+
+	advance, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("advance after correction failed: %v", err)
+	}
+	nextCommand := "hyper run 'Make the primary Repair Loop CRM flow persist real user data across restart or reload.'"
+	assertContains(t, advance.Stdout, "Stage advanced: Tiny MVP -> Usable MVP")
+	assertContains(t, advance.Stdout, "Next action: "+nextCommand)
+	nextPlan = readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: run")
+	assertContains(t, nextPlan, "Command: "+nextCommand)
+	assertNotContains(t, nextPlan, "--auto --until")
+
+	nextRun, err := runCLI(args("run", "Make the primary Repair Loop CRM flow persist real user data across restart or reload."), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("planned next run failed: %v", err)
+	}
+	assertContains(t, nextRun.Stdout, "Runtime packet: GOAL-0002")
+	assertContains(t, nextRun.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, nextRun.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0002", "goal.md")), "Data persistence")
 }
 
 func TestCompleteRequiresSpecificActiveCapabilityEvidence(t *testing.T) {
@@ -830,7 +1510,7 @@ func TestCompleteRejectsFailedValidationOutputForActiveValidator(t *testing.T) {
 	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
 	mustRun(t, root, "run")
 	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCommand: `go test ./...`\n\nOutput:\n\n```text\nFAIL ./...\n```\n\ngo test ./... failed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` failed and needs repair.\n\n## Active Capability Evidence\n\nvalidator-go-test: Pending. Required behavior: Run go test ./... before completing packets.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nCommand: `go test ./...`\n\nOutput:\n\n```text\nFAIL ./...\n```\n\ngo test ./... failed.\n\n## Readiness Evidence\n\nCore UX: CLI smoke verified create and complete flow.\nValidation coverage: `go test ./...` failed and needs correction.\n\n## Active Capability Evidence\n\nvalidator-go-test: Pending. Required behavior: Run go test ./... before completing packets.\n\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRepair the failing validation.\n")
 
 	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
@@ -876,12 +1556,151 @@ func TestCompleteAllowsEmergingSustainedQualityEvidence(t *testing.T) {
 	if _, err := runCLI(args("run", "Repeat handoff validation"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
-	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nSustained quality: Repeated runtime evidence exists for the same handoff validation pattern, but it is not active required behavior yet.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nSustained quality: Repeated runtime evidence exists for the same handoff validation pattern, but it is not active required behavior yet.\n\n"+serviceQualityReferenceBenchmarkPass()+serviceQualitySelfReviewPass()+"\n## Blocker\n\nNone blocking.\n")
 	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRepeat validation again.\n")
 
 	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
 		t.Fatalf("emerging sustained quality evidence should allow packet closure: %v", err)
 	}
+}
+
+func TestCompleteServiceQualityRequiresPassingSelfReview(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nLocal Build Relay\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one handoff command.\n\n## Current Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nEvery packet proves the handoff command.\n")
+	if _, err := runCLI(args("run", "Improve handoff quality"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	evidencePath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md")
+	nextPath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md")
+	baseEvidence := "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and is repeatable.\n\n"
+	writeFile(t, evidencePath, baseEvidence+"## Blocker\n\nNone blocking.\n")
+	writeFile(t, nextPath, "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nContinue improving handoff quality.\n")
+
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err == nil {
+		t.Fatal("expected missing self review to fail Service Quality finish gate")
+	} else {
+		assertContains(t, err.Message, "Self Review")
+	}
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: failed")
+
+	writeFile(t, evidencePath, baseEvidence+"## Self Review\n\nPlan alignment: Matches the CLI handoff plan.\nCore loop quality: The handoff command works but the output is still awkward.\nProduct satisfaction: needs work before it feels service-quality.\nNo drift: Stayed inside CLI handoff scope.\nValidation match: `go test ./...` matches the changed behavior.\nVerdict: fail; fix the awkward output before closing.\n\n## Blocker\n\nNone blocking.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err == nil {
+		t.Fatal("expected failing self review verdict to fail Service Quality finish gate")
+	} else {
+		assertContains(t, err.Message, "Self Review verdict is fail")
+		assertContains(t, err.Message, "Product satisfaction: needs work before it feels service-quality.")
+		assertContains(t, err.Message, "Verdict: fail; fix the awkward output before closing.")
+	}
+
+	writeFile(t, evidencePath, baseEvidence+serviceQualityReferenceBenchmarkPass()+"## Self Review\n\nPlan alignment: Matches the CLI handoff plan.\nCore loop quality: The core loop is coherent for this packet.\nProduct satisfaction: The visible or operational result is acceptable for this service-quality packet.\nNo drift: No broad feature expansion or non-goal drift was introduced.\nValidation match: Validation evidence matches the actual result.\nVerdict: not ready; service-quality proof is incomplete.\n\n## Blocker\n\nNone blocking.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err == nil {
+		t.Fatal("expected not-ready self review verdict to fail Service Quality finish gate")
+	} else {
+		assertContains(t, err.Message, "Self Review verdict is fail")
+		assertContains(t, err.Message, "Verdict: not ready; service-quality proof is incomplete.")
+	}
+
+	writeFile(t, evidencePath, baseEvidence+serviceQualityReferenceBenchmarkPass()+serviceQualitySelfReviewPass()+"\n## Blocker\n\nNone blocking.\n")
+	if out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("passing self review should allow Service Quality completion: %v", err)
+	} else {
+		assertContains(t, out.Stdout, "Finish gate: passed")
+	}
+}
+
+func TestCompleteServiceQualityRequiresSelfReviewReferenceBenchmarkAndActiveValidator(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nLocal Build Relay\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one handoff command.\n\n## Current Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nEvery packet proves validation, benchmark fit, and handoff quality.\n")
+	if _, err := runCLI(args("run", "Close service-quality handoff"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-smoke.md"), "# validator-smoke\n\nStatus: active\nKind: validator\nSignal: Run npm run smoke before completing packets.\n")
+	evidencePath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md")
+	nextPath := filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md")
+	baseEvidence := "# GOAL-0001 Evidence\n\n## Validation\n\nCommand: `go test ./...`\n\nOutput:\n\n```text\nok ./...\n```\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and is repeatable.\nSecurity baseline: Privacy boundary verified, no cloud sync, no telemetry, no token storage, no secrets, and local-only data handling is explicit.\nDeployment readiness: Built the CLI binary and ran the smoke command outside the development command.\nOperations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command.\nMaintainability: Table-driven validation helper keeps command checks repeatable without hidden local context.\nProduct satisfaction: Target-user fit, copy quality, coherent core loop, no drift, and service-quality verdict pass were accepted.\n\n"
+	writeFile(t, nextPath, "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nContinue sustained handoff validation.\n\n## Learn Notes\n\n- Pattern: Service-quality handoff packets require validator, benchmark, and self-review proof together.\n")
+	writeFile(t, evidencePath, baseEvidence+"## Active Capability Evidence\n\nvalidator-smoke: Pending. Required behavior: Run npm run smoke before completing packets.\n\n## Self Review\n\nPlan alignment: Matches the CLI handoff plan.\nCore loop quality: The handoff command works but the output is still awkward.\nProduct satisfaction: needs work before it feels service-quality.\nNo drift: Stayed inside CLI handoff scope.\nValidation match: `go test ./...` matches the changed behavior.\nVerdict: fail; fix the awkward output before closing.\n\n## Blocker\n\nNone blocking.\n")
+
+	_, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected service-quality finish gate to fail")
+	}
+	assertContains(t, err.Message, "Record active capability evidence for: validator-smoke")
+	assertContains(t, err.Message, "Add `## Reference Benchmark Evidence`")
+	assertContains(t, err.Message, "Self Review verdict is fail")
+	assertContains(t, err.Message, "Product satisfaction: needs work before it feels service-quality.")
+	assertContains(t, err.Message, "Verdict: fail; fix the awkward output before closing.")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: complete-current")
+	assertContains(t, nextPlan, "Record active capability evidence for: validator-smoke")
+	assertContains(t, nextPlan, "Add `## Reference Benchmark Evidence`")
+	assertContains(t, nextPlan, "Self Review verdict is fail")
+	assertContains(t, nextPlan, "Product satisfaction: needs work before it feels service-quality.")
+	resume, err := runCLI(args("resume"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("resume after service-quality finish gate failure failed: %v", err)
+	}
+	assertContains(t, resume.Stdout, "Current review findings:")
+	assertContains(t, resume.Stdout, "Product satisfaction: needs work before it feels service-quality.")
+	assertContains(t, resume.Stdout, "Verdict: fail; fix the awkward output before closing.")
+
+	writeFile(t, evidencePath, baseEvidence+"## Active Capability Evidence\n\nvalidator-smoke: `npm run smoke` passed.\n\n"+serviceQualitySelfReviewPass()+"\n## Blocker\n\nNone blocking.\n")
+	_, err = runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected missing reference benchmark to keep service-quality packet open")
+	}
+	assertContains(t, err.Message, "Add `## Reference Benchmark Evidence`")
+	assertNotContains(t, err.Message, "Self Review verdict is fail")
+	assertNotContains(t, err.Message, "Record active capability evidence for: validator-smoke")
+
+	writeFile(t, evidencePath, baseEvidence+"## Active Capability Evidence\n\nvalidator-smoke: `npm run smoke` passed.\n\n"+serviceQualityReferenceBenchmarkPass()+serviceQualitySelfReviewPass()+"\n## Blocker\n\nNone blocking.\n")
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete after service-quality proof correction failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Finish gate: passed")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: passed")
+	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Current Review Findings")
+}
+
+func TestFinishGateRequiresReferenceBenchmarkWhenItIsNextPressure(t *testing.T) {
+	root := t.TempDir()
+	goalDir := filepath.Join(root, ".hyper", "goals", "GOAL-0001")
+	if err := os.MkdirAll(goalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(goalDir, "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and is repeatable.\nSecurity baseline: Privacy boundary is documented and verified.\nDeployment readiness: Release binary was built and smoke tested.\nOperations and docs: README covers setup, rollback, and smoke checks.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(goalDir, "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nCompare against references.\n")
+	state := projectState{
+		Stage:           "Beta",
+		CurrentGoalID:   "GOAL-0001",
+		CurrentGoalPath: ".hyper/goals/GOAL-0001/goal.md",
+	}
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Beta",
+		Dimensions: []readinessDimension{
+			{ID: "validation_coverage", Name: "Validation coverage", Status: "covered"},
+			{ID: "security_baseline", Name: "Security baseline", Status: "covered"},
+			{ID: "deployment_readiness", Name: "Deployment readiness", Status: "covered"},
+			{ID: "operations_docs", Name: "Operations and docs", Status: "covered"},
+			{ID: "reference_benchmark", Name: "Reference benchmark", Status: "missing"},
+		},
+		StageGate: readinessStageGate{
+			CurrentStage: "Beta",
+			NextStage:    "Service Quality",
+			Status:       "not_ready",
+			RequiredAxes: []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "reference_benchmark"},
+		},
+		NextPressure: readinessPressure{Axis: "reference_benchmark", AxisName: "Reference benchmark", Status: "missing"},
+	}
+
+	_, err := runFinishGate(root, state, goalState{State: "completed", Reason: "done"}, readiness)
+	if err == nil {
+		t.Fatal("expected reference benchmark finish gate failure")
+	}
+	assertContains(t, err.Message, "Add `## Reference Benchmark Evidence`")
+	assertNotContains(t, err.Message, "Add covered readiness evidence for `Reference benchmark`")
 }
 
 func TestRunAutoUntilPlansNextPacketAfterComplete(t *testing.T) {
@@ -913,6 +1732,719 @@ func TestRunAutoUntilPlansNextPacketAfterComplete(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md")), "Status: passed")
 }
 
+func TestRunUsesPlanTargetStageAsDefaultAutoTarget(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nUsable MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, out.Stdout, "After `hyper complete` passes, read `.hyper/next-packet.md`")
+	assertContains(t, out.Stdout, "if Action is `run`, execute its Command and continue the next packet")
+	assertContains(t, out.Stdout, "if Action is `advance`, continue only when the Stage Advancement Review says the active auto target authorizes it")
+	resume, err := runCLI(args("resume"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("resume failed: %v", err)
+	}
+	assertContains(t, resume.Stdout, "After `hyper complete` passes, read `.hyper/next-packet.md`")
+	assertContains(t, resume.Stdout, "if Action is `advance`, continue only when the Stage Advancement Review says the active auto target authorizes it")
+	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
+	assertContains(t, state, `"auto_continue": true`)
+	assertContains(t, state, `"run_until": "Service Quality"`)
+	assertContains(t, state, `"run_target_source": "plan.md Target Stage"`)
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Mode: auto until Service Quality")
+	assertContains(t, status.Stdout, "Target: Service Quality (plan.md Target Stage)")
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[OK] Target Stage: Service Quality from plan.md")
+
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary notes flow.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and revisit customer notes flow.\nData persistence: SQLite database stored a created customer note and confirmed the row after reload.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nHandle empty, failure, and edge states.\n")
+
+	complete, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	assertContains(t, complete.Stdout, "Next action: hyper run 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Mode: auto until Service Quality")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Command: hyper run 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
+	status, err = runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status after complete failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Next: hyper run 'Handle empty, failure, and edge states for the primary Tiny CRM flow.'")
+}
+
+func TestPlanTargetStageContinuesWithPlainRunAfterAdvance(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
+		"# Product Plan",
+		"",
+		"## Product",
+		"",
+		"Plan Target CRM",
+		"",
+		"## Target Users",
+		"",
+		"Solo sellers",
+		"",
+		"## MVP",
+		"",
+		"Add and revisit customer notes.",
+		"",
+		"## Current Stage",
+		"",
+		"Tiny MVP",
+		"",
+		"## Target Stage",
+		"",
+		"Service Quality",
+		"",
+		"## Build Style",
+		"",
+		"Web app",
+		"",
+		"## Success Criteria",
+		"",
+		"Primary customer notes flow works without manual data edits.",
+	}, "\n"))
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("plan-target run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary notes flow.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and revisit customer notes flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n\n## Learn Notes\n\n- Pattern: Browser smoke should cover the primary customer notes flow.\n")
+
+	complete, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	assertContains(t, complete.Stdout, "Finish gate: passed")
+	assertContains(t, complete.Stdout, "Planned action: advance")
+	assertContains(t, complete.Stdout, "Next action: hyper advance")
+	assertContains(t, complete.Stdout, "Continuation guard: Run `hyper advance` only after the Stage Advancement Review shows ready proof and no blocking gaps; the active auto target authorizes continuing toward Service Quality.")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Mode: auto until Service Quality")
+	assertContains(t, nextPlan, "Action: advance")
+	assertContains(t, nextPlan, "Command: hyper advance")
+	assertContains(t, nextPlan, "## Stage Advancement Review")
+	assertContains(t, nextPlan, "Auto continuation: active target Service Quality authorizes `hyper advance` after this review.")
+	assertContains(t, nextPlan, "Continue by running `hyper advance`")
+	assertNotContains(t, nextPlan, "Pause here.")
+
+	advance, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("advance failed: %v", err)
+	}
+	assertContains(t, advance.Stdout, "Stage advanced: Tiny MVP -> Usable MVP")
+	assertContains(t, advance.Stdout, "Run target after advance: Service Quality (plan.md Target Stage)")
+	assertContains(t, advance.Stdout, "Next action: hyper run 'Make the primary Plan Target CRM flow persist real user data across restart or reload.'")
+	assertContains(t, advance.Stdout, "Progress guard: Continue only if the command creates a new runtime packet")
+	assertNotContains(t, advance.Stdout, "--auto --until")
+	nextPlan = readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Mode: auto until Service Quality")
+	assertContains(t, nextPlan, "Action: run")
+	assertContains(t, nextPlan, "Command: hyper run 'Make the primary Plan Target CRM flow persist real user data across restart or reload.'")
+	assertContains(t, nextPlan, "## Progress Guard")
+	assertContains(t, nextPlan, "## Codex Desktop Continuation")
+	assertNotContains(t, nextPlan, "--auto --until")
+
+	nextRun, err := runCLI(args("run", "Make the primary Plan Target CRM flow persist real user data across restart or reload."), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("plain continuation run failed: %v", err)
+	}
+	assertContains(t, nextRun.Stdout, "Runtime packet: GOAL-0002")
+	assertContains(t, nextRun.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, nextRun.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_target_source": "plan.md Target Stage"`)
+}
+
+func TestPlanTargetStageRunsPlainCommandAcrossMultipleStages(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
+		"# Product Plan",
+		"",
+		"## Product",
+		"",
+		"Plan Target Service CRM",
+		"",
+		"## Target Users",
+		"",
+		"Solo sellers",
+		"",
+		"## MVP",
+		"",
+		"Add, revisit, and recover customer notes.",
+		"",
+		"## Current Stage",
+		"",
+		"Tiny MVP",
+		"",
+		"## Target Stage",
+		"",
+		"Service Quality",
+		"",
+		"## Build Style",
+		"",
+		"Web app",
+		"",
+		"## Success Criteria",
+		"",
+		"Primary customer notes flow works, persists, handles edge states, and has service handoff proof.",
+	}, "\n"))
+	writeGoal := func(goalID, readiness string) {
+		reference := ""
+		if strings.Contains(readiness, "Reference benchmark:") {
+			reference = "\n" + serviceQualityReferenceBenchmarkPass()
+		}
+		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "evidence.md"), "# "+goalID+" Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary customer notes flow.\n\n## Readiness Evidence\n\n"+readiness+"\n"+reference+"\n## Blocker\n\nNone blocking.\n")
+		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "next.md"), "# "+goalID+" Next\n\n## Recommended Next Goal\n\nContinue toward Service Quality.\n\n## Learn Notes\n\n- Pattern: Browser smoke should cover the primary customer notes flow before handoff.\n")
+	}
+	complete := func(goalID string) string {
+		out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+		if err != nil {
+			t.Fatalf("complete %s failed: %v", goalID, err)
+		}
+		assertContains(t, out.Stdout, "Finish gate: passed")
+		assertContains(t, out.Stdout, "Progress guard:")
+		return out.Stdout
+	}
+	advance := func(from, to string) string {
+		out, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+		if err != nil {
+			t.Fatalf("advance %s -> %s failed: %v", from, to, err)
+		}
+		assertContains(t, out.Stdout, "Stage advanced: "+from+" -> "+to)
+		return out.Stdout
+	}
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("initial plan-target run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	writeGoal("GOAL-0001", strings.Join([]string{
+		"Product completeness: Plan Target Service CRM has a measurable create-and-revisit notes flow for solo sellers.",
+		"Core UX: Browser smoke verified create and revisit customer notes flow.",
+		"Validation coverage: `npm run build` passed and browser smoke is repeatable.",
+	}, "\n"))
+	complete("GOAL-0001")
+	advance("Tiny MVP", "Usable MVP")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	firstContinuation := "hyper run 'Make the primary Plan Target Service CRM flow persist real user data across restart or reload.'"
+	assertContains(t, nextPlan, "Command: "+firstContinuation)
+	assertNotContains(t, nextPlan, "--auto --until")
+
+	out, err = runCLI(args("run", "Make the primary Plan Target Service CRM flow persist real user data across restart or reload."), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("usable run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0002")
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	writeGoal("GOAL-0002", strings.Join([]string{
+		"Core UX: Browser smoke verified create, revisit, reload, empty, and invalid-note states.",
+		"Data persistence: SQLite storage saved a customer note, app reload re-read it from disk, and restart smoke confirmed the row.",
+		"Error handling: Empty note, missing customer, loading, and invalid input states are handled and verified by browser smoke.",
+		"Validation coverage: `npm run build` and browser smoke passed for persistence and edge states.",
+	}, "\n"))
+	complete("GOAL-0002")
+	advance("Usable MVP", "Beta")
+	nextPlan = readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: run")
+	assertContains(t, nextPlan, "Command: hyper run")
+	assertNotContains(t, nextPlan, "--auto --until")
+
+	out, err = runCLI(args("run", "Prove service quality handoff for Plan Target Service CRM"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("beta run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0003")
+	writeGoal("GOAL-0003", strings.Join([]string{
+		"Validation coverage: `npm run build`, browser smoke, and service handoff smoke passed with realistic customer note data.",
+		"Security baseline: Local privacy boundary verified: no telemetry, no cloud sync, no secrets in client storage, and delete clears local note content.",
+		"Deployment readiness: Production build artifact smoke passed from `dist/` outside the development server path.",
+		"Operations and docs: README documents setup, smoke command, local data path, rollback, recovery, and stop condition.",
+		"Product satisfaction: Target-user fit, coherent notes core loop, clear copy, no drift from solo-seller plan, and service-quality verdict pass were accepted.",
+		"Reference benchmark: Category: lightweight customer notes CRM; References: Notion database notes, Airtable lightweight CRM, HubSpot notes; Baseline expectations: create notes, revisit notes, persist data, handle empty and error states, document handoff, and keep privacy boundaries clear; Current comparison: Plan Target Service CRM meets baseline for create/revisit, SQLite persistence, edge handling, privacy boundary, build artifact, and README handoff; Below-baseline gaps: no critical below-baseline gap for the lightweight CRM category; Above-baseline strength: Hyper Run ties validation, readiness, and no-drift evidence to stage advancement; Decision: Service Quality advancement is acceptable because no core category-baseline gap remains.",
+	}, "\n"))
+	complete("GOAL-0003")
+	advanceOut := advance("Beta", "Service Quality")
+	assertContains(t, advanceOut, "Run target after advance: Service Quality (plan.md Target Stage)")
+	assertContains(t, advanceOut, "Readiness gate: Service Quality -> Sustained Service Quality (not_ready)")
+	assertContains(t, advanceOut, "Next action: hyper run")
+	assertContains(t, advanceOut, "Why: Maintainability")
+	assertContains(t, advanceOut, "Progress guard: Continue only if the command creates a new runtime packet")
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Stage: Service Quality")
+	assertContains(t, status.Stdout, "Plan: run")
+	assertContains(t, status.Stdout, "Next: hyper run")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: run")
+	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Current Stage\n\nService Quality")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0004")) {
+		t.Fatal("stage advance should plan the next Service Quality packet without creating GOAL-0004")
+	}
+
+	activeValidatorDir := filepath.Join(root, ".hyper", "capabilities", "active", "validator")
+	if err := os.MkdirAll(activeValidatorDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(activeValidatorDir, "validator-npm-run-build.md"), "# validator-npm-run-build\n\nStatus: active\nKind: validator\nSignal: Run npm run build before completing packets.\n")
+
+	out, err = runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("service quality run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0004")
+	assertContains(t, out.Stdout, "Stage: Service Quality")
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0004", "goal.md"))
+	assertContains(t, goal, "## Run Target")
+	assertContains(t, goal, "- plan.md Target Stage: Service Quality")
+	assertContains(t, goal, "- Target meaning: complete Service Quality readiness proof, not merely enter the stage.")
+	assertContains(t, goal, "- Target status: target stage is active but proof is not complete.")
+	assertContains(t, goal, "- Current target pressure: Maintainability")
+	assertContains(t, goal, "Required active validator validator-npm-run-build")
+	evidence := strings.Join([]string{
+		"# GOAL-0004 Evidence",
+		"",
+		"## Validation",
+		"",
+		"Command: `npm run build`",
+		"",
+		"Output:",
+		"",
+		"```text",
+		"build passed",
+		"```",
+		"",
+		"Browser smoke passed for create, revisit, reload, empty, error, delete, and rollback handoff paths.",
+		"",
+		"## Readiness Evidence",
+		"",
+		"Validation coverage: `npm run build`, browser smoke, and rollback handoff smoke passed from documented commands.",
+		"Security baseline: Local-only privacy boundary, no telemetry, no cloud sync, delete behavior, and secret-free storage were verified.",
+		"Deployment readiness: Production build artifact and rollback handoff smoke passed outside the dev server path.",
+		"Operations and docs: README and runbook cover setup, smoke command, data path, rollback, recovery, and known stop conditions.",
+		"Maintainability: Customer note storage, validation helpers, and handoff docs are organized so the next operator can continue without hidden context.",
+		"Product satisfaction: Target-user fit, copy quality, coherent notes core loop, no drift, and service-quality verdict pass were accepted.",
+		"",
+		serviceQualityReferenceBenchmarkPass(),
+		"## Active Capability Evidence",
+		"",
+		"validator-npm-run-build: `npm run build` passed.",
+		"",
+		serviceQualitySelfReviewPass(),
+		"## Changed Files",
+		"",
+		"Service quality hardening evidence and docs.",
+		"",
+		"## Blocker",
+		"",
+		"None blocking.",
+	}, "\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0004", "evidence.md"), evidence)
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0004", "next.md"), "# GOAL-0004 Next\n\n## Recommended Next Goal\n\nReview target proof completion.\n\n## Learn Notes\n\n- Pattern: Service Quality packets must include active validator proof, reference benchmark evidence, and self review before target proof is complete.\n")
+
+	completeOut := complete("GOAL-0004")
+	assertContains(t, completeOut, "Planned action: stop")
+	assertContains(t, completeOut, "Next action: hyper status --short")
+	assertContains(t, completeOut, "Why: Auto target Service Quality from plan.md has complete readiness proof")
+	nextPlan = readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Mode: auto until Service Quality")
+	assertContains(t, nextPlan, "Action: stop")
+	assertContains(t, nextPlan, "Run-until target proof is complete")
+
+	out, err = runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("target proof complete run should stop cleanly: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run-until target proof complete: Service Quality")
+	assertContains(t, out.Stdout, "No runtime packet created.")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0005")) {
+		t.Fatal("target proof complete run must not create another runtime packet")
+	}
+}
+
+func TestRunPlanTargetDoesNotCreatePacketWhenStageGateReady(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nPlan Target CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	if _, err := runCLI(args("run"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("initial run failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke verified the primary notes flow.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create and revisit customer notes flow.\nValidation coverage: `npm run build` passed and primary browser smoke is repeatable.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	if _, err := runCLI(args("complete"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("gate-ready run should stop cleanly: %v", err)
+	}
+	assertContains(t, out.Stdout, "Stage gate ready: Tiny MVP -> Usable MVP (ready)")
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, out.Stdout, "Next action: hyper advance")
+	assertContains(t, out.Stdout, "Progress guard: Continue only if `hyper advance` changes `plan.md` Current Stage")
+	assertContains(t, out.Stdout, "No runtime packet created.")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("plan-target run must not create a new packet when the stage gate is ready")
+	}
+	projectLog := readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl"))
+	assertContains(t, projectLog, `"type":"run_skipped"`)
+	assertContains(t, projectLog, `"reason":"stage_gate_ready"`)
+	assertContains(t, projectLog, `"next_action":"advance"`)
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Action: advance")
+	assertContains(t, nextPlan, "Command: hyper advance")
+	assertContains(t, nextPlan, "Auto continuation: active target Service Quality authorizes `hyper advance` after this review.")
+}
+
+func TestPlanTargetStageChangeUpdatesStatusAndNextRun(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nBeta\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Mode: auto until Beta")
+	assertContains(t, status.Stdout, "Target: Beta (plan.md Target Stage)")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: auto until Beta")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
+	assertContains(t, state, `"run_until": "Beta"`)
+	assertContains(t, state, `"run_target_source": "plan.md Target Stage"`)
+	assertNotContains(t, state, `"run_until": "Service Quality"`)
+}
+
+func TestPlanTargetStageRemovalClearsPlanDrivenAutoTarget(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works without manual data edits.\n")
+
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Mode: single packet")
+	assertContains(t, status.Stdout, "Target: none")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: single packet")
+	assertNotContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
+	assertNotContains(t, state, `"auto_continue": true`)
+	assertNotContains(t, state, `"run_until"`)
+	assertNotContains(t, state, `"run_target_source"`)
+}
+
+func TestRunPlanTargetStageContinuesUntilTargetProofIsComplete(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nService Ready CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one service handoff command.\n\n## Current Stage\n\nService Quality\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nService target keeps running until Service Quality proof is complete.\n")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, out.Stdout, "Readiness gate: Service Quality -> Sustained Service Quality (not_ready)")
+	assertContains(t, out.Stdout, "Runtime packet file: .hyper/goals/GOAL-0001/goal.md")
+	assertNotContains(t, out.Stdout, "No runtime packet created.")
+}
+
+func TestRunPlanTargetStageStopsWhenTargetProofIsComplete(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nService Ready CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one service handoff command.\n\n## Current Stage\n\nService Quality\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nService target proof complete guard does not create extra work.\n")
+	goalDir := filepath.Join(root, ".hyper", "goals", "GOAL-0001")
+	if err := os.MkdirAll(goalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	activeValidatorDir := filepath.Join(root, ".hyper", "capabilities", "active", "validator")
+	if err := os.MkdirAll(activeValidatorDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(goalDir, "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`go test ./...` passed and the CLI smoke command is repeatable.\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and the CLI smoke command is repeatable.\nSecurity baseline: Privacy boundary verified, no cloud sync, no telemetry, no token storage, no secrets, and local-only data handling is explicit.\nDeployment readiness: Built the CLI binary and ran the smoke command outside the development command.\nOperations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command.\nMaintainability: Table-driven validation helper keeps command checks repeatable without hidden local context.\nProduct satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass.\n\n"+serviceQualityReferenceBenchmarkPass()+"## Active Capability Evidence\n\nvalidator-go-test: `go test ./...` passed.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(activeValidatorDir, "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run-until target proof complete: Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertContains(t, out.Stdout, "Why: Auto target Service Quality from plan.md has complete readiness proof; choose a higher target or remove Target Stage before starting more work.")
+	assertContains(t, out.Stdout, "No runtime packet created.")
+	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPacket, "Action: stop")
+	assertContains(t, nextPacket, "Run-until target proof is complete. Raise or remove `plan.md` Target Stage before starting more work.")
+	assertContains(t, nextPacket, "wait for the user to raise `plan.md` Target Stage, remove it for manual work, or choose an override target.")
+	projectLog := readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl"))
+	assertContains(t, projectLog, `"type":"run_skipped"`)
+	assertContains(t, projectLog, `"reason":"auto_target_reached"`)
+	assertContains(t, projectLog, `"next_action":"stop"`)
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("plain run with complete plan target proof should not create a new runtime packet")
+	}
+}
+
+func TestRunManualFocusDoesNotReuseReachedPreviousAutoTarget(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nService Ready CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nRun one service handoff command.\n\n## Current Stage\n\nService Quality\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nManual follow-up packets can still start after an auto target was reached.\n")
+	if err := writeJSON(filepath.Join(root, ".hyper", "state.json"), projectState{
+		Project:          "Service Ready CLI",
+		Stage:            "Service Quality",
+		Status:           "completed",
+		ExecutionAdapter: defaultExecutionAdapter(),
+		PlanPath:         planFile,
+		AutoContinue:     true,
+		RunUntil:         "Service Quality",
+		UpdatedAt:        "now",
+	}); err != nil {
+		t.Fatalf("write state failed: %v", err)
+	}
+
+	out, err := runCLI(args("run", "Start a manual follow-up packet"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "Run mode: single packet")
+	assertNotContains(t, out.Stdout, "Run-until target proof complete")
+	assertNotContains(t, out.Stdout, "After `hyper complete` passes")
+}
+
+func TestRunExplicitUntilOverridesPlanTargetStage(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Target Users\n\nSolo sellers\n\n## MVP\n\nAdd and revisit customer notes.\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nService Quality\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary customer notes flow works.\n")
+
+	out, err := runCLI(args("run", "--until", "beta"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run mode: auto until Beta")
+	assertContains(t, out.Stdout, "Run target source: --until")
+	assertNotContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
+	assertContains(t, state, `"run_until": "Beta"`)
+	assertContains(t, state, `"run_target_source": "--until"`)
+	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
+	assertContains(t, goal, "- Run target: Beta")
+	assertContains(t, goal, "- Run target source: --until")
+	assertNotContains(t, goal, "- plan.md Target Stage: Service Quality")
+	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, status.Stdout, "Target: Beta (--until; plan.md Target Stage: Service Quality)")
+}
+
+func TestAutoRunWithoutUntilPreservesPreviousExplicitTargetSource(t *testing.T) {
+	resolved, err := applyDefaultRunTarget(runOptions{AutoContinue: true}, map[string]string{}, projectState{
+		AutoContinue:    true,
+		RunUntil:        "Beta",
+		RunTargetSource: "--until",
+	})
+	if err != nil {
+		t.Fatalf("apply default target failed: %v", err)
+	}
+	if resolved.RunUntil != "Beta" {
+		t.Fatalf("RunUntil = %q, want Beta", resolved.RunUntil)
+	}
+	if resolved.RunTargetSource != "--until" {
+		t.Fatalf("RunTargetSource = %q, want --until", resolved.RunTargetSource)
+	}
+}
+
+func TestPlainRunUsesPlanTargetOverPreviousExplicitTarget(t *testing.T) {
+	resolved, err := applyDefaultRunTarget(runOptions{}, map[string]string{
+		"Target Stage": "Service Quality",
+	}, projectState{
+		AutoContinue:    true,
+		RunUntil:        "Beta",
+		RunTargetSource: "--until",
+	})
+	if err != nil {
+		t.Fatalf("apply default target failed: %v", err)
+	}
+	if !resolved.AutoContinue {
+		t.Fatal("plain run should become auto when plan.md Target Stage is present")
+	}
+	if resolved.RunUntil != "Service Quality" {
+		t.Fatalf("RunUntil = %q, want Service Quality", resolved.RunUntil)
+	}
+	if resolved.RunTargetSource != planTargetStageSource {
+		t.Fatalf("RunTargetSource = %q, want %s", resolved.RunTargetSource, planTargetStageSource)
+	}
+}
+
+func TestRunInvalidPlanTargetStageFailsClearly(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid plan target to fail")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+	assertContains(t, err.Message, "service-quality")
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor should report invalid target without crashing: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[FAIL] Target Stage: invalid `Enterprise Launch`")
+}
+
+func TestRunInvalidPlanCurrentStageFailsClearly(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nEnterprise Launch\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary flow works.\n")
+
+	_, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid current stage to fail")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Current Stage: Enterprise Launch")
+	assertContains(t, err.Message, "service-quality")
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor should report invalid current stage without crashing: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[FAIL] Current Stage: invalid `Enterprise Launch`")
+}
+
+func TestStatusExplainsInvalidPlanTargetStage(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nEnterprise Launch\n")
+
+	out, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status should explain invalid target without crashing: %v", err)
+	}
+	assertContains(t, out.Stdout, "Plan: fix-plan")
+	assertContains(t, out.Stdout, "Do: Edit `plan.md` Target Stage to tiny-mvp, usable-mvp, beta, service-quality, or sustained-service-quality")
+	assertContains(t, out.Stdout, "Why: plan.md Target Stage is invalid: Invalid plan.md Target Stage: Enterprise Launch")
+	assertContains(t, out.Stdout, "Guard: Do not run `hyper run`, `hyper complete`, `hyper advance`, or `hyper migrate` until `plan.md` stage fields are valid.")
+}
+
+func TestStatusExplainsInvalidPlanCurrentStage(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nEnterprise Launch\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary flow works.\n")
+
+	out, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status should explain invalid current stage without crashing: %v", err)
+	}
+	assertContains(t, out.Stdout, "Plan: fix-plan")
+	assertContains(t, out.Stdout, "Next: edit plan.md Current Stage")
+	assertContains(t, out.Stdout, "Do: Edit `plan.md` Current Stage to tiny-mvp, usable-mvp, beta, service-quality, or sustained-service-quality")
+	assertContains(t, out.Stdout, "Why: plan.md Current Stage is invalid: Invalid plan.md Current Stage: Enterprise Launch")
+	assertContains(t, out.Stdout, "Guard: Do not run `hyper run`, `hyper complete`, `hyper advance`, or `hyper migrate` until `plan.md` stage fields are valid.")
+}
+
+func TestStatusPrioritizesInvalidPlanStageEvenWithActivePacket(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	planPath := filepath.Join(root, "plan.md")
+	writeFile(t, planPath, strings.Replace(readFile(t, planPath), "## Current Stage\n\nTiny MVP", "## Current Stage\n\nEnterprise Launch", 1))
+
+	out, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status should explain invalid plan stage even with an active packet: %v", err)
+	}
+	assertContains(t, out.Stdout, "Packet: GOAL-0001 (active)")
+	assertContains(t, out.Stdout, "Plan: fix-plan")
+	assertContains(t, out.Stdout, "Next: edit plan.md Current Stage")
+	assertContains(t, out.Stdout, "Do: Edit `plan.md` Current Stage to tiny-mvp, usable-mvp, beta, service-quality, or sustained-service-quality")
+	assertContains(t, out.Stdout, "Guard: Do not run `hyper run`, `hyper complete`, `hyper advance`, or `hyper migrate` until `plan.md` stage fields are valid.")
+}
+
+func TestMigrateRejectsInvalidPlanTargetStageBeforeWritingNextPacket(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nTiny MVP\n\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid plan target to block migrate")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+	if exists(filepath.Join(root, ".hyper", "next-packet.md")) {
+		t.Fatal("migrate must not write next-packet.md when plan target is invalid")
+	}
+}
+
+func TestMigrateRejectsInvalidPlanCurrentStageBeforeWritingNextPacket(t *testing.T) {
+	root := t.TempDir()
+	mustRun(t, root, "init")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny CRM\n\n## Current Stage\n\nEnterprise Launch\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nPrimary flow works.\n")
+
+	_, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid current stage to block migrate")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Current Stage: Enterprise Launch")
+	if exists(filepath.Join(root, ".hyper", "next-packet.md")) {
+		t.Fatal("migrate must not write next-packet.md when current stage is invalid")
+	}
+}
+
+func TestResumeRejectsInvalidPlanTargetStageBeforeHandoff(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, "plan.md"), readFile(t, filepath.Join(root, "plan.md"))+"\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("resume"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid plan target to block resume handoff")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+}
+
 func TestStatusAutoTargetReachedExplainsPause(t *testing.T) {
 	state := projectState{
 		Project:         "Local Clip Shelf",
@@ -931,19 +2463,22 @@ func TestStatusAutoTargetReachedExplainsPause(t *testing.T) {
 		StageGate: readinessStageGate{
 			CurrentStage: "Service Quality",
 			NextStage:    "Sustained Service Quality",
-			Status:       "not_ready",
-			BlockingGaps: []string{"Maintainability: The codebase has not accumulated enough maintainability evidence."},
+			Status:       "ready",
 		},
-		NextPressure: readinessPressure{Axis: "maintainability", AxisName: "Maintainability", Status: "emerging", Reason: "Maintainability is emerging for the Service Quality -> Sustained Service Quality gate."},
+		NextPressure: readinessPressure{Axis: "stage_advancement", AxisName: "Stage advancement", Status: "candidate", Reason: "Service Quality proof is complete."},
 	}
 
 	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Plan: stop")
+	assertContains(t, short, "Plan file: .hyper/next-packet.md")
 	assertContains(t, short, "Next: hyper status --short")
-	assertContains(t, short, "Why: Auto target Service Quality is reached; review status before choosing a new target or manual next run.")
+	assertContains(t, short, "Do: Target proof complete; choose a higher `--until` target, set `plan.md` Target Stage, or run a manual packet without auto mode.")
+	assertContains(t, short, "Why: Auto target Service Quality has complete readiness proof; choose a higher target or a manual next run.")
+	assertContains(t, short, "Guard: Do not start another auto run until you choose a higher target.")
 	assertNotContains(t, short, "Why: Maintainability is emerging")
 }
 
-func TestRunAutoUntilDoesNotCreatePacketAfterTargetReached(t *testing.T) {
+func TestRunAutoUntilContinuesAfterEnteringTargetUntilProofComplete(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nTiny Bookmark CLI\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nAdd and list one bookmark.\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nCommand-surface add/list flow is repeatable.\n")
 	mustRun(t, root, "init")
@@ -959,43 +2494,45 @@ func TestRunAutoUntilDoesNotCreatePacketAfterTargetReached(t *testing.T) {
 		t.Fatalf("advance failed: %v", err)
 	}
 
-	out, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Should not continue"), testRoot(root), fakeUpdater{})
+	out, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Continue usable proof"), testRoot(root), fakeUpdater{})
 	if err != nil {
-		t.Fatalf("run at reached target should stop cleanly: %v", err)
+		t.Fatalf("run at entered target should continue until target proof is complete: %v", err)
 	}
-	assertContains(t, out.Stdout, "Run-until target already reached: Usable MVP")
-	assertContains(t, out.Stdout, "No runtime packet created.")
-	assertContains(t, out.Stdout, "Next action: hyper status --short")
-	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
-		t.Fatal("auto run should not create another packet after the target stage is reached")
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0002")
+	assertContains(t, out.Stdout, "Run mode: auto until Usable MVP")
+	assertContains(t, out.Stdout, "Readiness gate: Usable MVP -> Beta (not_ready)")
+	assertContains(t, out.Stdout, "Runtime packet file: .hyper/goals/GOAL-0002/goal.md")
+	assertNotContains(t, out.Stdout, "No runtime packet created.")
+	if !exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("auto run should create another packet after entering the target stage but before target proof is complete")
 	}
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: stop")
 }
 
-func TestRunAutoUntilReachedBeforeFirstPacketKeepsHandoffConsistent(t *testing.T) {
+func TestRunAutoUntilEnteredTargetBeforeFirstPacketCreatesProofPacket(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nAuto Target Guard\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nOne command flow is already usable.\n\n## Current Stage\n\nUsable MVP\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nAuto run-until does not create work after the target stage is reached.\n")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nAuto Target Guard\n\n## Target Users\n\nDevelopers\n\n## MVP\n\nOne command flow is already usable.\n\n## Current Stage\n\nUsable MVP\n\n## Build Style\n\nGo CLI\n\n## Success Criteria\n\nAuto run-until creates work until the target stage proof is complete.\n")
 	mustRun(t, root, "init")
 
-	out, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Should not start"), testRoot(root), fakeUpdater{})
+	out, err := runCLI(args("run", "--auto", "--until", "usable-mvp", "Prove usable target"), testRoot(root), fakeUpdater{})
 	if err != nil {
-		t.Fatalf("run at reached target should stop cleanly: %v", err)
+		t.Fatalf("run at entered target should create proof packet: %v", err)
 	}
-	assertContains(t, out.Stdout, "No runtime packet created.")
-	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0001")) {
-		t.Fatal("auto run should not create a first packet when the target stage is already reached")
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "Readiness gate: Usable MVP -> Beta (not_ready)")
+	if !exists(filepath.Join(root, ".hyper", "goals", "GOAL-0001")) {
+		t.Fatal("auto run should create a first packet when the target stage proof is not complete")
 	}
 	status, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
 	if err != nil {
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, status.Stdout, "Mode: auto until Usable MVP")
-	assertContains(t, status.Stdout, "Next: hyper status --short")
+	assertContains(t, status.Stdout, "Next: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
 	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
 	if err != nil {
 		t.Fatalf("doctor failed: %v", err)
 	}
-	assertContains(t, doctor.Stdout, "[OK] Next packet plan: .hyper/next-packet.md matches current state")
+	assertContains(t, doctor.Stdout, "[OK] Next packet plan: not required while the current runtime packet is active")
 }
 
 func TestRunAutoUntilSustainedQualityPromotesActiveValidator(t *testing.T) {
@@ -1007,7 +2544,7 @@ func TestRunAutoUntilSustainedQualityPromotesActiveValidator(t *testing.T) {
 	}
 	validation := "`./check.sh` passed with output: `release-note add/list/error smoke passed`."
 	writeEvidence := func(goalID, readiness string) {
-		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "evidence.md"), "# "+goalID+" Evidence\n\n## Validation\n\n"+validation+"\n\n## Readiness Evidence\n\n"+readiness+"\n\n## Active Capability Evidence\n\nNo active project capability required yet.\n\n## Changed Files\n\nfixture\n\n## Decisions\n\nKeep the local CLI boundary.\n\n## Reusable Patterns\n\nUse `./check.sh` as the repeated validation path.\n\n## Blockers\n\nNone blocking.\n")
+		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "evidence.md"), "# "+goalID+" Evidence\n\n## Validation\n\n"+validation+"\n\n## Readiness Evidence\n\n"+readiness+"\n\n"+serviceQualityReferenceBenchmarkPass()+serviceQualitySelfReviewPass()+"\n## Active Capability Evidence\n\nNo active project capability required yet.\n\n## Changed Files\n\nfixture\n\n## Decisions\n\nKeep the local CLI boundary.\n\n## Reusable Patterns\n\nUse `./check.sh` as the repeated validation path.\n\n## Blockers\n\nNone blocking.\n")
 		writeFile(t, filepath.Join(root, ".hyper", "goals", goalID, "next.md"), "# "+goalID+" Next\n\n## Recommended Next Goal\n\nContinue toward sustained quality.\n\n## Learn Notes\n\n- pattern: Use `./check.sh` as the repeated validation path.\n")
 	}
 	complete := func(goalID string) string {
@@ -1061,8 +2598,135 @@ func TestRunAutoUntilSustainedQualityPromotesActiveValidator(t *testing.T) {
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, status.Stdout, "Stage: Sustained Service Quality")
+	assertContains(t, status.Stdout, "Plan: stop")
 	assertContains(t, status.Stdout, "Next: hyper status --short")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: stop")
+}
+
+func TestPlanTargetStageToSustainedQualityStopsAfterSustainedProof(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
+		"# Product Plan",
+		"",
+		"## Product",
+		"",
+		"Plan Target Sustained CLI",
+		"",
+		"## Target Users",
+		"",
+		"Developers",
+		"",
+		"## MVP",
+		"",
+		"Run one handoff command and keep it reliable.",
+		"",
+		"## Current Stage",
+		"",
+		"Service Quality",
+		"",
+		"## Target Stage",
+		"",
+		"Sustained Service Quality",
+		"",
+		"## Build Style",
+		"",
+		"Go CLI",
+		"",
+		"## Success Criteria",
+		"",
+		"Service quality proof can advance into sustained quality without switching to explicit --until commands.",
+	}, "\n"))
+	mustRun(t, root, "init")
+	activeValidatorDir := filepath.Join(root, ".hyper", "capabilities", "active", "validator")
+	if err := os.MkdirAll(activeValidatorDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(activeValidatorDir, "validator-go-test.md"), "# validator-go-test\n\nStatus: active\nKind: validator\nSignal: Run go test ./... before completing packets.\n")
+
+	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("plan target sustained run failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0001")
+	assertContains(t, out.Stdout, "Run mode: auto until Sustained Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	assertNotContains(t, out.Stdout, "--auto --until")
+
+	evidence := strings.Join([]string{
+		"# GOAL-0001 Evidence",
+		"",
+		"## Validation",
+		"",
+		"Command: `go test ./...`",
+		"",
+		"Output:",
+		"",
+		"```text",
+		"ok ./...",
+		"```",
+		"",
+		"## Readiness Evidence",
+		"",
+		"Validation coverage: `go test ./...` passed and the handoff smoke command is repeatable.",
+		"Security baseline: Privacy boundary verified, no cloud sync, no telemetry, no token storage, no secrets, and local-only data handling is explicit.",
+		"Deployment readiness: Built the CLI binary and ran the smoke command outside the development command.",
+		"Operations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command.",
+		"Maintainability: Table-driven validation helper keeps command checks repeatable without hidden local context.",
+		"Product satisfaction: Target-user fit, copy quality, coherent core loop, no drift, and service-quality verdict pass were accepted.",
+		"",
+		serviceQualityReferenceBenchmarkPass(),
+		"## Active Capability Evidence",
+		"",
+		"validator-go-test: `go test ./...` passed.",
+		"",
+		serviceQualitySelfReviewPass(),
+		"## Changed Files",
+		"",
+		"Service quality handoff evidence.",
+		"",
+		"## Blocker",
+		"",
+		"None blocking.",
+	}, "\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), evidence)
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview sustained quality advancement.\n\n## Learn Notes\n\n- Pattern: Plan Target Stage can carry Service Quality to Sustained Service Quality using plain `hyper run` continuation.\n")
+
+	complete, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	assertContains(t, complete.Stdout, "Finish gate: passed")
+	assertContains(t, complete.Stdout, "Planned action: advance")
+	assertContains(t, complete.Stdout, "Next action: hyper advance")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Mode: auto until Sustained Service Quality")
+	assertContains(t, nextPlan, "Action: advance")
+	assertContains(t, nextPlan, "Auto continuation: active target Sustained Service Quality authorizes `hyper advance` after this review.")
+
+	advance, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("advance failed: %v", err)
+	}
+	assertContains(t, advance.Stdout, "Stage advanced: Service Quality -> Sustained Service Quality")
+	assertContains(t, advance.Stdout, "Run target after advance: Sustained Service Quality (plan.md Target Stage)")
+	assertContains(t, advance.Stdout, "Planned action: stop")
+	assertContains(t, advance.Stdout, "Next action: hyper status --short")
+	assertContains(t, advance.Stdout, "Continuation guard: Run-until target proof is complete. Raise or remove `plan.md` Target Stage before starting more work.")
+	assertNotContains(t, advance.Stdout, "--auto --until")
+	nextPlan = readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Mode: auto until Sustained Service Quality")
+	assertContains(t, nextPlan, "Action: stop")
+	assertContains(t, nextPlan, "Run-until target proof is complete.")
+
+	out, err = runCLI(args("run"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("target complete run should stop cleanly: %v", err)
+	}
+	assertContains(t, out.Stdout, "Run-until target proof complete: Sustained Service Quality")
+	assertContains(t, out.Stdout, "No runtime packet created.")
+	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("complete sustained plan target must not create another runtime packet")
+	}
 }
 
 func TestStatusAutoTargetReachedDoesNotHideActivePacket(t *testing.T) {
@@ -1080,6 +2744,8 @@ func TestStatusAutoTargetReachedDoesNotHideActivePacket(t *testing.T) {
 	readiness := readinessState{Version: 1, Stage: "Service Quality"}
 
 	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Plan: complete-current")
+	assertContains(t, short, "Plan file: pending until `hyper complete`")
 	assertContains(t, short, "Next: update .hyper/goals/GOAL-0002/evidence.md and next.md, then run `hyper complete`")
 	assertContains(t, short, "Why: The current runtime packet is still open")
 }
@@ -1124,6 +2790,16 @@ func TestStatusRefreshesReadinessFromLatestEvidence(t *testing.T) {
 	assertContains(t, status.Stdout, "Stage advancement:")
 	assertContains(t, status.Stdout, "Next action: hyper advance")
 	assertContains(t, status.Stdout, "Recommended action: hyper advance")
+	assertContains(t, status.Stdout, "Stage advancement review:")
+	assertContains(t, status.Stdout, "Plan change: Current Stage -> Usable MVP")
+	assertContains(t, status.Stdout, "Required proof covered: Product completeness (covered), Core UX (covered), Validation coverage (covered)")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "## Stage Advancement Review")
+	assertContains(t, nextPlan, "- Current stage: Tiny MVP")
+	assertContains(t, nextPlan, "- Recommended next stage: Usable MVP")
+	assertContains(t, nextPlan, "- Plan change: Current Stage -> Usable MVP")
+	assertContains(t, nextPlan, "- Blocking gaps: none")
+	assertContains(t, nextPlan, "- User decision required: accept before running `hyper advance`.")
 }
 
 func TestStatusShortShowsOnlyDecisionSurface(t *testing.T) {
@@ -1149,6 +2825,54 @@ func TestStatusShortShowsOnlyDecisionSurface(t *testing.T) {
 	assertContains(t, status.Stdout, "Guard: accept the stage change before running `hyper advance`")
 	assertNotContains(t, status.Stdout, "Pressure Ledger:")
 	assertNotContains(t, status.Stdout, "Readiness:")
+}
+
+func TestStatusShowsAutoAdvanceContinuationWhenTargetActive(t *testing.T) {
+	state := projectState{
+		Project:         "Plan Target CRM",
+		Stage:           "Tiny MVP",
+		Status:          "completed",
+		ActiveRunID:     "RUN-0001",
+		CurrentGoalID:   "GOAL-0001",
+		CurrentGoalPath: ".hyper/goals/GOAL-0001/goal.md",
+		AutoContinue:    true,
+		RunUntil:        "Service Quality",
+		RunTargetSource: planTargetStageSource,
+		UpdatedAt:       "now",
+	}
+	derived := goalState{State: "completed", Reason: "Runtime packet is completed."}
+	readiness := readinessState{
+		Version: 1,
+		Stage:   "Tiny MVP",
+		Dimensions: []readinessDimension{
+			{ID: "product_completeness", Name: "Product completeness", Status: "covered", Evidence: "One useful flow exists."},
+			{ID: "core_ux", Name: "Core UX", Status: "covered", Evidence: "Browser smoke covered the primary flow."},
+			{ID: "validation_coverage", Name: "Validation coverage", Status: "covered", Evidence: "`npm run build` passed."},
+		},
+		StageGate: readinessStageGate{
+			CurrentStage: "Tiny MVP",
+			NextStage:    "Usable MVP",
+			Status:       "ready",
+			RequiredAxes: []string{"product_completeness", "core_ux", "validation_coverage"},
+			Advancement: stageAdvancementPolicy{
+				Candidate:      true,
+				PlanChange:     "Current Stage -> Usable MVP",
+				Recommendation: "Tiny MVP gate is ready.",
+			},
+		},
+		NextPressure: readinessPressure{Axis: "stage_advancement", AxisName: "Stage advancement", Status: "candidate", Reason: "Tiny MVP gate is ready."},
+	}
+
+	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, short, "Next: hyper advance")
+	assertContains(t, short, "Do: Review the Stage Advancement Review; if proof is ready and no blocking gaps remain, run `hyper advance`.")
+	assertContains(t, short, "Guard: review ready proof and blocking gaps before running `hyper advance`")
+	assertNotContains(t, short, "accept the stage change before running `hyper advance`")
+
+	full := strings.Join(statusDashboardLines(state, derived, readiness, growthState{}, 1, 1), "\n")
+	assertContains(t, full, "Do not do yet: Do not edit `plan.md` Current Stage manually; use `hyper advance` after the reviewed ready gate.")
+	assertContains(t, full, "Auto continuation: active target Service Quality authorizes `hyper advance` after review")
+	assertNotContains(t, full, "User decision required: accept before running `hyper advance`")
 }
 
 func TestStatusSuggestsMigrateBeforeNextActionWhenGrowthIsStale(t *testing.T) {
@@ -1221,6 +2945,7 @@ func TestStatusDoctorAndMigrateRecoverPlanStageMismatch(t *testing.T) {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	assertContains(t, migrated.Stdout, "State consistency: state.json is consistent; stage refreshed to Beta")
+	assertContains(t, migrated.Stdout, "Planned action: run")
 	assertContains(t, migrated.Stdout, "Next packet plan: .hyper/next-packet.md (run)")
 	updated, err := readState(filepath.Join(root, ".hyper", "state.json"))
 	if err != nil {
@@ -1575,11 +3300,28 @@ func TestMigrateRefreshesNextPacketPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
+	assertContains(t, out.Stdout, "Planned action: run")
+	assertContains(t, out.Stdout, "Next action: hyper run 'Implement the smallest usable A tiny notes API core flow: the primary user flow")
 	assertContains(t, out.Stdout, "Next packet plan: .hyper/next-packet.md (run)")
 	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPacket, "Action: run")
 	assertContains(t, nextPacket, "Command: hyper run 'Implement the smallest usable A tiny notes API core flow: the primary user flow'")
 	assertNotContains(t, nextPacket, "Command: hyper advance")
+}
+
+func TestMigrateDoesNotTellActivePacketToCompleteTooEarly(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny notes", "Build a tiny notes MVP")
+	mustRun(t, root, "run")
+
+	out, err := runCLI(args("migrate"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+	assertContains(t, out.Stdout, "Planned action: complete-current")
+	assertContains(t, out.Stdout, "Next action: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, out.Stdout, "Next packet plan: unchanged while the current runtime packet is active")
+	assertNotContains(t, out.Stdout, "Next action: hyper complete")
 }
 
 func TestMigrateRefreshesLegacyMemoryQualityFixture(t *testing.T) {
@@ -1847,7 +3589,10 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if state.Pressures[0].GoalCount != 2 {
 		t.Fatalf("expected two goal sources, got %+v", state.Pressures[0])
 	}
+	assertContains(t, state.ActivationPolicy.NextAction, "Keep collecting evidence for 1 repeated candidate")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "Status: repeated")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "## Activation Decision")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "Candidate: evidence count 2 reached repeated threshold 2")
 
 	insertTestMemory(t, db, "pattern", "GOAL-0003 learn pattern: Run go test before every runtime handoff.")
 	state, hyperErr = updateGrowthState(root, db)
@@ -1857,7 +3602,9 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if state.Candidates[0].Status != "promotable" {
 		t.Fatalf("expected promotable candidate, got %+v", state.Candidates[0])
 	}
+	assertContains(t, state.ActivationPolicy.NextAction, "Review 1 promotable capability candidate")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "Status: promotable")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")), "Promotable: evidence count 3 reached promotion threshold 3")
 
 	insertTestMemory(t, db, "pattern", "GOAL-0004 learn pattern: Run go test before each runtime packet handoff.")
 	state, hyperErr = updateGrowthState(root, db)
@@ -1867,7 +3614,10 @@ func TestGrowthClustersSignalsAndPromotesLifecycle(t *testing.T) {
 	if state.Candidates[0].Status != "active" {
 		t.Fatalf("expected active candidate, got %+v", state.Candidates[0])
 	}
+	assertContains(t, state.ActivationPolicy.NextAction, "Run or explicitly block 1 active capability")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md")), "Status: active")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-test.md")), "Active: evidence count 4 reached activation threshold 4")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"activation_policy"`)
 	if exists(filepath.Join(root, ".hyper", "capabilities", "candidates", "validator", "validator-go-test.md")) {
 		t.Fatal("active validator should move out of candidates")
 	}
@@ -2249,6 +3999,7 @@ func TestStatusReflectsManualActiveCapabilityBeforeMigrate(t *testing.T) {
 		"Deployment readiness: Built the CLI binary and ran the smoke command outside the development command.",
 		"Operations and docs: README handoff notes cover setup, rollback, recovery, and the smoke command.",
 		"Maintainability: Table-driven validation helper keeps command checks repeatable without hidden local context.",
+		"Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass.",
 		"",
 		"## Reference Benchmark Evidence",
 		"",
@@ -2281,7 +4032,7 @@ func TestStatusReflectsManualActiveCapabilityBeforeMigrate(t *testing.T) {
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, full.Stdout, "Pressure ledger: 0 pressure(s), 1 candidate(s), 1 active structure(s).")
-	assertContains(t, full.Stdout, "Covered axes: Product completeness, Validation coverage, Security baseline, Deployment readiness, Operations and docs, Maintainability, Reference benchmark, Sustained quality")
+	assertContains(t, full.Stdout, "Covered axes: Product completeness, Product satisfaction, Validation coverage, Security baseline, Deployment readiness, Operations and docs, Maintainability, Reference benchmark, Sustained quality")
 	if activeStructureCount(readGrowthStateIfExists(root).Candidates) != 0 {
 		t.Fatal("status overlay should not mutate stored growth state")
 	}
@@ -2540,6 +4291,47 @@ func TestReadinessEvidenceQualityRules(t *testing.T) {
 	if errorHandling.Status != "covered" {
 		t.Fatalf("expected error handling evidence with missing input text to be covered, got %+v", errorHandling)
 	}
+	productSatisfaction, ok := parseReadinessEvidenceLine("GOAL-0001", "Product satisfaction: Target-user fit, visual polish, copy quality, coherent core loop, and no drift were accepted; verdict pass.", defs)
+	if !ok {
+		t.Fatal("expected product satisfaction evidence to parse")
+	}
+	if productSatisfaction.Status != "covered" {
+		t.Fatalf("expected product satisfaction evidence to be covered, got %+v", productSatisfaction)
+	}
+	directionDriftSatisfaction, ok := parseReadinessEvidenceLine("GOAL-0001", "Product satisfaction: Target-user fit and core loop stayed inside plan.md without direction drift; verdict pass.", defs)
+	if !ok {
+		t.Fatal("expected direction-drift product satisfaction evidence to parse")
+	}
+	if directionDriftSatisfaction.Status != "covered" {
+		t.Fatalf("expected without direction drift evidence to be covered, got %+v", directionDriftSatisfaction)
+	}
+	weakProductSatisfaction, ok := parseReadinessEvidenceLine("GOAL-0001", "Product satisfaction: needs work before the target user would accept it.", defs)
+	if !ok {
+		t.Fatal("expected weak product satisfaction evidence to parse")
+	}
+	if weakProductSatisfaction.Status != "emerging" {
+		t.Fatalf("expected weak product satisfaction evidence to be emerging, got %+v", weakProductSatisfaction)
+	}
+}
+
+func TestSelfReviewFeedsProductSatisfactionReadiness(t *testing.T) {
+	pass := readinessEvidenceRecordsFromGoalText("GOAL-0001", "# GOAL-0001 Evidence\n\n"+serviceQualitySelfReviewPass())
+	record, ok := readinessEvidenceForAxis(pass, "product_satisfaction")
+	if !ok {
+		t.Fatal("expected product satisfaction record from passing self review")
+	}
+	if record.Status != "covered" {
+		t.Fatalf("expected passing self review to cover product satisfaction, got %+v", record)
+	}
+
+	fail := readinessEvidenceRecordsFromGoalText("GOAL-0002", "# GOAL-0002 Evidence\n\n## Self Review\n\nProduct satisfaction: needs work before the target user would accept it.\nVerdict: fail.\n")
+	record, ok = readinessEvidenceForAxis(fail, "product_satisfaction")
+	if !ok {
+		t.Fatal("expected product satisfaction record from failing self review")
+	}
+	if record.Status != "emerging" {
+		t.Fatalf("expected failing self review to leave product satisfaction emerging, got %+v", record)
+	}
 }
 
 func TestLatestFailurePressureBlocksStageAdvancement(t *testing.T) {
@@ -2614,6 +4406,84 @@ func TestNextPacketRunCommandKeepsFullRecommendedGoal(t *testing.T) {
 	}
 	assertContains(t, plan.Command, "`Store.Add`")
 	assertContains(t, plan.Command, "future error handling should return persistence failures")
+
+	body := renderNextPacketPlan(state, readiness, plan)
+	assertContains(t, body, "## Codex Desktop Continuation")
+	assertContains(t, body, "## Progress Guard")
+	assertContains(t, body, "Continue automatically by running the command above")
+	assertContains(t, body, "If the same command repeats without new evidence or stage movement")
+	assertContains(t, nextPacketPlanCommand(body), plan.Command)
+}
+
+func TestNextPacketRunCommandNormalizesUnsafeWhitespace(t *testing.T) {
+	focus := "Fix cache write failure:\n\n\tverify user's saved draft survives reload\r\nand report validation output."
+	state := projectState{
+		Status:       "completed",
+		Stage:        "Usable MVP",
+		AutoContinue: true,
+		RunUntil:     "Service Quality",
+	}
+	readiness := readinessState{
+		Stage: "Usable MVP",
+		StageGate: readinessStageGate{
+			CurrentStage: "Usable MVP",
+			NextStage:    "Beta",
+			Status:       "not_ready",
+		},
+		NextPressure: readinessPressure{
+			Axis:            "open_failure",
+			Reason:          "Latest evidence recorded an unresolved failure.",
+			RecommendedGoal: focus,
+		},
+	}
+
+	plan := buildNextPacketPlan(state, goalState{State: "completed"}, readiness, growthState{})
+	if strings.ContainsAny(plan.Command, "\r\n\t") {
+		t.Fatalf("next-packet command must stay single-line and shell-ready, got %q", plan.Command)
+	}
+	assertContains(t, plan.Command, "'Fix cache write failure: verify user'\\''s saved draft survives reload and report validation output.'")
+	body := renderNextPacketPlan(state, readiness, plan)
+	assertContains(t, nextPacketPlanCommand(body), plan.Command)
+}
+
+func TestNextPacketCodexContinuationExplainsNonRunActions(t *testing.T) {
+	cases := []struct {
+		action   string
+		command  string
+		expected string
+	}{
+		{"advance", "hyper advance", "only after the user accepts the stage change"},
+		{"complete-current", "hyper complete", "Stay in the current runtime packet"},
+		{"stop", "hyper status --short", "Stop the auto loop"},
+	}
+	for _, tc := range cases {
+		body := renderNextPacketPlan(projectState{}, readinessState{}, plannedNextPacket{Action: tc.action, Command: tc.command, Reason: "test"})
+		assertContains(t, body, "## Codex Desktop Continuation")
+		assertContains(t, body, tc.expected)
+		assertContains(t, nextPacketPlanCommand(body), tc.command)
+	}
+}
+
+func TestNextPacketProgressGuardExplainsAutoActions(t *testing.T) {
+	state := projectState{AutoContinue: true, RunUntil: "Service Quality"}
+	cases := []struct {
+		action   string
+		command  string
+		expected string
+	}{
+		{"run", "hyper run 'Continue'", "same command repeats without new evidence or stage movement"},
+		{"advance", "hyper advance", "changes `plan.md` Current Stage"},
+		{"complete-current", "hyper complete", "same findings repeat after a fix attempt"},
+		{"stop", "hyper status --short", "Do not continue automatically after stop"},
+	}
+	for _, tc := range cases {
+		body := renderNextPacketPlan(state, readinessState{}, plannedNextPacket{Action: tc.action, Command: tc.command, Reason: "test"})
+		assertContains(t, body, "## Progress Guard")
+		assertContains(t, body, tc.expected)
+	}
+
+	manualBody := renderNextPacketPlan(projectState{}, readinessState{}, plannedNextPacket{Action: "run", Command: "hyper run", Reason: "test"})
+	assertNotContains(t, manualBody, "## Progress Guard")
 }
 
 func TestOpenFailureFinishGateAcceptsClosureEvidence(t *testing.T) {
@@ -2677,6 +4547,7 @@ func TestBetaGateAcceptsStaticDeploymentAndRunbookEvidence(t *testing.T) {
 		"Deployment readiness: proof. Release/build artifacts are created at `dist/llog-beta-demo/index.html` and `dist/llog-beta-demo.zip` outside the `prototype/` development path. Demo deployment path is documented in `demo-release.md`. Validation proved the release artifacts through direct `file://` execution, isolated artifact server URL `http://127.0.0.1:4201/?artifact=1`, extracted zip release URL `http://127.0.0.1:4202/?release=zip`, artifact parity, and mobile Playwright smoke with realistic data.",
 		"Operations and docs: `demo-release.md` documents artifact creation, direct file run, static server run, smoke path, rollback, and stop conditions.",
 		"Reference benchmark: Category: Static journaling app; References: Day One, Journey, Diarium; Baseline expectations: daily entry, report, setup, and handoff are understandable; Current comparison: core entry and report meet baseline, and local artifact release evidence is above baseline; Below-baseline gaps: None; no critical user or operator baseline gap remains; Above-baseline strength: local artifact release evidence; Decision: Service Quality is allowed from the benchmark perspective.",
+		"Product satisfaction: Target-user fit, visual polish, copy quality, coherent core loop, and no drift were accepted; verdict pass.",
 	}
 	records := []readinessEvidenceRecord{}
 	for _, line := range lines {
@@ -2912,6 +4783,7 @@ func TestPlanAliasesAcceptInlineFields(t *testing.T) {
 
 Project: Service Desk Lite
 Current Stage: Tiny MVP
+Run Until: Service Quality
 
 Product brief:
 A tiny internal support queue where a teammate can create one request, see it in a list, and mark it handled.
@@ -2929,6 +4801,9 @@ Use the smallest command or smoke check that proves the useful flow still works.
 	}
 	if got := plan["Current Stage"]; got != "Tiny MVP" {
 		t.Fatalf("Current Stage inline field = %q", got)
+	}
+	if got := plan["Target Stage"]; got != "Service Quality" {
+		t.Fatalf("Target Stage inline field = %q", got)
 	}
 	if got := plan["Build Style"]; got != "Thin vertical slice first." {
 		t.Fatalf("Build Style inline field = %q", got)
@@ -3048,6 +4923,10 @@ func TestLongServiceQualityFocusIsRewrittenThroughReadinessPressure(t *testing.T
 	goal := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "goal.md"))
 	assertContains(t, goal, "Translate `"+focus+"` into the smallest Tiny MVP step")
 	assertContains(t, goal, "- Current focus: "+focus)
+	assertContains(t, goal, "## Run Target")
+	assertContains(t, goal, "- Run target: Service Quality")
+	assertContains(t, goal, "- Run target source: --until")
+	assertContains(t, goal, "- Target meaning: complete Service Quality readiness proof, not merely enter the stage.")
 }
 
 func TestSpecificServiceFocusIsNotOverRewritten(t *testing.T) {
@@ -3098,7 +4977,11 @@ func TestAdvanceUpdatesPlanWhenGateReady(t *testing.T) {
 		t.Fatalf("advance failed: %v", err)
 	}
 	assertContains(t, out.Stdout, "Stage advanced: Tiny MVP -> Usable MVP")
+	assertContains(t, out.Stdout, "Accepted gate: Tiny MVP -> Usable MVP (ready)")
 	assertContains(t, out.Stdout, "Updated: plan.md Current Stage -> Usable MVP")
+	assertContains(t, out.Stdout, "Plan change: Current Stage -> Usable MVP")
+	assertContains(t, out.Stdout, "Required proof covered: Product completeness (covered), Core UX (covered), Validation coverage (covered)")
+	assertContains(t, out.Stdout, "Run target after advance: single packet")
 	assertContains(t, out.Stdout, "Readiness gate: Usable MVP -> Beta")
 	assertContains(t, out.Stdout, "Next packet plan: .hyper/next-packet.md")
 	assertContains(t, readFile(t, filepath.Join(root, "plan.md")), "## Current Stage\n\nUsable MVP")
@@ -3107,6 +4990,26 @@ func TestAdvanceUpdatesPlanWhenGateReady(t *testing.T) {
 	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPlan, "Action: run")
 	assertNotContains(t, nextPlan, "Command: hyper advance")
+}
+
+func TestAdvanceRejectsInvalidPlanTargetStage(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny tasks", "Build a tiny task list MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\n`npm run build` passed and browser smoke passed.\n\n## Readiness Evidence\n\nCore UX: Browser smoke verified create, complete, and delete flow.\nValidation coverage: `npm run build` passed and primary flow smoke test passed.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview stage advancement.\n")
+	mustRun(t, root, "complete")
+	planPath := filepath.Join(root, "plan.md")
+	writeFile(t, planPath, readFile(t, planPath)+"\n## Target Stage\n\nEnterprise Launch\n")
+
+	_, err := runCLI(args("advance"), testRoot(root), fakeUpdater{})
+	if err == nil {
+		t.Fatal("expected invalid plan target to block stage advancement")
+	}
+	assertContains(t, err.Message, "Invalid plan.md Target Stage: Enterprise Launch")
+	assertContains(t, readFile(t, planPath), "## Current Stage\n\nTiny MVP")
+	assertNotContains(t, readFile(t, planPath), "## Current Stage\n\nUsable MVP")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"stage": "Tiny MVP"`)
 }
 
 func TestAdvanceStopsAutoPlanWhenRunUntilTargetReached(t *testing.T) {
@@ -3157,6 +5060,7 @@ func TestAdvanceStopsAutoPlanWhenRunUntilTargetReached(t *testing.T) {
 		"Security baseline: Privacy boundary verified: clipboard content stays local in SQLite, no cloud sync or telemetry, and sensitive text can be deleted locally.",
 		"Deployment readiness: Packaged helper binary smoke passed outside the development command path.",
 		"Operations and docs: README documents setup, local data path, delete path, rollback, and smoke command.",
+		"Product satisfaction: Target-user fit, helper copy quality, coherent save/search/pin core loop, and no drift were accepted; verdict pass.",
 		"",
 		"## Reference Benchmark Evidence",
 		"",
@@ -3186,16 +5090,15 @@ func TestAdvanceStopsAutoPlanWhenRunUntilTargetReached(t *testing.T) {
 		t.Fatalf("advance failed: %v", err)
 	}
 	assertContains(t, advance.Stdout, "Stage advanced: Beta -> Service Quality")
-	assertContains(t, advance.Stdout, "Next action: hyper status --short")
-	assertContains(t, advance.Stdout, "Why: Auto target Service Quality is reached; review status before choosing a new target or manual next run.")
-	if strings.Count(advance.Stdout, "  hyper status --short") != 1 {
-		t.Fatalf("expected one status next command, got:\n%s", advance.Stdout)
-	}
+	assertContains(t, advance.Stdout, "Run target after advance: Service Quality")
+	assertContains(t, advance.Stdout, "Readiness gate: Service Quality -> Sustained Service Quality (not_ready)")
+	assertContains(t, advance.Stdout, "Next action: hyper run --auto --until 'Service Quality'")
+	assertContains(t, advance.Stdout, "Why: Maintainability")
 	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPlan, "Mode: auto until Service Quality")
-	assertContains(t, nextPlan, "Action: stop")
-	assertContains(t, nextPlan, "Command: hyper status --short")
-	assertContains(t, nextPlan, "Reason: Auto target Service Quality is reached; review status before choosing a new target or manual next run.")
+	assertContains(t, nextPlan, "Action: run")
+	assertContains(t, nextPlan, "Command: hyper run --auto --until 'Service Quality'")
+	assertContains(t, nextPlan, "Reason: Maintainability")
 	assertNotContains(t, nextPlan, "Command: hyper advance")
 }
 
@@ -3258,6 +5161,15 @@ func TestAdvanceToSustainedServiceQualityDoesNotLoop(t *testing.T) {
 		"- Above-baseline strength: packet evidence loop.",
 		"- Decision: Service Quality proof can continue.",
 		"",
+		"## Self Review",
+		"",
+		"Plan alignment: The result stays inside the local developer handoff CLI plan.",
+		"Core loop quality: The handoff command remains coherent and repeatable.",
+		"Product satisfaction: The operator-facing result is acceptable for sustained quality advancement.",
+		"No drift: No broad feature or non-goal expansion was introduced.",
+		"Validation match: `go test ./...` and active validator evidence match the result.",
+		"Verdict: pass; the packet is service-quality enough to close.",
+		"",
 		"## Active Capability Evidence",
 		"",
 		"validator-go-test: `go test ./...` passed.",
@@ -3297,6 +5209,8 @@ func TestAdvanceRejectsWhenGateNotReady(t *testing.T) {
 	}
 	assertContains(t, err.Message, "Stage gate is not ready")
 	assertContains(t, err.Message, "Core UX")
+	assertContains(t, err.Message, "Required proof:")
+	assertContains(t, err.Message, "Recommendation: Do not advance stage yet. Close the blocking readiness gaps first.")
 }
 
 func TestBetaStageGeneratesValidatorCandidates(t *testing.T) {
@@ -3574,6 +5488,7 @@ func TestStageNormalizationUsesFirstNamedStage(t *testing.T) {
 		readinessEvidenceRecordForAxis("GOAL-0001", "validation_coverage", "`go test ./...` passed and is repeatable."),
 		readinessEvidenceRecordForAxis("GOAL-0001", "operations_docs", "Operations and docs: README documents setup, rollback, and smoke command."),
 		readinessEvidenceRecordForAxis("GOAL-0001", "maintainability", "Maintainability: Test helper keeps command validation repeatable without hidden local context."),
+		readinessEvidenceRecordForAxis("GOAL-0001", "product_satisfaction", "Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass."),
 	})
 	if sustained.Stage != "Sustained Service Quality" {
 		t.Fatalf("expected Sustained Service Quality, got %s", sustained.Stage)
@@ -3627,10 +5542,14 @@ func TestReferenceBenchmarkPressureShapesRuntimePacket(t *testing.T) {
 	assertContains(t, goal, "strongest critical below-baseline gap")
 
 	boundary := runtimeWorkBoundary(goal, "Beta", plan, growthState{}, readiness)
+	assertContains(t, boundary, "No drift guard")
 	assertContains(t, boundary, "Do not add broad feature work")
 	assertContains(t, boundary, "Select 3-5 named references")
 	assertContains(t, boundary, "implement only the smallest fix")
 	assertContains(t, boundary, "do not advance the stage")
+
+	stop := runtimeStopCondition(plan, "Beta", growthState{}, readiness)
+	assertContains(t, stop, "drift outside plan.md product direction")
 
 	next := buildNextDoc("GOAL-0009", readiness)
 	assertContains(t, next, "durable reference signals")
@@ -3658,7 +5577,7 @@ func TestServiceQualityStageDefinesOperationalStandard(t *testing.T) {
 	}
 
 	_, _, axes, evidence := readinessGateDefinition("Service Quality")
-	for _, axis := range []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "sustained_quality"} {
+	for _, axis := range []string{"validation_coverage", "security_baseline", "deployment_readiness", "operations_docs", "maintainability", "reference_benchmark", "product_satisfaction", "sustained_quality"} {
 		found := false
 		for _, got := range axes {
 			if got == axis {
@@ -3675,6 +5594,7 @@ func TestServiceQualityStageDefinesOperationalStandard(t *testing.T) {
 	assertContains(t, joinedEvidence, "rollback")
 	assertContains(t, joinedEvidence, "hidden context")
 	assertContains(t, joinedEvidence, "Reference benchmark evidence")
+	assertContains(t, joinedEvidence, "Product satisfaction")
 	assertContains(t, joinedEvidence, "Repeated runtime evidence")
 }
 
@@ -3699,6 +5619,7 @@ func TestServiceQualityGateRequiresSustainedGrowthEvidence(t *testing.T) {
 			"Above-baseline strength: packet evidence loop.",
 			"Decision: Service Quality proof can continue.",
 		}, "; ")),
+		readinessEvidenceRecordForAxis("GOAL-0001", "product_satisfaction", "Product satisfaction: Target-user fit, copy quality, coherent core loop, and no drift were accepted; verdict pass."),
 	}
 
 	state := deriveReadinessState(plan, growthState{}, evidence)
@@ -3811,6 +5732,8 @@ func TestServiceQualityPressureWalksRequiredAxesInOrder(t *testing.T) {
 		"Above-baseline strength: packet evidence loop.",
 		"Decision: Service Quality proof can continue.",
 	}, "; ")))
+	assertNext("product_satisfaction", growthState{})
+	evidence = append(evidence, readinessEvidenceRecordForAxis("GOAL-0007", "product_satisfaction", "Product satisfaction: Target-user fit, visual polish, copy quality, coherent core loop, and no drift were accepted; verdict pass."))
 	assertNext("sustained_quality", growthState{})
 
 	state := deriveReadinessState(plan, growthState{Candidates: []growthCandidate{{Kind: "validator", Name: "validator-go-test", Status: "active"}}}, evidence)
@@ -3829,15 +5752,20 @@ func TestReferenceBenchmarkEvidenceTemplateForBetaAndServiceQuality(t *testing.T
 
 	serviceEvidence := buildEvidenceDoc("GOAL-0001", "Service Quality", readinessState{}, growthState{})
 	assertContains(t, serviceEvidence, "## Reference Benchmark Evidence")
+	assertContains(t, serviceEvidence, "## Self Review")
+	assertContains(t, serviceEvidence, "Product satisfaction: Pending")
+	assertContains(t, serviceEvidence, "Verdict: Pending")
 
 	tinyEvidence := buildEvidenceDoc("GOAL-0001", "Tiny MVP", readinessState{}, growthState{})
 	assertNotContains(t, tinyEvidence, "## Reference Benchmark Evidence")
+	assertNotContains(t, tinyEvidence, "## Self Review")
 
 	tasks := buildTasksDoc("GOAL-0001", "Web app", "Service Quality", readinessState{}, growthState{})
 	assertContains(t, tasks, "Fill Reference Benchmark Evidence")
+	assertContains(t, tasks, "Fill Self Review")
 }
 
-func TestReferenceBenchmarkTemplateWaitsForPressure(t *testing.T) {
+func TestReferenceBenchmarkTemplateIncludedForBetaUntilCovered(t *testing.T) {
 	readiness := readinessState{
 		Version: 1,
 		Stage:   "Beta",
@@ -3856,11 +5784,11 @@ func TestReferenceBenchmarkTemplateWaitsForPressure(t *testing.T) {
 
 	evidence := buildEvidenceDoc("GOAL-0001", "Beta", readiness, growthState{})
 	assertContains(t, evidence, "Reference benchmark: Pending.")
-	assertNotContains(t, evidence, "## Reference Benchmark Evidence")
+	assertContains(t, evidence, "## Reference Benchmark Evidence")
 	tasks := buildTasksDoc("GOAL-0001", "Local CLI", "Beta", readiness, growthState{})
-	assertNotContains(t, tasks, "Fill Reference Benchmark Evidence")
+	assertContains(t, tasks, "Fill Reference Benchmark Evidence")
 	checklist := doneChecklistDoc("Beta", readiness, growthState{})
-	assertNotContains(t, checklist, "Reference Benchmark Evidence lists")
+	assertContains(t, checklist, "Reference Benchmark Evidence lists")
 
 	readiness.NextPressure = readinessPressure{Axis: "reference_benchmark", AxisName: "Reference benchmark", Status: "missing"}
 	evidence = buildEvidenceDoc("GOAL-0002", "Beta", readiness, growthState{})
@@ -3968,6 +5896,80 @@ func TestReferenceBenchmarkNestedReferencesCountAsNamedReferences(t *testing.T) 
 	record := referenceBenchmarkRecordFromExample(t, evidence)
 	if record.Status != "covered" {
 		t.Fatalf("expected nested reference benchmark evidence to be covered, got %+v", record)
+	}
+}
+
+func TestReferenceBenchmarkBelowBaselineGapMustBeExplicitlyNonCritical(t *testing.T) {
+	deceptive := strings.Join([]string{
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Local-first notes app.",
+		"- References: Apple Notes, Notion, Obsidian.",
+		"- Baseline expectations: Users can create, edit, search, recover, and export notes from documented steps.",
+		"- Current comparison: create and search meet baseline; recovery is below baseline; export is above baseline.",
+		"- Below-baseline gaps: None of the recovery problems are fixed yet; recovery is below baseline for corrupted files.",
+		"- Above-baseline strength: local export proof is documented with command output.",
+		"- Decision: Service Quality is allowed only after recovery reaches the baseline.",
+	}, "\n")
+	blockedRecord := referenceBenchmarkRecordFromExample(t, deceptive)
+	if blockedRecord.Status == "covered" {
+		t.Fatalf("below-baseline gap hidden behind 'none' must not be covered: %+v", blockedRecord)
+	}
+	assertContains(t, blockedRecord.Quality, "no critical below-baseline gap")
+
+	nonCritical := strings.Replace(deceptive,
+		"None of the recovery problems are fixed yet; recovery is below baseline for corrupted files.",
+		"None critical; advanced recovery is below baseline but explicitly deferred as a non-goal for this service boundary.",
+		1)
+	nonCritical = strings.Replace(nonCritical,
+		"Service Quality is allowed only after recovery reaches the baseline.",
+		"Service Quality is allowed because the deferred recovery gap is a non-goal for this service boundary.",
+		1)
+	allowedRecord := referenceBenchmarkRecordFromExample(t, nonCritical)
+	if allowedRecord.Status != "covered" {
+		t.Fatalf("explicit non-critical/deferred below-baseline gap should be covered, got %+v", allowedRecord)
+	}
+
+	blockingDecision := strings.Replace(nonCritical,
+		"Service Quality is allowed because the deferred recovery gap is a non-goal for this service boundary.",
+		"Service Quality is blocked until recovery reaches the category baseline.",
+		1)
+	decisionBlockedRecords := readinessEvidenceRecordsFromGoalText("GOAL-DOC", "# GOAL-DOC Evidence\n\n"+blockingDecision)
+	if record, ok := readinessEvidenceForAxis(decisionBlockedRecords, "reference_benchmark"); ok && record.Status == "covered" {
+		t.Fatalf("blocking benchmark decision must not be covered, got %+v", record)
+	}
+	fields := parseReferenceBenchmarkEvidence(strings.Join(usefulSectionLines(blockingDecision, "Reference Benchmark Evidence"), "; "))
+	if missing := strings.Join(referenceBenchmarkMissingRequirements(fields), ", "); !strings.Contains(missing, "decision that allows Service Quality to proceed") {
+		t.Fatalf("expected blocking decision to fail the decision requirement, got %q", missing)
+	}
+}
+
+func TestReferenceBenchmarkDecisionAllowsNotBlockedProceeding(t *testing.T) {
+	evidence := strings.Join([]string{
+		"## Reference Benchmark Evidence",
+		"",
+		"- Category: Local-first notes app.",
+		"- References: Apple Notes, Notion, Obsidian.",
+		"- Baseline expectations: Users can create, edit, search, recover, and export notes from documented steps.",
+		"- Current comparison: create, edit, search, local recovery, and export meet the category baseline.",
+		"- Below-baseline gaps: No critical below-baseline gap remains for the current service boundary.",
+		"- Above-baseline strength: local export proof is documented with command output.",
+		"- Decision: Service Quality is not blocked and can proceed for this service boundary.",
+	}, "\n")
+
+	record := referenceBenchmarkRecordFromExample(t, evidence)
+	if record.Status != "covered" {
+		t.Fatalf("expected not-blocked proceeding decision to be covered, got %+v", record)
+	}
+}
+
+func TestReadinessEvidenceAllowsUnblockedPhrasing(t *testing.T) {
+	record, ok := parseReadinessEvidenceLine("GOAL-0001", "Product satisfaction: Target-user fit is unblocked, the core loop is coherent, and the verdict can proceed.", readinessDimensionDefs())
+	if !ok {
+		t.Fatal("expected unblocked readiness evidence to parse")
+	}
+	if record.Axis != "product_satisfaction" || record.Status != "covered" {
+		t.Fatalf("expected covered product satisfaction evidence, got %+v", record)
 	}
 }
 
@@ -4212,6 +6214,14 @@ func testPlan(product, focus string) string {
 	return "# Product Plan\n\n## Product\n\n" + product + "\n\n## Target Users\n\nSolo builders\n\n## MVP\n\n" + focus + "\n\n## Current Stage\n\nTiny MVP\n\n## Build Style\n\nCLI\n\n## Non-goals\n\nProduction hardening\n\n## Constraints\n\nLocal first\n\n## Success Criteria\n\nOne useful flow works\n\n## Current Focus\n\n" + focus + "\n"
 }
 
+func serviceQualitySelfReviewPass() string {
+	return "## Self Review\n\nPlan alignment: The result still matches plan.md scope and current stage.\nCore loop quality: The core loop is coherent for this packet.\nProduct satisfaction: The visible or operational result is acceptable for this service-quality packet.\nNo drift: No broad feature expansion or non-goal drift was introduced.\nValidation match: Validation evidence matches the actual result.\nVerdict: pass; the packet is service-quality enough to close.\n"
+}
+
+func serviceQualityReferenceBenchmarkPass() string {
+	return "## Reference Benchmark Evidence\n\n- Category: Local developer handoff CLI.\n- References: GitHub CLI, Taskfile, Make.\n- Baseline expectations: documented command, repeatable output, rollback notes, and no hidden credentials.\n- Current comparison: meets baseline for command, validation, docs, rollback, and local handoff proof.\n- Below-baseline gaps: No critical below-baseline gap.\n- Above-baseline strength: packet evidence loop ties validation to stage readiness.\n- Decision: Service Quality is allowed for this local CLI category.\n\n"
+}
+
 func args(values ...string) []string {
 	return values
 }
@@ -4272,6 +6282,39 @@ func readFile(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return string(body)
+}
+
+func replaceLinePrefix(body, prefix, replacement string) string {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, prefix) {
+			lines[i] = replacement
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func removeMarkdownSection(body, heading string) string {
+	lines := strings.Split(body, "\n")
+	out := []string{}
+	skip := false
+	headingLine := "## " + heading
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == headingLine {
+			skip = true
+			continue
+		}
+		if skip && strings.HasPrefix(trimmed, "## ") {
+			skip = false
+		}
+		if skip {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }
 
 func writeFile(t *testing.T, path, body string) {

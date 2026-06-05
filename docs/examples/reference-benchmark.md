@@ -40,6 +40,8 @@ Why this is covered:
 - It names one above-baseline strength.
 - It makes a decision and turns the comparison into next pressure.
 
+If the below-baseline line mentions a below-baseline area, it must explicitly say why that area is not critical for the current service boundary, for example because it is deferred, out of scope, or an explicit non-goal.
+
 ## Emerging Example
 
 ```md
@@ -60,7 +62,7 @@ Why this is emerging:
 - The baseline is too vague.
 - Current comparison does not say below/meets/above baseline.
 - Below-baseline gaps are still pending.
-- The decision does not create clear next pressure.
+- The decision does not explicitly allow Service Quality to proceed.
 
 ## Blocked Example
 
@@ -79,6 +81,7 @@ Why this is emerging:
 Why this blocks Service Quality:
 
 - The evidence is useful, but it names a critical below-baseline gap.
+- The decision says Service Quality is blocked until more work is done.
 - Hyper Run should turn that gap into the next runtime pressure instead of advancing the stage.
 
 ## Category Templates

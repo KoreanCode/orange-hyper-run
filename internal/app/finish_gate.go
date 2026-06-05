@@ -3,14 +3,21 @@ package app
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type finishGateResult struct {
-	Status   string
-	GoalID   string
-	Findings []string
-	Review   string
+	Status                    string
+	GoalID                    string
+	Findings                  []string
+	Review                    string
+	EvidenceHash              string
+	NextHash                  string
+	FindingsHash              string
+	FailureRepeatCount        int
+	RepeatedFindings          bool
+	InputChangedSincePrevious bool
 }
 
 func runFinishGate(root string, state projectState, derived goalState, readiness readinessState) (finishGateResult, *hyperError) {
@@ -18,11 +25,16 @@ func runFinishGate(root string, state projectState, derived goalState, readiness
 	goalDir := filepath.Join(root, hyperDir, "goals", goalID)
 	evidenceText := readIfExists(filepath.Join(goalDir, "evidence.md"))
 	nextText := readIfExists(filepath.Join(goalDir, "next.md"))
+	previousReview := readIfExists(filepath.Join(goalDir, "review.md"))
 	result := finishGateResult{Status: "passed", GoalID: goalID}
 
-	if derived.State == "blocked" {
-		result.Status = "blocked"
-		result.Findings = append(result.Findings, "Packet is closing as blocked: "+derived.Reason)
+	if terminalPacketState(derived.State) {
+		result.Status = derived.State
+		if derived.State == "blocked" {
+			result.Findings = append(result.Findings, "Packet is closing as blocked: "+derived.Reason)
+		} else {
+			result.Findings = append(result.Findings, "Packet is waiting for user input: "+derived.Reason)
+		}
 		result.Review = renderFinishGateReview(result, state, derived, readiness)
 		if err := writeText(filepath.Join(goalDir, "review.md"), result.Review); err != nil {
 			return result, err
@@ -50,7 +62,16 @@ func runFinishGate(root string, state projectState, derived goalState, readiness
 		result.Status = "failed"
 		result.Findings = append(result.Findings, finding)
 	}
+	if finding := referenceBenchmarkFinishGateFinding(state.CurrentGoalID, state.Stage, readiness, evidenceText); finding != "" {
+		result.Status = "failed"
+		result.Findings = append(result.Findings, finding)
+	}
+	if finding := selfReviewFinishGateFinding(state.Stage, readiness, evidenceText); finding != "" {
+		result.Status = "failed"
+		result.Findings = append(result.Findings, finding)
+	}
 
+	annotateFinishGateRepeat(&result, previousReview, evidenceText, nextText)
 	result.Review = renderFinishGateReview(result, state, derived, readiness)
 	if err := writeText(filepath.Join(goalDir, "review.md"), result.Review); err != nil {
 		return result, err
@@ -77,6 +98,32 @@ func finishGateReviewStatus(root, goalID string) string {
 	return strings.ToLower(strings.TrimSpace(firstLabelValue(body, "Status")))
 }
 
+func finishGateReviewFindings(root, goalID string) []string {
+	if strings.TrimSpace(goalID) == "" {
+		return nil
+	}
+	body := readIfExists(filepath.Join(root, hyperDir, "goals", goalID, "review.md"))
+	return usefulSectionLines(body, "Findings")
+}
+
+func finishGateReviewRepeatNote(root, goalID string) string {
+	if strings.TrimSpace(goalID) == "" {
+		return ""
+	}
+	body := readIfExists(filepath.Join(root, hyperDir, "goals", goalID, "review.md"))
+	if strings.ToLower(strings.TrimSpace(firstLabelValue(body, "Status"))) != "failed" {
+		return ""
+	}
+	count, _ := strconv.Atoi(firstLabelValue(body, "Failure repeat count"))
+	if count < 2 || strings.ToLower(firstLabelValue(body, "Repeated findings")) != "yes" {
+		return ""
+	}
+	if strings.ToLower(firstLabelValue(body, "Input changed since previous failure")) == "yes" {
+		return fmt.Sprintf("Repeated finish-gate failure: same findings repeated %d times after evidence or next.md changed; stop auto continuation unless the next fix directly addresses them.", count)
+	}
+	return fmt.Sprintf("Repeated finish-gate failure: same findings repeated %d times with unchanged evidence and next.md; update the same packet before retrying.", count)
+}
+
 func isFailedFinishGateReason(reason string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(reason)), "finish gate failed")
 }
@@ -84,7 +131,7 @@ func isFailedFinishGateReason(reason string) bool {
 func readinessFinishGateFinding(state projectState, evidenceText string, readiness readinessState) string {
 	axis := strings.TrimSpace(readiness.NextPressure.Axis)
 	axisName := strings.TrimSpace(readiness.NextPressure.AxisName)
-	if axis == "" || axisName == "" || axis == "stage_advancement" || axis == "product_completeness" {
+	if axis == "" || axisName == "" || axis == "stage_advancement" || axis == "product_completeness" || axis == "reference_benchmark" {
 		return ""
 	}
 	records := readinessEvidenceRecordsFromGoalText(state.CurrentGoalID, evidenceText)
@@ -163,6 +210,22 @@ func activeCapabilityFinishGateFinding(root, evidenceText string) string {
 		return ""
 	}
 	return "Record active capability evidence for: " + strings.Join(missing, ", ")
+}
+
+func referenceBenchmarkFinishGateFinding(goalID, stage string, readiness readinessState, evidenceText string) string {
+	if !referenceBenchmarkRequired(stage, readiness) {
+		return ""
+	}
+	records := inferReadinessEvidenceFromReferenceBenchmark(goalID, usefulSectionLines(evidenceText, "Reference Benchmark Evidence"))
+	if len(records) == 0 {
+		return "Add `## Reference Benchmark Evidence` with category, 3-5 references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and decision."
+	}
+	for _, record := range records {
+		if record.Status == "covered" {
+			return ""
+		}
+	}
+	return "Complete Reference Benchmark Evidence with category, 3-5 references, baseline expectations, current comparison, no critical below-baseline gap, above-baseline strength, and decision."
 }
 
 func activeCapabilityEvidenceCovers(capability activeCapability, lines []string) bool {
@@ -335,6 +398,11 @@ func readinessEvidenceRecordsFromGoalText(goalID, evidenceText string) []readine
 		}
 		records = append(records, inferReadinessEvidenceFromSurfaceLine(goalID, line)...)
 	}
+	for _, line := range usefulSectionLines(evidenceText, "Self Review") {
+		if record, ok := parseReadinessEvidenceLine(goalID, line, defs); ok {
+			records = append(records, record)
+		}
+	}
 	records = append(records, inferReadinessEvidenceFromReferenceBenchmark(goalID, usefulSectionLines(evidenceText, "Reference Benchmark Evidence"))...)
 	return records
 }
@@ -348,7 +416,7 @@ func renderFinishGateReview(result finishGateResult, state projectState, derived
 		}
 		findings = strings.Join(lines, "\n")
 	}
-	return strings.Join([]string{
+	lines := []string{
 		"# " + state.CurrentGoalID + " Review",
 		"",
 		"## Finish Gate",
@@ -357,6 +425,18 @@ func renderFinishGateReview(result finishGateResult, state projectState, derived
 		"Runtime packet state: " + derived.State,
 		"Reason: " + derived.Reason,
 		"Readiness gate: " + readinessGateSummary(readiness),
+	}
+	if result.Status == "failed" {
+		lines = append(lines,
+			"Evidence hash: "+result.EvidenceHash,
+			"Next hash: "+result.NextHash,
+			"Findings hash: "+result.FindingsHash,
+			fmt.Sprintf("Failure repeat count: %d", result.FailureRepeatCount),
+			"Repeated findings: "+yesNo(result.RepeatedFindings),
+			"Input changed since previous failure: "+yesNo(result.InputChangedSincePrevious),
+		)
+	}
+	lines = append(lines,
 		"",
 		"## Findings",
 		"",
@@ -364,9 +444,53 @@ func renderFinishGateReview(result finishGateResult, state projectState, derived
 		"",
 		"## Return Path",
 		"",
-		"Stay in the same runtime packet. Update `evidence.md` and `next.md`, then run `hyper complete` again.",
+		finishGateReturnPath(result),
 		"",
-	}, "\n")
+	)
+	return strings.Join(lines, "\n")
+}
+
+func finishGateReturnPath(result finishGateResult) string {
+	switch result.Status {
+	case "passed":
+		return "Packet passed the finish gate. Follow `.hyper/next-packet.md` for the next planned action."
+	case "blocked":
+		return "Packet closed as blocked. Record the blocker in status and follow `.hyper/next-packet.md` before starting more work."
+	case "waiting_user":
+		return "Packet is waiting for user input. Report the waiting reason and follow `.hyper/next-packet.md` before starting more work."
+	default:
+		return "Stay in the same runtime packet. Update `evidence.md` and `next.md`, then run `hyper complete` again."
+	}
+}
+
+func annotateFinishGateRepeat(result *finishGateResult, previousReview, evidenceText, nextText string) {
+	result.EvidenceHash = hashText(evidenceText)
+	result.NextHash = hashText(nextText)
+	result.FindingsHash = hashText(strings.Join(result.Findings, "\n"))
+	if result.Status != "failed" {
+		return
+	}
+	result.FailureRepeatCount = 1
+	if strings.ToLower(strings.TrimSpace(firstLabelValue(previousReview, "Status"))) != "failed" {
+		return
+	}
+	if firstLabelValue(previousReview, "Findings hash") != result.FindingsHash {
+		return
+	}
+	previousCount, _ := strconv.Atoi(firstLabelValue(previousReview, "Failure repeat count"))
+	if previousCount < 1 {
+		previousCount = 1
+	}
+	result.FailureRepeatCount = previousCount + 1
+	result.RepeatedFindings = true
+	result.InputChangedSincePrevious = firstLabelValue(previousReview, "Evidence hash") != result.EvidenceHash || firstLabelValue(previousReview, "Next hash") != result.NextHash
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }
 
 func finishGateFailureMessage(state projectState, result finishGateResult) string {
@@ -381,6 +505,14 @@ func finishGateFailureMessage(state projectState, result finishGateResult) strin
 	}
 	for _, finding := range result.Findings {
 		lines = append(lines, "  - "+finding)
+	}
+	if result.RepeatedFindings && result.FailureRepeatCount > 1 {
+		lines = append(lines, "")
+		if result.InputChangedSincePrevious {
+			lines = append(lines, fmt.Sprintf("Repeated failure: same finish-gate findings repeated %d times after evidence or next.md changed. Stop auto continuation unless the next fix directly addresses those findings.", result.FailureRepeatCount))
+		} else {
+			lines = append(lines, fmt.Sprintf("Repeated failure: same finish-gate findings repeated %d times with unchanged evidence and next.md. Update the same packet before retrying.", result.FailureRepeatCount))
+		}
 	}
 	lines = append(lines,
 		"",

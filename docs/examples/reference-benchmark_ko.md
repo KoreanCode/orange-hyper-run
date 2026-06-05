@@ -40,6 +40,8 @@ covered인 이유:
 - above-baseline strength가 있습니다.
 - decision이 있고, 비교 결과를 다음 pressure로 바꿉니다.
 
+Below-baseline line에 below-baseline 영역이 언급된다면, 그 영역이 현재 service boundary에서 왜 critical하지 않은지 명시해야 합니다. 예를 들어 deferred, out of scope, explicit non-goal이어야 합니다.
+
 ## Emerging 예시
 
 ```md
@@ -60,7 +62,7 @@ emerging인 이유:
 - baseline이 너무 모호합니다.
 - current comparison이 below/meets/above baseline으로 표현되지 않았습니다.
 - below-baseline gaps가 pending입니다.
-- decision이 다음 pressure로 이어지지 않습니다.
+- decision이 Service Quality 진행을 명시적으로 허용하지 않습니다.
 
 ## Blocked 예시
 
@@ -80,6 +82,7 @@ Service Quality가 blocked인 이유:
 
 - 증거 자체는 유용합니다.
 - 하지만 critical below-baseline gap이 남아 있습니다.
+- decision이 추가 작업 전에는 Service Quality가 blocked라고 판단합니다.
 - Hyper Run은 stage를 올리지 않고, 이 gap을 다음 runtime pressure로 바꿔야 합니다.
 
 ## Category Template

@@ -15,6 +15,10 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if err != nil {
 		return commandOutput{}, err
 	}
+	plan := parsePlan(planResult.Body)
+	if err := validatePlanStageFields(plan); err != nil {
+		return commandOutput{}, err
+	}
 	if err := ensureProjectLayout(root); err != nil {
 		return commandOutput{}, err
 	}
@@ -77,11 +81,12 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			return commandOutput{}, err
 		}
 	}
-	plan := parsePlan(updatedPlan)
+	plan = parsePlan(updatedPlan)
 	state.Project = firstNonBlank(readinessProductName(plan), state.Project, "Unknown project")
 	state.Stage = nextStage
 	state.PlanPath = planFile
 	state.PlanHash = hashText(updatedPlan)
+	state = applyPlanTargetToState(state, plan)
 	state.UpdatedAt = now
 	if err := writeJSON(statePath, state); err != nil {
 		return commandOutput{}, err
@@ -122,7 +127,11 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Hyper Run Stage Advance",
 		"",
 		"Stage advanced: " + previousStage + " -> " + nextStage,
+		"Accepted gate: " + previousStage + " -> " + nextStage + " (ready)",
 		"Updated: plan.md Current Stage -> " + nextStage,
+		"Plan change: " + readiness.StageGate.Advancement.PlanChange,
+		"Required proof covered: " + stageAdvanceRequiredProofSummary(readiness),
+		"Run target after advance: " + stageAdvanceRunTargetSummary(state),
 	}
 	if repaired {
 		lines = append(lines, "State repaired: "+firstNonBlank(oldStatus, "unknown")+" -> "+state.Status)
@@ -130,8 +139,15 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	lines = append(lines,
 		"Readiness gate: "+readinessGateSummary(updatedReadiness),
 		"Readiness pressure: "+readinessPressureSummary(updatedReadiness),
+		"Planned action: "+nextPlan.Action,
 		"Next action: "+nextPlan.Command,
 		"Why: "+nextPlan.Reason,
+		"Continuation guard: "+compactText(nextPacketGuard(state, nextPlan), 220),
+	)
+	if progressLine := nextPacketProgressGuardLine(state, nextPlan); progressLine != "" {
+		lines = append(lines, progressLine)
+	}
+	lines = append(lines,
 		"Next packet plan: "+displayRelPath(hyperDir, "next-packet.md"),
 		"",
 		"Next:",
@@ -156,6 +172,10 @@ func stageAdvanceNotReadyMessage(readiness readinessState) string {
 		for _, gap := range readiness.StageGate.BlockingGaps {
 			lines = append(lines, "  - "+gap)
 		}
+	}
+	lines = append(lines, "Required proof: "+stageAdvanceRequiredProofSummary(readiness))
+	if readiness.StageGate.Advancement.Recommendation != "" {
+		lines = append(lines, "Recommendation: "+readiness.StageGate.Advancement.Recommendation)
 	}
 	if readiness.NextPressure.RecommendedGoal != "" {
 		lines = append(lines, "", "Next:", "  hyper run \""+compactText(readiness.NextPressure.RecommendedGoal, 120)+"\"")

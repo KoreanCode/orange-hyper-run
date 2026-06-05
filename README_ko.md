@@ -9,7 +9,7 @@
 
 Hyper Run은 AI 코딩 세션이 매번 처음부터 다시 시작하는 느낌을 줄여주는 CLI입니다.
 
-프로젝트 루트에 짧은 `plan.md`를 적어두면, `hyper run`이 그 계획과 이전 기록을 읽고 다음에 할 집중된 작업 packet을 만듭니다. 작업이 끝나면 `hyper complete`가 evidence를 확인하고 다음 단계를 준비합니다.
+프로젝트 루트에 짧은 `plan.md`를 적어두면, `hyper run`이 그 계획과 이전 기록을 읽고 다음에 할 집중된 작업 packet을 만듭니다. `plan.md`에 `Target Stage`가 있으면 plain `hyper run`이 그 목표까지 packet 단위로 계속 이어가도록 계획합니다. 각 packet이 끝나면 `hyper complete`가 evidence를 확인하고 다음 단계를 준비합니다.
 
 목표는 단순합니다. 작은 MVP에서 시작해서, AI 세션이 바뀌어도 문맥을 잃지 않고 계속 서비스 수준까지 개선하는 것입니다.
 
@@ -46,14 +46,14 @@ plan.md -> hyper run -> goal.md/tasks.md -> evidence.md/next.md -> hyper complet
 
 | 파일 또는 명령 | 의미 |
 | --- | --- |
-| `plan.md` | 제품 설명서입니다. 무엇을 만들고, 누구를 위한 것이고, 현재 단계와 제약이 무엇인지 적습니다. |
+| `plan.md` | 제품 설명서입니다. 무엇을 만들고, 누구를 위한 것이고, 현재 단계, 목표 단계, 제약이 무엇인지 적습니다. |
 | `hyper run` | 다음에 할 집중된 작업 packet을 만듭니다. |
 | `goal.md` / `tasks.md` | AI가 지금 해야 할 작업입니다. |
 | `evidence.md` | 무엇을 바꿨고 어떻게 확인했는지 남기는 파일입니다. |
 | `review.md` | `hyper complete`가 아직 부족하다고 판단하면 보강할 내용을 남기는 파일입니다. |
 | `next.md` | 다음에 할 작업 하나와 재사용 가능한 배운 점을 남기는 파일입니다. |
 | `hyper complete` | packet을 닫고, evidence를 확인하고, 다음 단계를 준비합니다. |
-| `.hyper/next-packet.md` | 다음에 실행할 명령 계획입니다. auto mode와 `hyper doctor`가 이 파일을 확인합니다. |
+| `.hyper/next-packet.md` | 다음에 실행할 명령과 Codex continuation 안내입니다. auto mode와 `hyper doctor`가 이 파일을 확인합니다. |
 | `hyper status --short` | 현재 단계, 막힌 이유, 다음 행동을 짧게 보여줍니다. |
 
 ## 어떻게 성장하나요
@@ -68,7 +68,7 @@ Hyper Run은 첫날부터 하네스를 만들라고 하지 않습니다.
 - UI 변경마다 브라우저 screenshot이 필요하면 visual check 후보를 제안할 수 있습니다.
 - 같은 실패가 반복되면 그 실패를 stop condition으로 만들 수 있습니다.
 
-이 제안들은 바로 강제되지 않습니다. 반복 evidence가 충분할 때까지 candidate로 남습니다.
+이 제안들은 바로 강제되지 않습니다. 반복 evidence가 충분할 때까지 candidate로 남습니다. Hyper Run은 activation policy도 함께 기록합니다. 반복 evidence가 생기면 candidate, 더 강한 반복 evidence가 쌓이면 promotable, activation 수준의 evidence가 쌓였을 때만 future packet finish gate에서 필수 행동이 됩니다.
 
 ## 자주 보이는 용어
 
@@ -83,6 +83,7 @@ Hyper Run에는 내부 용어가 있지만 외울 필요는 없습니다.
 | Pressure Ledger | 프로젝트가 반복해서 보여준 필요, gap, 실패를 모아둔 목록입니다. |
 | Readiness pressure | 다음 단계로 가기 위해 지금 가장 부족한 증거입니다. |
 | Capability candidate | validator, skill, agent, harness 제안입니다. 아직 활성화된 것은 아닙니다. |
+| Capability policy | candidate가 관찰 단계인지, 검토할 단계인지, active 필수 행동인지 정하는 threshold rule입니다. |
 | 하네스 없이 성장 | 가볍게 시작하고, 필요가 증명될 때만 구조를 추가하는 방식입니다. |
 
 짧게 말하면:
@@ -106,14 +107,22 @@ Service Quality benchmark 예시는 [Reference Benchmark Evidence 예시](docs/e
 
 `hyper run`은 목표 stage에 가까워질 때까지 다음 집중 작업 packet을 계속 만듭니다.
 
-## v0.6.3 기준 현재 기능
+## 현재 기능
 
+- `plan.md`에 `Target Stage`를 적으면 plain `hyper run`이 그 목표까지 packet 단위 continuation으로 동작합니다.
+- 목표가 `plan.md`에서 왔을 때 다음 continuation 명령도 plain `hyper run`으로 유지합니다. `--auto --until`은 명령어에서 직접 목표를 override할 때만 씁니다.
+- `--auto --until` override를 계속 쓰려면 생성된 `--until` 명령을 따르고, `plan.md` 목표로 돌아가려면 plain `hyper run`을 쓰면 됩니다.
+- 명시 override가 켜져 있고 `plan.md` 목표와 다르면 `hyper status`가 현재 override 목표와 `plan.md` 목표를 같이 보여줍니다.
+- `Target Stage`를 바꾸거나 제거하면 다음 status/run/migrate 흐름이 수정된 plan target을 따릅니다.
 - `hyper complete`는 packet을 학습하기 전에 finish gate를 실행합니다. evidence가 약하면 `review.md`에 보강할 내용을 남기고 같은 packet에 머무릅니다.
-- `hyper run --auto --until <stage>`는 `.hyper/next-packet.md`를 기준으로 packet 단위 continuation을 계획합니다. stage를 몰래 올리지는 않습니다.
-- `hyper advance`는 `hyper status`가 gate ready라고 말하고 사용자가 stage 변경을 받아들였을 때만 적용합니다.
-- Service Quality에서는 reference benchmark evidence가 필요할 수 있습니다. 해당 category의 기본 기대치를 충족하고, 구체적인 강점 하나가 있어야 합니다.
+- 같은 finish-gate finding이 반복되면 반복 횟수를 기록하고, 다음 수정이 그 finding을 직접 해결하지 않는 한 auto loop를 멈추도록 경고합니다.
+- `hyper run --auto --until <stage>`는 명시적인 override로 계속 사용할 수 있습니다. stage advancement 전에는 여전히 ready proof가 필요합니다.
+- `hyper advance`는 `hyper status`가 gate ready라고 말할 때만 적용합니다. active auto target 안에서는 `.hyper/next-packet.md`가 Stage Advancement Review 뒤의 advancement를 이어갈 수 있고, auto mode 밖에서는 사용자 승인이 필요합니다.
+- Stage advancement 출력과 `.hyper/next-packet.md`는 accepted gate, 정확한 plan change, 충족된 proof, continuation guard, progress guard를 보여줍니다.
+- auto target이 켜져 있고 stage gate가 이미 ready이면 다시 `hyper run`을 실행해도 filler packet을 만들지 않고, 검토된 `hyper advance`로 안내합니다.
+- Beta와 Service Quality packet에서는 이미 충족된 경우가 아니면 reference benchmark evidence가 필요합니다. 해당 category의 기본 기대치를 충족하고, 구체적인 강점 하나가 있어야 합니다.
 - installer와 `hyper update`는 release checksum을 검증합니다. `cosign`이 설치되어 있으면 signature 검증도 실행합니다.
-- `hyper doctor`는 설치 상태, 프로젝트 상태, SQLite, Codex routing, signature 검증 가능 여부, `.hyper/next-packet.md`의 최신성을 확인합니다.
+- `hyper doctor`는 설치 상태, 프로젝트 상태, SQLite, Codex routing, signature 검증 가능 여부, `.hyper/next-packet.md`의 최신성과 필요한 handoff section을 확인합니다.
 - `hyper status`와 `hyper doctor`는 `state.json`의 오래된 stage가 `plan.md`와 다르면 알려줍니다. `hyper migrate`가 그 상태를 갱신합니다.
 
 ## 기본 흐름
@@ -122,13 +131,13 @@ Service Quality benchmark 예시는 [Reference Benchmark Evidence 예시](docs/e
 hyper init
 # plan.md를 한 번 채웁니다
 
-hyper run "가장 작은 사용 가능한 MVP를 만들어줘"
+hyper run
 # 생성된 packet을 구현합니다
 # evidence.md와 next.md를 업데이트합니다
 
 hyper complete
 hyper status --short
-hyper advance   # stage gate가 ready이고 stage 변경을 받아들일 때만 실행합니다
+hyper advance   # stage gate가 ready이고 review 또는 active auto target 뒤 실행합니다
 hyper doctor
 hyper run "다음 개선 작업"
 ```
@@ -148,23 +157,49 @@ flowchart TD
   G -- "예" --> I["재사용 가능한 배운 점 저장<br/>프로젝트 상태 갱신"]
   I --> J["다음 명령 준비<br/>.hyper/next-packet.md 작성"]
   J --> K{"다음 stage로 갈 준비가 됐나?"}
-  K -- "예, 사용자가 수락" --> L["hyper advance<br/>plan.md stage 변경"]
+  K -- "예, 수락 또는 active auto target" --> L["hyper advance<br/>plan.md stage 변경"]
   K -- "아니오 또는 미수락" --> M["hyper status --short<br/>다음 행동 확인"]
-  L --> N{"auto 목표 stage 도달?"}
+  L --> N{"auto 목표 proof 완료?"}
   M --> N
   N -- "아니오" --> C
   N -- "예" --> O["멈추고 상태 검토<br/>다음 service target 선택"]
 ```
 
-`hyper complete`는 배운 점을 저장하기 전에 packet을 먼저 확인합니다. validation, stage evidence, active check, `next.md`가 부족하면 현재 packet의 `review.md`에 보강할 내용을 남기고 같은 packet에 머무르게 합니다.
+`hyper complete`는 배운 점을 저장하기 전에 packet을 먼저 확인합니다. validation, stage evidence, active check, `next.md`가 부족하면 현재 packet의 `review.md`에 보강할 내용을 남기고 같은 packet에 머무르게 합니다. 같은 finding은 `.hyper/next-packet.md`와 `hyper resume`에도 표시되어, 다음 Codex 단계가 새 작업을 시작하지 않고 현재 packet을 보강하게 합니다.
 
-Codex Desktop에서 더 긴 세션을 돌릴 때는 목표 stage를 지정할 수 있습니다.
+Service Quality와 Sustained Service Quality packet에서는 Self Review도 필요합니다. Hyper Run은 agent가 plan alignment, core loop quality, product satisfaction, no drift, validation match를 직접 판단하고 `Verdict: pass`를 남기길 요구합니다. `fail`이면 같은 packet을 열어둔 채 재작업하게 하고, 구체적인 품질 gap을 `review.md`, `.hyper/next-packet.md`, `hyper resume`에 전달합니다.
+
+모든 packet에는 no-drift guard도 들어갑니다. 작업이 `plan.md`의 제품 방향, 대상 사용자, 핵심 loop, non-goal, constraint를 벗어나야 한다면 agent는 조용히 범위를 넓히지 않고 멈춰서 blocker로 기록해야 합니다.
+
+Codex Desktop에서 더 긴 세션을 돌릴 때는 목표 stage를 `plan.md`에 적습니다.
+
+```markdown
+## Target Stage
+
+Service Quality
+```
+
+그러면 plain `hyper run`이 그 목표를 사용하고, `.hyper/next-packet.md`의 다음 명령도 `hyper run`으로 유지됩니다. Codex Desktop이 같은 제품 entrypoint로 이어갈 수 있게 하기 위해서입니다. 명령어에서 직접 override할 수도 있습니다.
 
 ```bash
 hyper run --auto --until service-quality "서비스 수준까지 계속 고도화"
 ```
 
-auto mode는 proof를 건너뛰거나 stage를 몰래 올리지 않습니다. 다음 packet 명령은 `.hyper/next-packet.md`에 계획하고, stage 변경은 여전히 사용자가 `hyper advance`로 받아들여야 합니다.
+Service Quality 이후에도 품질을 유지하는 방향이면 `Target Stage: Sustained Service Quality` 또는 `--until sustained-service-quality`를 사용합니다.
+
+`Current Stage`와 `Target Stage`에는 `Tiny MVP`, `Usable MVP`, `Beta`, `Service Quality`, `Sustained Service Quality` 중 하나를 사용하세요. stage 값이 애매하면 Hyper Run은 추측하지 않고 `plan.md`를 고치라고 멈춥니다.
+
+auto mode는 proof를 건너뛰지 않습니다. 다음 packet 명령은 `.hyper/next-packet.md`에 계획하고, stage gate가 ready이면 active auto target이 Stage Advancement Review의 ready proof와 blocking gap 없음 확인 뒤 `hyper advance`를 이어갈 수 있습니다. auto mode 밖에서는 stage 변경에 여전히 사용자 승인이 필요합니다.
+
+`.hyper/next-packet.md`는 Codex Desktop이 다음 `run`을 이어갈지, 검토된 `hyper advance`를 적용할지, 현재 packet의 review/evidence/next notes를 보강할지, target proof 완료, blocked 상태, 사용자 입력 필요 때문에 멈출지도 함께 알려줍니다. Auto mode에서는 Progress Guard도 포함합니다. 다음 명령이 새 packet, stage 변경, readiness pressure 변경, action/command 변경, 또는 보강된 evidence를 만들 때만 계속하고, 같은 명령이나 같은 finding이 진전 없이 반복되면 멈춰서 loop risk를 보고합니다.
+
+blocked 또는 waiting packet 때문에 auto continuation이 멈춘 뒤에는 plan target을 쓰는 plain `hyper run`이 새 packet을 만들지 않습니다. blocker를 해결한 뒤 `hyper run "API credential 준비 후 계속"`처럼 명확한 focus를 넣어 의도적인 follow-up을 시작하세요.
+
+packet 완료나 stage advancement 이후 CLI 출력에도 같은 planned action과 guard를 보여줍니다. 파일을 먼저 열지 않아도 다음에 해도 되는 명령과 멈춰야 할 조건을 바로 볼 수 있습니다.
+
+`Target Stage`는 `plan.md Current Stage` 이름이 그 단계가 되는 순간을 뜻하지 않습니다. 그 단계의 readiness proof가 완료될 때까지 계속한다는 뜻입니다. 예를 들어 `Target Stage: Service Quality`는 Service Quality packet 안에서도 validation, operations, benchmark, satisfaction, maintainability, active-quality evidence가 충분해질 때까지 계속 진행합니다.
+
+target proof가 완료되면 plain `hyper run`은 의도적으로 멈춥니다. 계속 진행하려면 `Target Stage`를 더 높이거나, manual packet을 위해 제거하거나, 더 높은 `--until` target을 명시하세요.
 
 Codex Desktop에서는 프로젝트 명령처럼 사용할 수 있습니다.
 
@@ -362,6 +397,10 @@ hyper init
 
 Tiny MVP
 
+## Target Stage
+
+Service Quality
+
 ## Build Style
 
 Web app
@@ -390,6 +429,7 @@ Web app
 
 Project: Service Desk Lite
 Current Stage: Tiny MVP
+Run Until: Service Quality
 Build Style: Thin vertical slice first.
 
 Product brief:
@@ -440,7 +480,7 @@ hyper complete
 - readiness 진행 상태
 
 다음 `hyper run`은 이 정보를 사용합니다.
-구체적으로 다음 work boundary, validation signal, stop condition, readiness pressure, capability candidate에 영향을 줍니다.
+구체적으로 다음 work boundary, validation signal, stop condition, readiness pressure, capability candidate, capability activation policy에 영향을 줍니다.
 
 ## Readiness를 쉽게 말하면
 
@@ -461,6 +501,7 @@ Tiny MVP -> Usable MVP -> Beta -> Service Quality
 - 배포
 - 문서
 - 유지보수성
+- 제품 만족도
 
 이 내용은 `evidence.md`에 이렇게 적습니다.
 
@@ -470,19 +511,26 @@ Tiny MVP -> Usable MVP -> Beta -> Service Quality
 Core UX: 브라우저 smoke test에서 생성과 완료 flow가 통과했다.
 Validation coverage: `go test ./...`가 통과했고 반복 실행 가능하다.
 Data persistence: SQLite로 저장한 records가 reload 뒤에도 유지된다.
+Product satisfaction: 대상 사용자 적합성, copy quality, coherent core loop, no drift가 확인되었고 verdict pass.
 ```
 
-evidence가 충분하면 `hyper status`에서 다음 stage로 올릴 준비가 됐는지 보여줍니다. Hyper Run은 stage 변경을 추천하지만, `plan.md`를 자동으로 수정하지는 않습니다.
+evidence가 충분하면 `hyper status`에서 다음 stage로 올릴 준비가 됐는지 보여줍니다. Hyper Run은 작업 packet 안에서 stage를 조용히 바꾸지는 않습니다. 사용자가 stage 변경을 받아들이거나, active auto target이 Stage Advancement Review 뒤 계속 진행하도록 이미 지정되어 있을 때 실행합니다.
+
+```bash
+hyper advance
+```
+
+이 명령은 `plan.md`의 현재 stage를 다음 stage로 바꾸고 readiness를 갱신합니다. 그 다음 계획된 명령은 새 stage 기준으로 동작합니다.
 
 ## 명령어
 
 ```bash
 hyper init                  # 프로젝트에 Hyper Run 파일 설치
-hyper run [focus]           # 다음 runtime packet 생성
-hyper run --auto --until service-quality [focus]
+hyper run [focus]           # 다음 packet 생성; plan.md Target Stage가 있으면 그 목표를 사용
+hyper run --auto --until service-quality [focus]  # 명시적인 목표 override
 hyper run --auto --until sustained-service-quality [focus]
 hyper complete              # finish gate를 통과한 뒤 packet을 닫고 학습
-hyper advance               # gate가 ready이고 사용자가 stage 변경을 받아들일 때 적용
+hyper advance               # ready stage 변경을 review 또는 active auto target 뒤 적용
 hyper status                # 현재 stage, gap, readiness 확인
 hyper status --short        # stage, gate, proof, 다음 행동만 짧게 확인
 hyper doctor                # 설치, PATH, 프로젝트 상태, Codex 라우팅 진단

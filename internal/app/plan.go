@@ -48,6 +48,10 @@ func planTemplate() string {
 
 Tiny MVP
 
+## Target Stage
+
+Service Quality
+
 ## Build Style
 
 ## Non-goals
@@ -229,6 +233,18 @@ func canonicalPlanKey(heading string) string {
 		"현재스테이지":            "Current Stage",
 		"스테이지":              "Current Stage",
 		"페이즈":               "Current Stage",
+		"targetstage":       "Target Stage",
+		"target":            "Target Stage",
+		"goalstage":         "Target Stage",
+		"rununtil":          "Target Stage",
+		"runtarget":         "Target Stage",
+		"servicetarget":     "Target Stage",
+		"qualitytarget":     "Target Stage",
+		"목표단계":              "Target Stage",
+		"목표스테이지":            "Target Stage",
+		"서비스목표":             "Target Stage",
+		"품질목표":              "Target Stage",
+		"실행목표":              "Target Stage",
 		"buildstyle":        "Build Style",
 		"stack":             "Build Style",
 		"technicalstack":    "Build Style",
@@ -426,7 +442,7 @@ func genericPlanTitle(value string) bool {
 	}
 }
 
-func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext, growth growthState, readiness readinessState) episode {
+func compileGoalEpisode(goalID, focus, planBody string, opts runOptions, similar []similarContext, growth growthState, readiness readinessState) episode {
 	plan := parsePlan(planBody)
 	stage := normalizeRuntimeStage(firstRuntimeValue(plan["Current Stage"], "Tiny MVP"))
 	buildStyle := firstRuntimeValue(plan["Build Style"], "Detect from project")
@@ -437,7 +453,7 @@ func compileGoalEpisode(goalID, focus, planBody string, similar []similarContext
 	scope := runtimeWorkBoundary(objective, stage, plan, growth, readiness)
 	nonGoals := firstRuntimeValue(plan["Non-goals"], "No explicit non-goals recorded in plan.md.")
 	docs := episodeDocs{
-		Goal:     buildGoalDoc(goalID, objective, focus, plan, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
+		Goal:     buildGoalDoc(goalID, objective, focus, plan, opts, stage, buildStyle, scope, validation, stopCondition, similar, growth, readiness),
 		Tasks:    buildTasksDoc(goalID, buildStyle, stage, readiness, growth),
 		Evidence: buildEvidenceDoc(goalID, stage, readiness, growth),
 		Review:   fmt.Sprintf("# %s Review\n\n## Result\n\nPending.\n\n## Issues\n\nPending.\n", goalID),
@@ -673,6 +689,7 @@ func runtimeWorkBoundary(objective, stage string, plan map[string]string, growth
 		"- Do the smallest coherent implementation step that advances: " + compactText(objective, 180),
 		"- Keep the work inside the current stage: " + stage,
 		"- Stage contract: " + compactText(stageGrowthContract(stage), 180),
+		"- No drift guard: do not change product direction, target user, core loop, or plan non-goals unless this packet explicitly records a blocker or user decision.",
 	}
 	if guidance := stageRuntimeBoundary(stage); guidance != "" {
 		lines = append(lines, "- "+guidance)
@@ -763,6 +780,7 @@ func runtimeStopCondition(plan map[string]string, stage string, growth growthSta
 	if criteria := firstRuntimeValue(plan["Success Criteria"]); criteria != "" && !sameStopCondition(criteria, base) {
 		base = "- Plan success criteria: " + compactText(criteria, 240) + "\n" + base
 	}
+	base += "\n- Stop and record a blocker if the work would drift outside plan.md product direction, target user, core loop, non-goals, or constraints."
 	return applyReadinessStopConditions(applyGrowthStopConditions(base, growth), readiness)
 }
 
@@ -871,7 +889,7 @@ func validationForBuildStyle(buildStyle string) string {
 	return common + "\n- If validation cannot run, document the blocker in evidence.md."
 }
 
-func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage, buildStyle, workBoundary, validation, stopCondition string, similar []similarContext, growth growthState, readiness readinessState) string {
+func buildGoalDoc(goalID, objective, focus string, plan map[string]string, opts runOptions, stage, buildStyle, workBoundary, validation, stopCondition string, similar []similarContext, growth growthState, readiness readinessState) string {
 	currentFocus := firstRuntimeValue(strings.TrimSpace(focus), plan["Current Focus"], "Continue the current stage.")
 	product := firstRuntimeValue(plan["Product"], "the current project")
 	targetUsers := firstRuntimeValue(plan["Target Users"], "Not specified yet.")
@@ -908,6 +926,10 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 
 - Build style: %s
 - Current focus: %s
+
+## Run Target
+
+%s
 
 ## Stage Gate
 
@@ -947,6 +969,7 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 - Readiness evidence in axis-slot format, for example "%s: proof"
 - Active capability evidence when required validators are present
 - Surface proof evidence when this packet changes a user-facing screen or flow
+- Self Review evidence when the packet is in Service Quality or Sustained Service Quality
 - Changed file summary
 - Decisions that should persist into future runs
 - Reusable patterns that should guide similar future work
@@ -962,7 +985,56 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, stage
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), executionContractDoc(stage, readiness, growth), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), doneChecklistDoc(stage, readiness, growth), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, runTargetDoc(plan, opts, stage, readiness), buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), executionContractDoc(stage, readiness, growth), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), doneChecklistDoc(stage, readiness, growth), stopCondition)
+}
+
+func runTargetDoc(plan map[string]string, opts runOptions, stage string, readiness readinessState) string {
+	value := firstRuntimeValue(plan["Target Stage"])
+	source := ""
+	if opts.AutoContinue && strings.TrimSpace(opts.RunUntil) != "" && opts.RunTargetSource != planTargetStageSource {
+		value = opts.RunUntil
+		source = firstNonBlank(opts.RunTargetSource, "--until")
+	} else if value != "" {
+		source = planTargetStageSource
+	} else if opts.AutoContinue && strings.TrimSpace(opts.RunUntil) != "" {
+		value = opts.RunUntil
+		source = firstNonBlank(opts.RunTargetSource, "--until")
+	} else {
+		return "- Run target: not set."
+	}
+	target := normalizeRuntimeStage(value)
+	if !knownRuntimeStage(target) {
+		target = strings.TrimSpace(value)
+	}
+	current := normalizeRuntimeStage(firstNonBlank(readiness.Stage, stage))
+	lines := []string{}
+	if source == planTargetStageSource {
+		lines = append(lines, "- plan.md Target Stage: "+target)
+	} else {
+		lines = append(lines, "- Run target: "+target)
+		lines = append(lines, "- Run target source: "+source)
+	}
+	lines = append(lines,
+		"- Target meaning: complete "+target+" readiness proof, not merely enter the stage.",
+	)
+	currentRank := stageRank(current)
+	targetRank := stageRank(target)
+	switch {
+	case currentRank == 0 || targetRank == 0:
+		lines = append(lines, "- Target status: stage value needs validation before continuation can be trusted.")
+	case currentRank < targetRank:
+		lines = append(lines, "- Target status: not at target stage yet; continue packet-by-packet toward "+target+".")
+	case currentRank > targetRank:
+		lines = append(lines, "- Target status: current stage is past the target; stop automatic continuation and review plan.md.")
+	case readiness.StageGate.Status == "ready" && normalizeRuntimeStage(readiness.StageGate.CurrentStage) == target:
+		lines = append(lines, "- Target status: proof complete for "+target+"; the next plan should stop unless the target is raised.")
+	default:
+		lines = append(lines, "- Target status: target stage is active but proof is not complete.")
+		if readiness.NextPressure.AxisName != "" {
+			lines = append(lines, "- Current target pressure: "+readiness.NextPressure.AxisName+" - "+compactText(readiness.NextPressure.Reason, 180))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func executionContractDoc(stage string, readiness readinessState, growth growthState) string {
@@ -1000,6 +1072,9 @@ func doneChecklistDoc(stage string, readiness readinessState, growth growthState
 	if strings.Contains(normalizeLabel(stage), "beta") || strings.Contains(normalizeLabel(stage), "service") {
 		lines = append(lines, "- Stop conditions cover failure, regression, and missing credential cases found during this packet.")
 	}
+	if line := selfReviewChecklistLine(stage, readiness); line != "" {
+		lines = append(lines, line)
+	}
 	if referenceBenchmarkRequired(stage, readiness) {
 		lines = append(lines, "- Reference Benchmark Evidence lists 3-5 references, baseline expectations, current comparison, below-baseline gaps, above-baseline strength, and the next pressure.")
 	}
@@ -1017,6 +1092,9 @@ func proofContractDoc(stage, buildStyle string, readiness readinessState) string
 		lines = append(lines,
 			"- Surface proof should name the affected surface, primary user action, checked states, viewport(s), screenshot or browser smoke evidence, and remaining surface gaps.",
 		)
+	}
+	if line := selfReviewProofLine(stage, readiness); line != "" {
+		lines = append(lines, line)
 	}
 	normalizedStage := normalizeLabel(stage)
 	if strings.Contains(normalizedStage, "tiny") && strings.Contains(normalizedStage, "mvp") {
@@ -1137,6 +1215,7 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if referenceBenchmarkRequired(stage, readiness) {
 		referenceTask = "- [ ] Fill Reference Benchmark Evidence with category references, baseline expectations, current comparison, and blocking gaps\n"
 	}
+	selfReviewTask := selfReviewTaskLine(stage, readiness)
 	readinessTask := ""
 	if readiness.NextPressure.AxisName != "" {
 		readinessTask = "- [ ] Fill the `" + readiness.NextPressure.AxisName + ":` readiness evidence slot with concrete proof\n"
@@ -1145,11 +1224,11 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if activeStructureCount(growth.Candidates) > 0 {
 		activeTask = "- [ ] Run or explicitly block every active capability listed in goal.md\n"
 	}
-	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, readinessTask, activeTask)
+	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, selfReviewTask, readinessTask, activeTask)
 }
 
 func buildEvidenceDoc(goalID, stage string, readiness readinessState, growth growthState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
+	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), selfReviewEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
 }
 
 func activeCapabilityEvidenceTemplate(growth growthState) string {
@@ -1196,11 +1275,17 @@ func serviceQualityStage(stage string) bool {
 }
 
 func referenceBenchmarkRequired(stage string, readiness readinessState) bool {
+	runtimeStage := firstNonBlank(readiness.Stage, stage)
+	normalized := normalizeLabel(runtimeStage)
 	if readiness.Version != 0 {
-		return readiness.NextPressure.Axis == "reference_benchmark"
+		if readiness.NextPressure.Axis == "reference_benchmark" {
+			return true
+		}
+		if readinessDimensionMap(readiness.Dimensions)["reference_benchmark"].Status == "covered" {
+			return false
+		}
 	}
-	normalized := normalizeLabel(stage)
-	if strings.Contains(normalized, "beta") || serviceQualityStage(stage) {
+	if strings.Contains(normalized, "beta") || serviceQualityStage(runtimeStage) {
 		return true
 	}
 	for _, axis := range readiness.StageGate.RequiredAxes {
@@ -1243,17 +1328,21 @@ func runtimeContinuation(similar []similarContext) string {
 	return formatSimilarContext(similar)
 }
 
-func createExecutionHandoff(runID, goalID string) handoff {
+func createExecutionHandoff(runID, goalID string, autoContinue bool) handoff {
 	_ = runID
 	goalPath := fmt.Sprintf(".hyper/goals/%s/goal.md", goalID)
 	evidencePath := fmt.Sprintf(".hyper/goals/%s/evidence.md", goalID)
 	nextPath := fmt.Sprintf(".hyper/goals/%s/next.md", goalID)
+	instructions := fmt.Sprintf("Read %s as a runtime packet and complete it checkpoint by checkpoint. Update %s, write %s, and stop early for destructive actions, missing credentials, unclear product scope, or repeated validation failure.", goalPath, evidencePath, nextPath)
+	if autoContinue {
+		instructions += " After `hyper complete` passes, read `.hyper/next-packet.md`; obey its Guard and Progress Guard; if Action is `run`, execute its Command and continue the next packet; if Action is `advance`, continue only when the Stage Advancement Review says the active auto target authorizes it, otherwise pause and report it; if Action is `complete-current`, stay in the same packet, fix review.md/evidence.md/next.md, and run `hyper complete` again; if Action is `stop`, report the stop reason from `.hyper/next-packet.md` and wait."
+	}
 	return handoff{
 		Adapter:           "prompt",
 		EventType:         "execution_handoff_generated",
 		Description:       "Prompt handoff mode. In Codex Desktop, use this as the execution payload for `$hyper run`.",
 		InstructionsLabel: "Codex Desktop payload:",
-		Instructions:      fmt.Sprintf("Read %s as a runtime packet and complete it checkpoint by checkpoint. Update %s, write %s, and stop early for destructive actions, missing credentials, unclear product scope, or repeated validation failure.", goalPath, evidencePath, nextPath),
+		Instructions:      instructions,
 	}
 }
 
