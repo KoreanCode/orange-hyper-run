@@ -79,6 +79,7 @@ func surfaceProofFollowupRequiredFromState(derived goalState) bool {
 }
 
 func writeNextPacketPlan(root string, state projectState, derived goalState, readiness readinessState, growth growthState) (plannedNextPacket, *hyperError) {
+	readiness = readinessWithPacketNextGoal(root, state, derived, readiness)
 	plan := buildNextPacketPlan(state, derived, readiness, growth)
 	body := renderNextPacketPlan(state, readiness, plan)
 	if review := nextPacketReviewFindings(root, state, plan); review != "" {

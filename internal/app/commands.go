@@ -444,6 +444,7 @@ func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	runs, goals := statusDBCounts(root)
 	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
+	readiness = readinessWithPacketNextGoal(root, state, derived, readiness)
 	refresh := statusRefreshFor(root, state)
 	if short {
 		lines := statusShortLinesWithRefresh(state, derived, readiness, growth, refresh)

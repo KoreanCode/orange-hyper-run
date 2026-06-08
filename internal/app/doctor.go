@@ -244,6 +244,7 @@ func doctorNextPacketPlanCheck(root string) doctorCheck {
 	}
 	growth := growthStateForStatus(root)
 	readiness := readinessStateForStatus(root, growth)
+	readiness = readinessWithPacketNextGoal(root, state, derived, readiness)
 	if !exists(path) {
 		if strings.TrimSpace(state.CurrentGoalID) == "" && !hasNoPacketRunEvent(root) {
 			return doctorCheck{"Next packet plan", "OK", "not required before the first runtime packet"}
