@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -5378,6 +5379,110 @@ func TestSurfaceProofPolicyBlockCompletesAndPlansFollowup(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: run")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "surface-proof gap")
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"status": "completed"`)
+}
+
+func TestNextPacketUsesCurrentNextGoalForSustainedQuality(t *testing.T) {
+	root := t.TempDir()
+	writeCompletedGoalFiles(t, root, "GOAL-0001",
+		"# GOAL-0001 Evidence\n\n## Validation\n\n`npm run quality:active` passed.\n\n## Blocker\n\nNone blocking.\n",
+		"# GOAL-0001 Next\n\n## Recommended Next Goal\n\nCreate an allowed visual/accessibility surface proof for the home -> onboarding -> map -> message path.\n")
+	state := completedGoalState("GOAL-0001", "Sustained Service Quality")
+	derived := goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
+	readiness := sustainedQualityReadiness()
+
+	plan, err := writeNextPacketPlan(root, state, derived, readiness, growthState{})
+	if err != nil {
+		t.Fatalf("write next packet failed: %v", err)
+	}
+	enriched := readinessWithPacketNextGoal(root, state, derived, readiness)
+	short := strings.Join(statusShortLines(state, derived, enriched, growthState{}), "\n")
+
+	assertContains(t, plan.Command, "Create an allowed visual/accessibility surface proof")
+	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Create an allowed visual/accessibility surface proof")
+	assertContains(t, short, "Next: hyper run 'Create an allowed visual/accessibility surface proof")
+	assertNotContains(t, plan.Command, "Run active quality checks")
+}
+
+func TestSurfaceProofGapOverridesGenericNextGoal(t *testing.T) {
+	root := t.TempDir()
+	writeCompletedGoalFiles(t, root, "GOAL-0001",
+		"# GOAL-0001 Evidence\n\n## Validation\n\n`npm run quality:active` passed.\n\n## Surface Proof Evidence\n\nSurface risks or gaps: Browser screenshot proof is still blocked by Browser URL policy.\n\n## Blocker\n\nNone blocking.\n",
+		"# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRun active quality checks and reduce one small operational friction.\n")
+	state := completedGoalState("GOAL-0001", "Sustained Service Quality")
+	derived := goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
+
+	plan, err := writeNextPacketPlan(root, state, derived, sustainedQualityReadiness(), growthState{})
+	if err != nil {
+		t.Fatalf("write next packet failed: %v", err)
+	}
+
+	assertContains(t, plan.Command, "Create an allowed visual/accessibility surface proof")
+	assertContains(t, plan.Reason, "surface-proof gap")
+	assertNotContains(t, plan.Command, "Run active quality checks")
+}
+
+func TestCurrentNextGoalDoesNotOverrideStageAdvancement(t *testing.T) {
+	root := t.TempDir()
+	writeCompletedGoalFiles(t, root, "GOAL-0001",
+		"# GOAL-0001 Evidence\n\n## Validation\n\n`npm run quality:active` passed.\n\n## Blocker\n\nNone blocking.\n",
+		"# GOAL-0001 Next\n\n## Recommended Next Goal\n\nCreate an allowed visual/accessibility surface proof for the primary flow.\n")
+	state := completedGoalState("GOAL-0001", "Service Quality")
+	derived := goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
+	readiness := sustainedQualityReadiness()
+	readiness.Stage = "Service Quality"
+	readiness.StageGate.CurrentStage = "Service Quality"
+	readiness.StageGate.NextStage = "Sustained Service Quality"
+	readiness.NextPressure = readinessPressure{Axis: "stage_advancement", AxisName: "Stage advancement", Status: "ready", Reason: "Service Quality gate is ready.", RecommendedGoal: ""}
+	readiness.StageGate.Advancement = stageAdvancementPolicy{Candidate: true, Recommendation: "Service Quality gate is ready.", PlanChange: "Current Stage -> Sustained Service Quality"}
+
+	plan, err := writeNextPacketPlan(root, state, derived, readiness, growthState{})
+	if err != nil {
+		t.Fatalf("write next packet failed: %v", err)
+	}
+
+	assertContains(t, plan.Command, "hyper advance")
+	assertNotContains(t, plan.Command, "Create an allowed visual/accessibility surface proof")
+}
+
+func writeCompletedGoalFiles(t *testing.T, root, goalID, evidence, next string) {
+	t.Helper()
+	goalDir := filepath.Join(root, hyperDir, "goals", goalID)
+	if err := os.MkdirAll(goalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(goalDir, "evidence.md"), evidence)
+	writeFile(t, filepath.Join(goalDir, "next.md"), next)
+}
+
+func completedGoalState(goalID, stage string) projectState {
+	return projectState{
+		Project:         "Tiny map chat",
+		Stage:           stage,
+		Status:          "completed",
+		ActiveRunID:     strings.Replace(goalID, "GOAL", "RUN", 1),
+		CurrentGoalID:   goalID,
+		CurrentGoalPath: fmt.Sprintf(".hyper/goals/%s/goal.md", goalID),
+		UpdatedAt:       nowISO(),
+	}
+}
+
+func sustainedQualityReadiness() readinessState {
+	return readinessState{
+		Version: 1,
+		Stage:   "Sustained Service Quality",
+		StageGate: readinessStageGate{
+			CurrentStage: "Sustained Service Quality",
+			NextStage:    "Sustained Service Quality",
+			Status:       "ready",
+		},
+		NextPressure: readinessPressure{
+			Axis:            "sustained_quality",
+			AxisName:        "Sustained quality",
+			Status:          "ongoing",
+			Reason:          "Sustained Service Quality is active; continue the next focused quality improvement instead of advancing stage.",
+			RecommendedGoal: "Run active quality checks and reduce one small operational, validation, or maintainability friction for Tiny map chat.",
+		},
+	}
 }
 
 func TestLearnDedupesOverlappingSectionAndLearnSignals(t *testing.T) {
