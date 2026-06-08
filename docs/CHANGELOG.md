@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.6 - 2026-06-08
+
+- Use the completed packet's `next.md` Recommended Next Goal when planning `.hyper/next-packet.md` for generic or sustained-quality follow-up.
+- Keep stage advancement, target completion, and same-packet correction higher priority than packet next-goal recommendations.
+- Prefer visual/accessibility surface-proof follow-up when the last packet records browser, screenshot, or surface-proof gaps.
+- Make `hyper status` and `hyper doctor` validate the same next-goal-aware plan so stale generic next-packet handoffs are detected.
+
 ## v0.6.5 - 2026-06-05
 
 - Warn when a long-running service-quality focus is used without `plan.md` `Target Stage`, so users know plain `hyper run` will create a single packet instead of continuing automatically.

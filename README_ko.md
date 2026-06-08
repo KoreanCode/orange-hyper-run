@@ -21,7 +21,7 @@ hyper run
 
 목표는 단순합니다. 작은 MVP에서 시작해, AI 세션이 바뀌어도 문맥을 잃지 않고 실제 서비스처럼 다룰 수 있는 수준까지 계속 개선하는 것입니다.
 
-현재 릴리즈는 `v0.6.5`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
+현재 릴리즈는 `v0.6.6`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
 
 ## 첫 실행
 

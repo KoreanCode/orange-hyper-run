@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.6 - 2026-06-08
+
+- generic 또는 Sustained Service Quality 후속 작업을 계획할 때 완료된 packet의 `next.md` Recommended Next Goal을 `.hyper/next-packet.md`에 반영합니다.
+- stage advancement, target 완료, 같은 packet 보강은 packet next-goal 추천보다 계속 우선합니다.
+- 마지막 packet에 browser, screenshot, surface proof gap이 남아 있으면 visual/accessibility surface-proof 후속 작업을 우선 추천합니다.
+- `hyper status`와 `hyper doctor`도 같은 next-goal-aware 계획을 검증해 오래된 generic next-packet handoff를 감지하게 했습니다.
+
 ## v0.6.5 - 2026-06-05
 
 - 서비스 품질까지 계속 개발하려는 긴 focus를 쓰면서 `plan.md`에 `Target Stage`가 없으면, plain `hyper run`이 자동 continuation이 아니라 single packet만 만든다는 점을 안내합니다.
