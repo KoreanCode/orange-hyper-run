@@ -127,7 +127,11 @@ func surfaceProofGapFromCurrentPacket(root string, state projectState) bool {
 
 func packetNextGoalReason(root string, state projectState, goal string, readiness readinessState) string {
 	if surfaceProofGapFromCurrentPacket(root, state) {
-		return "The last packet left a surface-proof gap; run the concrete next.md recommendation before general sustained-quality work."
+		nextText := readIfExists(filepath.Join(root, hyperDir, "goals", state.CurrentGoalID, "next.md"))
+		if surfaceProofNextGoal(recommendedNextGoalFromText(nextText)) {
+			return "The last packet left a surface-proof gap; run the concrete next.md surface-proof recommendation before general sustained-quality work."
+		}
+		return "The last packet left a surface-proof gap; prioritize an allowed visual/accessibility proof before the broader next.md recommendation or generic sustained-quality work."
 	}
 	return "Use the completed packet's next.md recommendation as the next concrete runtime episode before falling back to generic readiness pressure."
 }

@@ -97,7 +97,7 @@ func TestRunWarnsWhenLongFocusHasNoTargetStage(t *testing.T) {
 
 	assertContains(t, out.Stdout, "Run mode: single packet")
 	assertContains(t, out.Stdout, "Run target notice: this is a single packet because plan.md has no Target Stage.")
-	assertContains(t, out.Stdout, "hyper run --auto --until service-quality")
+	assertContains(t, out.Stdout, "add `Target Stage: Service Quality` to plan.md")
 	assertNotContains(t, readFile(t, filepath.Join(root, ".hyper", "state.json")), `"run_until"`)
 }
 
@@ -2212,6 +2212,7 @@ func TestPlanTargetStageRemovalClearsPlanDrivenAutoTarget(t *testing.T) {
 	}
 	assertContains(t, status.Stdout, "Mode: single packet")
 	assertContains(t, status.Stdout, "Target: none")
+	assertContains(t, status.Stdout, "Target hint: Plain `hyper run` creates one packet; add `Target Stage: Service Quality`")
 
 	out, err := runCLI(args("run"), testRoot(root), fakeUpdater{})
 	if err != nil {
@@ -5417,8 +5418,31 @@ func TestSurfaceProofGapOverridesGenericNextGoal(t *testing.T) {
 	}
 
 	assertContains(t, plan.Command, "Create an allowed visual/accessibility surface proof")
-	assertContains(t, plan.Reason, "surface-proof gap")
+	assertContains(t, plan.Reason, "prioritize an allowed visual/accessibility proof")
+	assertNotContains(t, plan.Reason, "run the concrete next.md recommendation")
 	assertNotContains(t, plan.Command, "Run active quality checks")
+}
+
+func TestSustainedQualityWithoutTargetStageExplainsSinglePacketMode(t *testing.T) {
+	root := t.TempDir()
+	writeCompletedGoalFiles(t, root, "GOAL-0001",
+		"# GOAL-0001 Evidence\n\n## Validation\n\n`npm run quality:active` passed.\n\n## Blocker\n\nNone blocking.\n",
+		"# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReduce one sustained-quality friction.\n")
+	writeFile(t, filepath.Join(root, "plan.md"), "# Product Plan\n\n## Product\n\nSustained app\n\n## Current Stage\n\nSustained Service Quality\n\n## Build Style\n\nWeb app\n\n## Success Criteria\n\nKeep the primary flow healthy.\n")
+	state := completedGoalState("GOAL-0001", "Sustained Service Quality")
+	derived := goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
+	readiness := sustainedQualityReadiness()
+
+	status := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
+	assertContains(t, status, "Mode: single packet")
+	assertContains(t, status, "Target: none")
+	assertContains(t, status, "Target hint: No higher Target Stage is defined")
+
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[OK] Target Stage: not set; No higher Target Stage is defined")
 }
 
 func TestCurrentNextGoalDoesNotOverrideStageAdvancement(t *testing.T) {

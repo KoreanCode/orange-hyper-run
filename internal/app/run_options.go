@@ -83,7 +83,18 @@ func missingTargetStageAdvisory(opts runOptions, plan map[string]string) []strin
 	}
 	return []string{
 		"Run target notice: this is a single packet because plan.md has no Target Stage.",
-		"To continue packet by packet, add `Target Stage: Service Quality` to plan.md or run `hyper run --auto --until service-quality [focus]`.",
+		targetStageMissingDetail(firstRuntimeValue(plan["Current Stage"])),
+	}
+}
+
+func targetStageMissingDetail(currentStage string) string {
+	switch normalizeRuntimeStage(currentStage) {
+	case "Sustained Service Quality":
+		return "No higher Target Stage is defined; plain `hyper run` starts one deliberate sustained-quality packet from `.hyper/next-packet.md`."
+	case "Service Quality":
+		return "Plain `hyper run` creates one packet; add `Target Stage: Sustained Service Quality` to plan.md when you want guarded continuation after Service Quality proof."
+	default:
+		return "Plain `hyper run` creates one packet; add `Target Stage: Service Quality` to plan.md when you want packet-by-packet continuation toward service quality."
 	}
 }
 

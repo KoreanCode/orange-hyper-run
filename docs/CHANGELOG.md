@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Clarify single-packet mode in `hyper status` and `hyper doctor` when `plan.md` has no `Target Stage`, with stage-aware guidance for Service Quality and Sustained Service Quality projects.
+- Make next-packet reasons distinguish between following the packet's `next.md` recommendation and overriding it to close a surface-proof gap first.
+
 ## v0.6.6 - 2026-06-08
 
 - Use the completed packet's `next.md` Recommended Next Goal when planning `.hyper/next-packet.md` for generic or sustained-quality follow-up.

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `plan.md`에 `Target Stage`가 없을 때 `hyper status`와 `hyper doctor`가 single-packet mode를 더 분명하게 설명하고, Service Quality / Sustained Service Quality 단계에 맞춘 안내를 보여줍니다.
+- 다음 packet reason이 packet의 `next.md` 추천을 그대로 따르는 경우와 surface-proof gap을 먼저 닫기 위해 추천을 override하는 경우를 구분하게 했습니다.
+
 ## v0.6.6 - 2026-06-08
 
 - generic 또는 Sustained Service Quality 후속 작업을 계획할 때 완료된 packet의 `next.md` Recommended Next Goal을 `.hyper/next-packet.md`에 반영합니다.
