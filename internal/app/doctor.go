@@ -96,7 +96,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 func doctorPlanTargetCheck(plan map[string]string) doctorCheck {
 	value := firstRuntimeValue(plan["Target Stage"])
 	if value == "" {
-		return doctorCheck{"Target Stage", "OK", "not set; plain `hyper run` uses single-packet mode unless an explicit auto target is provided"}
+		return doctorCheck{"Target Stage", "OK", "not set; " + targetStageMissingDetail(firstRuntimeValue(plan["Current Stage"]))}
 	}
 	target, err := normalizeRunUntilTarget(value)
 	if err != nil {

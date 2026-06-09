@@ -60,20 +60,25 @@ func statusDashboardLinesWithRefresh(state projectState, derived goalState, read
 		"Stage: " + stage,
 		"Run mode: " + stateRunMode(state),
 		statusRunTargetLine(state),
-		"Stage contract: " + stageGrowthContract(stage),
-		"Method: " + growthRuntimeDefinition,
-		"Protocol: " + runtimeProtocolDefinition,
-		"Pressure ledger: " + growthLoopStateSummary(growth),
-		"Capability policy: " + capabilityPolicySummary(growth),
-		"Proof: " + proofStatusSummary(derived, readiness),
-		"Next proof gap: " + nextProofGap(readiness),
-		"Principles: " + growthPrinciplesLine(),
-		"Status: " + displayProjectStatus(state, derived),
-		"Runtime packet state: " + derived.State,
-		"Runtime packet reason: " + derived.Reason,
-		"Planned action: " + planAction,
-		"Next packet plan: " + statusNextPacketPlanPath(state, derived, readiness),
 	}
+	if hint := statusTargetHintLine(state, stage); hint != "" {
+		lines = append(lines, hint)
+	}
+	lines = append(lines,
+		"Stage contract: "+stageGrowthContract(stage),
+		"Method: "+growthRuntimeDefinition,
+		"Protocol: "+runtimeProtocolDefinition,
+		"Pressure ledger: "+growthLoopStateSummary(growth),
+		"Capability policy: "+capabilityPolicySummary(growth),
+		"Proof: "+proofStatusSummary(derived, readiness),
+		"Next proof gap: "+nextProofGap(readiness),
+		"Principles: "+growthPrinciplesLine(),
+		"Status: "+displayProjectStatus(state, derived),
+		"Runtime packet state: "+derived.State,
+		"Runtime packet reason: "+derived.Reason,
+		"Planned action: "+planAction,
+		"Next packet plan: "+statusNextPacketPlanPath(state, derived, readiness),
+	)
 	if statusRefreshVisible(derived, refresh) {
 		lines = append(lines, "State refresh: needed - "+refresh.Reason)
 	}
@@ -124,15 +129,20 @@ func statusShortLinesWithRefresh(state projectState, derived goalState, readines
 		"Stage: " + stage,
 		"Mode: " + stateRunMode(state),
 		statusRunTargetLine(state),
-		"Gate: " + readinessGateSummary(readiness),
-		"Proof: " + proofStatusSummary(derived, readiness),
-		"Packet: " + shortPacketSummary(state, derived),
-		"Plan: " + planAction,
-		"Plan file: " + statusNextPacketPlanPath(state, derived, readiness),
-		"Next: " + next,
-		"Do: " + statusActionHintWithRefresh(state, derived, readiness, refresh),
-		"Why: " + statusActionReasonWithRefresh(state, derived, readiness, growth, refresh),
 	}
+	if hint := statusTargetHintLine(state, stage); hint != "" {
+		lines = append(lines, hint)
+	}
+	lines = append(lines,
+		"Gate: "+readinessGateSummary(readiness),
+		"Proof: "+proofStatusSummary(derived, readiness),
+		"Packet: "+shortPacketSummary(state, derived),
+		"Plan: "+planAction,
+		"Plan file: "+statusNextPacketPlanPath(state, derived, readiness),
+		"Next: "+next,
+		"Do: "+statusActionHintWithRefresh(state, derived, readiness, refresh),
+		"Why: "+statusActionReasonWithRefresh(state, derived, readiness, growth, refresh),
+	)
 	if summary := capabilityPolicySummary(growth); summary != "No capability activation pressure yet." {
 		lines = append(lines, "Capabilities: "+summary)
 	}
@@ -177,6 +187,13 @@ func statusRunTargetLine(state projectState) string {
 		return "Target: " + state.RunUntil + " (" + source + "; plan.md Target Stage: " + planTarget + ")"
 	}
 	return "Target: " + state.RunUntil + " (" + source + ")"
+}
+
+func statusTargetHintLine(state projectState, stage string) string {
+	if state.AutoContinue || strings.TrimSpace(state.RunUntil) != "" {
+		return ""
+	}
+	return "Target hint: " + targetStageMissingDetail(stage)
 }
 
 func statusNextPacketPlanPath(state projectState, derived goalState, readiness readinessState) string {
