@@ -2,11 +2,14 @@
 
 Use this checklist when publishing a new Hyper Run release.
 
+For AI-assisted release preparation, stop before replacing the active `hyper` executable, creating tags, pushing tags, or publishing GitHub releases unless the maintainer explicitly approves that action.
+
 ## 1. Prepare The Release Branch
 
 - Confirm the branch is based on the latest `main`.
 - Confirm `docs/CHANGELOG.md` and `docs/CHANGELOG_ko.md` have a section for the new version.
 - Confirm README install/update instructions still match the release assets.
+- For runtime-packet or generator-template changes, confirm the changelog names the generated `goal.md`, `tasks.md`, and `evidence.md` surface that users will receive through `hyper update`.
 - Confirm no generated local test projects or temporary binaries are staged.
 
 ## 2. Run Local Validation
@@ -24,6 +27,29 @@ If the local Go cache is not writable in a sandboxed environment, use a writable
 ```bash
 GOCACHE=/private/tmp/hyper-go-cache go test -count=1 ./...
 ```
+
+For runtime-packet or generator-template changes, build the local binary and verify packet generation in a disposable project before tagging:
+
+```bash
+GOCACHE=/private/tmp/hyper-go-cache go build -o /private/tmp/hyper-local ./cmd/hyper
+/private/tmp/hyper-local version
+```
+
+The disposable project check must confirm that generated packets include any new user-visible sections across:
+
+- `.hyper/goals/<GOAL-ID>/goal.md`
+- `.hyper/goals/<GOAL-ID>/tasks.md`
+- `.hyper/goals/<GOAL-ID>/evidence.md`
+
+For autonomous runtime-template releases, confirm these generated sections before publishing:
+
+- `Decision Hierarchy`
+- `Autonomous Work Plan`
+- `Autonomous Safety Policy`
+- `Capability Expansion Policy`
+- `Research Evidence Policy`
+- `Loop Progress Policy`
+- `Product Satisfaction Policy`
 
 ## 3. Merge The PR
 

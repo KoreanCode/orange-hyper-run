@@ -923,6 +923,34 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, opts 
 
 %s
 
+## Decision Hierarchy
+
+%s
+
+## Autonomous Work Plan
+
+%s
+
+## Autonomous Safety Policy
+
+%s
+
+## Capability Expansion Policy
+
+%s
+
+## Research Evidence Policy
+
+%s
+
+## Loop Progress Policy
+
+%s
+
+## Product Satisfaction Policy
+
+%s
+
 ## Execution Contract
 
 %s
@@ -961,7 +989,100 @@ func buildGoalDoc(goalID, objective, focus string, plan map[string]string, opts 
 ## Stop When
 
 %s
-`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, runTargetDoc(plan, opts, stage, readiness), buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), executionContractDoc(stage, readiness, growth), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), doneChecklistDoc(stage, readiness, growth), stopCondition)
+`, goalID, runtimeContinuation(similar), objective, product, stage, stageContract, targetUsers, runtimeProtocolDefinition, growthLoopDefinition, buildStyle, currentFocus, runTargetDoc(plan, opts, stage, readiness), buildStageGateDoc(readiness), stageRuntimeBehaviorDoc(stage, buildStyle, readiness), activeCapabilitiesDoc(growth), formatGrowthPrinciples(), decisionHierarchyDoc(stage, readiness), autonomousWorkPlanDoc(objective, stage, readiness, growth), autonomousSafetyPolicyDoc(), capabilityExpansionPolicyDoc(growth), researchEvidencePolicyDoc(), loopProgressPolicyDoc(readiness), productSatisfactionPolicyDoc(stage, buildStyle, readiness), executionContractDoc(stage, readiness, growth), proofContractDoc(stage, buildStyle, readiness), workBoundary, validation, readinessEvidenceExampleAxis(readiness), doneChecklistDoc(stage, readiness, growth), stopCondition)
+}
+
+func decisionHierarchyDoc(stage string, readiness readinessState) string {
+	pressure := firstNonBlank(readiness.NextPressure.AxisName, "current packet objective")
+	reason := compactText(firstNonBlank(readiness.NextPressure.Reason, stageGrowthContract(stage)), 180)
+	return strings.Join([]string{
+		"- Safety boundary: identify destructive, credential, payment, publication, external-cost, production-data, or high-risk actions before implementation; stop for approval when present.",
+		"- Product intent: restate the target user, core loop, current stage, and no-drift boundary as conclusions, not hidden chain-of-thought.",
+		"- Evidence gap: name the current proof gap before editing; current pressure is " + pressure + " - " + reason,
+		"- Smallest step: choose one reversible implementation or evidence step that directly closes the named gap.",
+		"- Validation proof: select the active validator, safest command, smoke check, browser proof, artifact proof, or explicit blocker before closing the packet.",
+		"- Learning signal: record only decisions, patterns, constraints, failures, or capability pressure that should change future packets.",
+	}, "\n")
+}
+
+func autonomousWorkPlanDoc(objective, stage string, readiness readinessState, growth growthState) string {
+	pressure := firstNonBlank(readiness.NextPressure.AxisName, "current objective")
+	validation := "safest available validation command or smoke proof"
+	if len(growth.RuntimeBehavior.ValidationSignals) > 0 {
+		validation = compactText(strings.TrimPrefix(strings.TrimSpace(growth.RuntimeBehavior.ValidationSignals[0]), "- "), 180)
+	} else if readiness.NextPressure.ValidationSignal != "" {
+		validation = compactText(readiness.NextPressure.ValidationSignal, 180)
+	} else if signal := stageValidationSignal(stage); signal != "" {
+		validation = compactText(signal, 180)
+	}
+	return strings.Join([]string{
+		"- Research questions: list only missing product, technical, validation, benchmark, or safety facts that can change this packet.",
+		"- Research evidence: cite local files, command output, docs, or web sources only when they change the chosen step, validation, stop condition, or capability pressure.",
+		"- Chosen implementation step: " + compactText(objective, 180),
+		"- Validation plan: " + validation,
+		"- Harness pressure: record whether this packet repeats a validator, skill, agent, or harness need; do not create structure before repeated evidence.",
+		"- Progress guard: continue only if this packet creates code, evidence, a validator/capability signal, a clearer blocker, or a next-step change for " + pressure + ".",
+	}, "\n")
+}
+
+func autonomousSafetyPolicyDoc() string {
+	return strings.Join([]string{
+		"- Self-directed allowed: read repository files, inspect local project state, research public technical facts, edit workspace files, add focused tests, run non-destructive local validation, and update Hyper evidence files.",
+		"- Approval required: destructive file operations, git history rewrites, commits or pushes not explicitly requested, credential or secret handling, payment or billing actions, publication, release, deployment, production data access, external spend, or long-running background automation.",
+		"- Stop condition: when a packet touches an approval-required action, stop before the action and record the needed decision, owner, and safest fallback in evidence.md and next.md.",
+		"- Safety evidence: every packet should classify its work as self-directed, approval-required, or blocked, and explain the boundary in public conclusions.",
+	}, "\n")
+}
+
+func capabilityExpansionPolicyDoc(growth growthState) string {
+	thresholds := normalizeGrowthThresholds(growth.Thresholds)
+	nextAction := strings.TrimSpace(growth.ActivationPolicy.NextAction)
+	if nextAction == "" {
+		nextAction = growthActivationPolicyFor(growth.Candidates, thresholds).NextAction
+	}
+	return strings.Join([]string{
+		"- Reuse first: run active validators, active harnesses, or the safest existing local validation before adding a new structure.",
+		fmt.Sprintf("- Validator lifecycle: record pressure after %d independent packet(s), review after %d, and require it only after %d or an explicit active capability file.", thresholds.RepeatedSignalGoals, thresholds.PromotableSignalGoals, thresholds.ActiveSignalGoals),
+		fmt.Sprintf("- Harness lifecycle: record harness pressure only when validation, implementation, and work-boundary pressure repeat together; review after %d stable pressures and require after %d.", thresholds.HarnessPromotableSignals, thresholds.HarnessActiveSignals),
+		"- Candidate rule: repeated or promotable candidates are guidance, not finish-gate requirements; keep collecting evidence until activation.",
+		"- Active rule: active capabilities are required behavior for every packet unless explicitly blocked with a concrete reason.",
+		"- Current capability action: " + nextAction,
+	}, "\n")
+}
+
+func researchEvidencePolicyDoc() string {
+	return strings.Join([]string{
+		"- Store research only when it changes the chosen implementation step, validation plan, stop condition, safety boundary, readiness evidence, or capability pressure.",
+		"- Cite the source as a local file path, command output, project artifact, documentation link, or web source when the source affects the decision.",
+		"- Do not store generic summaries, broad background reading, one-off links, or facts that did not change the packet.",
+		"- If research is unnecessary, record `Not needed` with the reason so future agents can distinguish skipped research from missing research.",
+		"- Durable research signals that should affect future packets belong in Learn Notes as a decision, pattern, constraint, or failure.",
+	}, "\n")
+}
+
+func loopProgressPolicyDoc(readiness readinessState) string {
+	pressure := firstNonBlank(readiness.NextPressure.AxisName, "current packet objective")
+	return strings.Join([]string{
+		"- Continue only when this packet produces at least one real progress signal: code change, validation evidence, readiness evidence, active capability signal, clearer blocker, or changed next step.",
+		"- Stop cleanly when the same command, finding, blocker, or recommendation repeats without new evidence or a changed boundary.",
+		"- If validation fails twice for the same reason, record the repeated failure and recommend the smallest fix instead of broadening scope.",
+		"- If no code change is needed, the packet must still produce stronger evidence, a closed blocker, a corrected next action, or a reusable policy change for " + pressure + ".",
+		"- next.md must recommend exactly one next episode and explain why it is the highest-value continuation.",
+	}, "\n")
+}
+
+func productSatisfactionPolicyDoc(stage, buildStyle string, readiness readinessState) string {
+	reviewRule := "record a concrete product satisfaction judgment before closing"
+	if selfReviewRequired(stage, readiness) {
+		reviewRule = "Self Review must pass with product satisfaction, no drift, and validation match before closing"
+	}
+	return strings.Join([]string{
+		"- Target-user fit: judge whether the result helps the target user complete the core loop with less confusion, not just whether code changed.",
+		"- Core loop quality: check the main workflow, command, artifact, or handoff for coherence, clear feedback, and acceptable friction.",
+		"- Quality bar: for " + compactText(firstRuntimeValue(buildStyle, "the current build style"), 120) + ", evaluate visible UI, CLI output, docs, operational handoff, error wording, or generated packet clarity as applicable.",
+		"- No drift: do not add broad features to make the result feel better; choose the smallest polish, evidence, or blocker that improves the current stage.",
+		"- Verdict rule: " + reviewRule + "; use fail when the result works but is awkward, unclear, misleading, or not service-quality enough.",
+	}, "\n")
 }
 
 func runTargetDoc(plan map[string]string, opts runOptions, stage string, readiness readinessState) string {
@@ -1200,11 +1321,11 @@ func buildTasksDoc(goalID, buildStyle, stage string, readiness readinessState, g
 	if activeStructureCount(growth.Candidates) > 0 {
 		activeTask = "- [ ] Run or explicitly block every active capability listed in goal.md\n"
 	}
-	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, selfReviewTask, readinessTask, activeTask)
+	return fmt.Sprintf("# %s Tasks\n\n- [ ] Read plan.md and this runtime packet\n- [ ] Inspect current project structure and recent Hyper evidence\n- [ ] Confirm the stage behavior for `%s`\n- [ ] Apply the Decision Hierarchy before editing: safety, product intent, evidence gap, smallest step, validation, learning signal\n- [ ] Fill the Autonomous Work Plan before editing: research questions, research evidence, chosen step, validation plan, harness pressure, progress guard\n- [ ] Classify the packet with the Autonomous Safety Policy before taking action: self-directed, approval-required, or blocked\n- [ ] Apply the Capability Expansion Policy: reuse active validation, record pressure, or justify candidate promotion without creating premature harnesses\n- [ ] Apply the Research Evidence Policy: store only research that changes step, validation, stop condition, safety, readiness, or capability pressure\n- [ ] Apply the Loop Progress Policy: continue only with code, evidence, capability signal, clearer blocker, or changed next step\n- [ ] Apply the Product Satisfaction Policy before completion: target-user fit, core loop quality, no drift, validation match, verdict\n- [ ] Implement the smallest coherent step toward the current episode\n- [ ] Run validation or record why validation is blocked\n%s%s%s%s%s- [ ] Update evidence.md with validation, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers\n- [ ] Write next.md with exactly one recommended next runtime episode and durable Learn Notes only\n- [ ] Run `hyper complete`; if the finish gate fails, fix this same packet using review.md\n", goalID, stage, browserTask, referenceTask, selfReviewTask, readinessTask, activeTask)
 }
 
 func buildEvidenceDoc(goalID, stage string, readiness readinessState, growth growthState) string {
-	return fmt.Sprintf("# %s Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), selfReviewEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
+	return fmt.Sprintf("# %s Evidence\n\n## Decision Hierarchy Evidence\n\n- Safety boundary: Pending.\n- Product intent: Pending.\n- Evidence gap: Pending.\n- Smallest step: Pending.\n- Validation proof: Pending.\n- Learning signal: Pending.\n\n## Autonomous Work Evidence\n\n- Research questions: Pending.\n- Research evidence: Pending.\n- Chosen implementation step: Pending.\n- Validation plan: Pending.\n- Harness pressure: Pending.\n- Progress guard: Pending.\n\n## Autonomous Safety Evidence\n\n- Classification: Pending. Use self-directed, approval-required, or blocked.\n- Boundary: Pending.\n- Approval needed: Pending.\n- Fallback or stop condition: Pending.\n\n## Capability Expansion Evidence\n\n- Reused validation: Pending.\n- Pressure recorded: Pending.\n- Candidate status change: Pending.\n- Harness decision: Pending.\n- Active capability requirement: Pending.\n\n## Research Evidence Ledger\n\n- Question: Pending.\n- Source: Pending.\n- Finding: Pending.\n- Changed: Pending. State chosen step, validation plan, stop condition, safety boundary, readiness evidence, or capability pressure.\n- Stored as Learn signal: Pending. Use yes/no and explain only when durable.\n\n## Loop Progress Evidence\n\n- Progress signal: Pending. Use code, validation evidence, readiness evidence, active capability signal, clearer blocker, or changed next step.\n- Repeated loop risk: Pending.\n- Continue decision: Pending. Use continue, complete-current, stop, or blocked.\n- Next-step change: Pending.\n\n## Product Satisfaction Evidence\n\n- Target-user fit: Pending.\n- Core loop quality: Pending.\n- Clarity and friction: Pending.\n- No drift: Pending.\n- Validation match: Pending.\n- Verdict: Pending. Use pass or fail.\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\n%s\n\n## Surface Proof Evidence\n\n- Target surface: Pending.\n- Primary user action: Pending.\n- States checked: Pending.\n- Viewports: Pending.\n- Evidence: Pending.\n- Surface risks or gaps: Pending.\n\n%s%s\n## Active Capability Evidence\n\n%s\n\n## Pressure Signals\n\nPending.\n\n## Changed Files\n\nPending.\n\n## Decisions\n\nPending.\n\n## Reusable Patterns\n\nPending.\n\n## Learn Quality Gate\n\n- Keep as memory only if it should change future work boundary, validation, stop conditions, readiness, or capability candidates.\n- Do not record one-off progress, file lists, generic summaries, or \"none\" statements as Learn signals.\n\n## Blocker\n\nPending.\n\n## Notes\n\nPending.\n", goalID, readinessEvidenceTemplate(readiness), referenceBenchmarkEvidenceTemplate(stage, readiness), selfReviewEvidenceTemplate(stage, readiness), activeCapabilityEvidenceTemplate(growth))
 }
 
 func activeCapabilityEvidenceTemplate(growth growthState) string {

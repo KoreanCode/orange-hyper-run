@@ -102,13 +102,17 @@ func surfaceProofGapFromCurrentPacket(root string, state projectState) bool {
 		return false
 	}
 	goalDir := filepath.Join(root, hyperDir, "goals", state.CurrentGoalID)
-	text := strings.Join([]string{
-		sectionBody(readIfExists(filepath.Join(goalDir, "evidence.md")), "Surface Proof Evidence"),
-		sectionBody(readIfExists(filepath.Join(goalDir, "evidence.md")), "Pressure Signals"),
-		sectionBody(readIfExists(filepath.Join(goalDir, "evidence.md")), "Blocker"),
+	evidenceText := readIfExists(filepath.Join(goalDir, "evidence.md"))
+	surfaceValues := []string{}
+	for _, line := range usefulSectionLines(evidenceText, "Surface Proof Evidence") {
+		surfaceValues = append(surfaceValues, surfaceProofValue(line))
+	}
+	text := strings.Join(append(surfaceValues,
+		sectionBody(evidenceText, "Pressure Signals"),
+		sectionBody(evidenceText, "Blocker"),
 		sectionBody(readIfExists(filepath.Join(goalDir, "next.md")), "Recommended Next Goal"),
 		sectionBody(readIfExists(filepath.Join(goalDir, "next.md")), "Learn Notes"),
-	}, "\n")
+	), "\n")
 	normalized := normalizeSentence(text)
 	if !hasAny(normalized, "surface proof", "browser", "screenshot", "visual", "accessibility", "a11y") {
 		return false

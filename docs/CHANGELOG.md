@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.6.7 - 2026-06-16
+
+- Add generated runtime-packet sections for Decision Hierarchy, Autonomous Work Plan, Autonomous Safety Policy, Capability Expansion Policy, Research Evidence Policy, Loop Progress Policy, and Product Satisfaction Policy, with matching task and evidence rows.
+- Document the safer local source propagation path: verify a locally built `hyper` first, then intentionally install it to `~/.local/bin/hyper` only when the user wants that checkout to replace the active PATH executable.
+- Add release-checklist coverage for runtime-template smoke tests and AI-assisted approval boundaries before PATH installs, tags, pushes, or release publishing.
 - Clarify single-packet mode in `hyper status` and `hyper doctor` when `plan.md` has no `Target Stage`, with stage-aware guidance for Service Quality and Sustained Service Quality projects.
 - Make next-packet reasons distinguish between following the packet's `next.md` recommendation and overriding it to close a surface-proof gap first.
 

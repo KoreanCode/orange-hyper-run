@@ -21,7 +21,7 @@ If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by pack
 
 The goal is simple: start from a tiny MVP and keep upgrading it until it can behave like a real service, without every AI session losing the project thread.
 
-Current release: `v0.6.6`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
+Current release: `v0.6.7`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
 
 ## First Run
 
@@ -308,8 +308,28 @@ Make sure `~/.local/bin` is on your `PATH`.
 
 ## Install From Source
 
+For ordinary users, prefer the release installer or `hyper update` because those paths verify release checksums. Use source installs when you are working from a trusted local checkout and deliberately want that checkout to become the active `hyper` on your `PATH`.
+
 ```bash
 go install github.com/KoreanCode/orange-hyper-run/cmd/hyper@latest
+```
+
+From a local checkout, verify the source build before changing your active executable:
+
+```bash
+GOCACHE=/private/tmp/hyper-go-cache go build -o /private/tmp/hyper-local ./cmd/hyper
+/private/tmp/hyper-local version
+```
+
+After the local binary is verified, install it to the standard user bin only when you intentionally want this checkout to replace the active `hyper`:
+
+```bash
+GOBIN="$HOME/.local/bin" GOCACHE=/private/tmp/hyper-go-cache go install ./cmd/hyper
+hash -r
+hyper version
+hyper migrate
+hyper doctor
+hyper status --short
 ```
 
 ## Update

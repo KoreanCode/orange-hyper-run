@@ -141,7 +141,7 @@ func readinessFinishGateFinding(state projectState, evidenceText string, readine
 				return ""
 			}
 		}
-		return "Add sustained quality evidence that records repeated runtime proof or a real blocker."
+		return readinessFindingWithGateContext("Add sustained quality evidence that records repeated runtime proof or a real blocker.", axisName, readiness)
 	}
 	if axis == "open_failure" {
 		if openFailureFinishGateCovered(evidenceText) {
@@ -154,7 +154,28 @@ func readinessFinishGateFinding(state projectState, evidenceText string, readine
 			return ""
 		}
 	}
-	return "Add covered readiness evidence for `" + axisName + "`" + readinessFinishGateHint(axis) + " or record a real blocker."
+	return readinessFindingWithGateContext("Add covered readiness evidence for `"+axisName+"`"+readinessFinishGateHint(axis)+" or record a real blocker.", axisName, readiness)
+}
+
+func readinessFindingWithGateContext(finding, currentAxisName string, readiness readinessState) string {
+	gaps := otherReadinessGateGaps(readiness, currentAxisName)
+	if len(gaps) == 0 {
+		return finding
+	}
+	return finding + " Other current gate gaps: " + strings.Join(gaps, "; ")
+}
+
+func otherReadinessGateGaps(readiness readinessState, currentAxisName string) []string {
+	currentAxisName = strings.TrimSpace(currentAxisName)
+	gaps := []string{}
+	for _, gap := range readiness.StageGate.BlockingGaps {
+		gap = strings.TrimSpace(gap)
+		if gap == "" || (currentAxisName != "" && strings.HasPrefix(gap, currentAxisName+":")) {
+			continue
+		}
+		gaps = append(gaps, gap)
+	}
+	return gaps
 }
 
 func openFailureFinishGateCovered(evidenceText string) bool {

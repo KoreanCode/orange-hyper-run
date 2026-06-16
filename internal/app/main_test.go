@@ -275,6 +275,34 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertNotContains(t, goal, "Gate evidence:")
 	assertContains(t, goal, "## Stage Runtime Behavior")
 	assertContains(t, goal, "## Active Capabilities")
+	assertContains(t, goal, "## Decision Hierarchy")
+	assertContains(t, goal, "- Safety boundary:")
+	assertContains(t, goal, "- Evidence gap:")
+	assertContains(t, goal, "- Smallest step:")
+	assertContains(t, goal, "- Validation proof:")
+	assertContains(t, goal, "not hidden chain-of-thought")
+	assertContains(t, goal, "## Autonomous Work Plan")
+	assertContains(t, goal, "- Research questions:")
+	assertContains(t, goal, "- Harness pressure:")
+	assertContains(t, goal, "- Progress guard:")
+	assertContains(t, goal, "## Autonomous Safety Policy")
+	assertContains(t, goal, "- Self-directed allowed:")
+	assertContains(t, goal, "- Approval required:")
+	assertContains(t, goal, "- Safety evidence:")
+	assertContains(t, goal, "## Capability Expansion Policy")
+	assertContains(t, goal, "- Reuse first:")
+	assertContains(t, goal, "- Validator lifecycle:")
+	assertContains(t, goal, "- Harness lifecycle:")
+	assertContains(t, goal, "- Current capability action:")
+	assertContains(t, goal, "## Research Evidence Policy")
+	assertContains(t, goal, "- Store research only when it changes")
+	assertContains(t, goal, "- Do not store generic summaries")
+	assertContains(t, goal, "## Loop Progress Policy")
+	assertContains(t, goal, "- Continue only when this packet produces")
+	assertContains(t, goal, "- Stop cleanly when")
+	assertContains(t, goal, "## Product Satisfaction Policy")
+	assertContains(t, goal, "- Target-user fit:")
+	assertContains(t, goal, "- Verdict rule:")
 	assertContains(t, goal, "## Proof Contract")
 	assertContains(t, goal, "## Execution Contract")
 	assertContains(t, goal, "## Done Checklist")
@@ -286,8 +314,37 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertNotContains(t, goal, "## Scope")
 	assertNotContains(t, goal, "## Non-goals")
 	evidence := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"))
+	assertContains(t, evidence, "## Decision Hierarchy Evidence")
+	assertContains(t, evidence, "- Safety boundary: Pending.")
+	assertContains(t, evidence, "- Learning signal: Pending.")
+	assertContains(t, evidence, "## Autonomous Work Evidence")
+	assertContains(t, evidence, "- Research questions: Pending.")
+	assertContains(t, evidence, "- Progress guard: Pending.")
+	assertContains(t, evidence, "## Autonomous Safety Evidence")
+	assertContains(t, evidence, "- Classification: Pending. Use self-directed, approval-required, or blocked.")
+	assertContains(t, evidence, "- Approval needed: Pending.")
+	assertContains(t, evidence, "## Capability Expansion Evidence")
+	assertContains(t, evidence, "- Reused validation: Pending.")
+	assertContains(t, evidence, "- Harness decision: Pending.")
+	assertContains(t, evidence, "## Research Evidence Ledger")
+	assertContains(t, evidence, "- Question: Pending.")
+	assertContains(t, evidence, "- Changed: Pending. State chosen step, validation plan, stop condition, safety boundary, readiness evidence, or capability pressure.")
+	assertContains(t, evidence, "## Loop Progress Evidence")
+	assertContains(t, evidence, "- Progress signal: Pending. Use code, validation evidence, readiness evidence, active capability signal, clearer blocker, or changed next step.")
+	assertContains(t, evidence, "- Continue decision: Pending. Use continue, complete-current, stop, or blocked.")
+	assertContains(t, evidence, "## Product Satisfaction Evidence")
+	assertContains(t, evidence, "- Target-user fit: Pending.")
+	assertContains(t, evidence, "- Verdict: Pending. Use pass or fail.")
 	assertContains(t, evidence, "## Readiness Evidence")
 	assertContains(t, evidence, "Core UX: Pending.")
+	tasks := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "tasks.md"))
+	assertContains(t, tasks, "Apply the Decision Hierarchy before editing")
+	assertContains(t, tasks, "Fill the Autonomous Work Plan before editing")
+	assertContains(t, tasks, "Classify the packet with the Autonomous Safety Policy before taking action")
+	assertContains(t, tasks, "Apply the Capability Expansion Policy")
+	assertContains(t, tasks, "Apply the Research Evidence Policy")
+	assertContains(t, tasks, "Apply the Loop Progress Policy")
+	assertContains(t, tasks, "Apply the Product Satisfaction Policy before completion")
 	assertContains(t, evidence, "## Surface Proof Evidence")
 	assertContains(t, evidence, "- Target surface: Pending.")
 	assertContains(t, evidence, "## Active Capability Evidence")
@@ -4553,6 +4610,25 @@ func TestOpenFailureFinishGateAcceptsClosureEvidence(t *testing.T) {
 	}
 }
 
+func TestReadinessFinishGateFindingShowsOtherGateGaps(t *testing.T) {
+	evidence := "# GOAL-0003 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n"
+	readiness := readinessState{
+		NextPressure: readinessPressure{Axis: "security_baseline", AxisName: "Security baseline"},
+		StageGate: readinessStageGate{BlockingGaps: []string{
+			"Security baseline: Basic security, privacy, and misuse boundaries are not yet explicit.",
+			"Deployment readiness: The project is not yet proven runnable outside the local development path.",
+			"Operations and docs: Operational notes, setup, rollback, or handoff docs are not sufficient.",
+		}},
+	}
+
+	finding := readinessFinishGateFinding(projectState{CurrentGoalID: "GOAL-0003"}, evidence, readiness)
+	assertContains(t, finding, "Add covered readiness evidence for `Security baseline`")
+	assertContains(t, finding, "Other current gate gaps:")
+	assertContains(t, finding, "Deployment readiness: The project is not yet proven runnable outside the local development path.")
+	assertContains(t, finding, "Operations and docs: Operational notes, setup, rollback, or handoff docs are not sufficient.")
+	assertNotContains(t, finding, "Other current gate gaps: Security baseline")
+}
+
 func TestStaleFailurePressureDoesNotBlockLaterCleanEvidence(t *testing.T) {
 	plan := map[string]string{
 		"Product":       "Mini Notes API",
@@ -5421,6 +5497,43 @@ func TestSurfaceProofGapOverridesGenericNextGoal(t *testing.T) {
 	assertContains(t, plan.Reason, "prioritize an allowed visual/accessibility proof")
 	assertNotContains(t, plan.Reason, "run the concrete next.md recommendation")
 	assertNotContains(t, plan.Command, "Run active quality checks")
+}
+
+func TestDocumentationOnlySurfaceRiskLabelDoesNotForceVisualProof(t *testing.T) {
+	root := t.TempDir()
+	writeCompletedGoalFiles(t, root, "GOAL-0001",
+		strings.Join([]string{
+			"# GOAL-0001 Evidence",
+			"",
+			"## Validation",
+			"",
+			"`go test ./...` passed.",
+			"",
+			"## Surface Proof Evidence",
+			"",
+			"- Target surface: Documentation and generated-release process surface; no browser UI changed.",
+			"- Primary user action: Maintainer prepares a release checklist update.",
+			"- States checked: Branch preparation, local validation, generated packet proof, and update smoke path.",
+			"- Viewports: Not applicable for documentation-only release process work.",
+			"- Evidence: `rg` proof shows the release-checklist language.",
+			"- Surface risks or gaps: A full disposable-project release dry run is still a useful next step before any tag or publish action.",
+			"",
+			"## Blocker",
+			"",
+			"None for this packet.",
+		}, "\n"),
+		"# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRun a disposable-project release-readiness dry run with the local binary.\n")
+	state := completedGoalState("GOAL-0001", "Sustained Service Quality")
+	derived := goalState{State: "completed", Reason: "Evidence and next recommendation are populated."}
+
+	plan, err := writeNextPacketPlan(root, state, derived, sustainedQualityReadiness(), growthState{})
+	if err != nil {
+		t.Fatalf("write next packet failed: %v", err)
+	}
+
+	assertContains(t, plan.Command, "Run a disposable-project release-readiness dry run")
+	assertNotContains(t, plan.Command, "Create an allowed visual/accessibility surface proof")
+	assertNotContains(t, plan.Reason, "surface-proof gap")
 }
 
 func TestSustainedQualityWithoutTargetStageExplainsSinglePacketMode(t *testing.T) {

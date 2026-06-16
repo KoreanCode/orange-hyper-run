@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.6.7 - 2026-06-16
+
+- Decision Hierarchy, Autonomous Work Plan, Autonomous Safety Policy, Capability Expansion Policy, Research Evidence Policy, Loop Progress Policy, Product Satisfaction Policy를 runtime packet에 생성하고, 이에 맞는 task/evidence row를 함께 생성하게 했습니다.
+- local source propagation 경로를 더 안전하게 문서화했습니다. locally built `hyper`를 먼저 검증한 뒤, 사용자가 해당 checkout을 active PATH executable로 바꾸려는 경우에만 의도적으로 `~/.local/bin/hyper`에 설치하도록 안내합니다.
+- runtime template smoke test와 AI-assisted 작업의 승인 경계를 release checklist에 추가했습니다. PATH install, tag, push, release publish는 명시 승인 전에는 진행하지 않습니다.
 - `plan.md`에 `Target Stage`가 없을 때 `hyper status`와 `hyper doctor`가 single-packet mode를 더 분명하게 설명하고, Service Quality / Sustained Service Quality 단계에 맞춘 안내를 보여줍니다.
 - 다음 packet reason이 packet의 `next.md` 추천을 그대로 따르는 경우와 surface-proof gap을 먼저 닫기 위해 추천을 override하는 경우를 구분하게 했습니다.
 
