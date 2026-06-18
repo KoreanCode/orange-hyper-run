@@ -198,7 +198,7 @@ func statusTargetHintLine(state projectState, stage string) string {
 
 func statusNextPacketPlanPath(state projectState, derived goalState, readiness readinessState) string {
 	if derived.State == "active" && !isFailedFinishGateReason(derived.Reason) {
-		return "pending until `hyper complete`"
+		return "pending until the agent finish gate passes"
 	}
 	if strings.TrimSpace(state.CurrentGoalID) == "" && !(state.AutoContinue && runUntilReached(state, readiness)) {
 		return "pending until `hyper run`"
@@ -461,9 +461,9 @@ func statusActionHintWithRefresh(state projectState, derived goalState, readines
 	}
 	if derived.State == "active" {
 		if isFailedFinishGateReason(derived.Reason) {
-			return "Fix review.md findings in this same packet, then run `hyper complete` again."
+			return "Let the agent fix review.md findings in this same packet, then rerun the finish gate internally."
 		}
-		return "Update evidence.md and next.md for this packet, then run `hyper complete`."
+		return "Let the agent finish this packet: update evidence.md and next.md, then run the finish gate internally."
 	}
 	if terminalPacketState(derived.State) {
 		return "Resolve the " + derived.State + " packet state, then choose a deliberate manual follow-up."
@@ -537,7 +537,7 @@ func statusDoNotDoYetWithRefresh(state projectState, derived goalState, readines
 	}
 	if derived.State == "active" {
 		if isFailedFinishGateReason(derived.Reason) {
-			return "Do not start another `hyper run`; fix review.md findings in the same packet and run `hyper complete` again."
+			return "Do not start another `hyper run`; the agent must fix review.md findings in the same packet and rerun the finish gate."
 		}
 		return "Do not start another `hyper run` until this packet is completed or blocked."
 	}
@@ -545,7 +545,7 @@ func statusDoNotDoYetWithRefresh(state projectState, derived goalState, readines
 		return "Do not continue automatically while the runtime packet is " + derived.State + "; resolve it or start a manual follow-up intentionally."
 	}
 	if strings.TrimSpace(state.Status) != "" && strings.TrimSpace(state.Status) != strings.TrimSpace(derived.State) {
-		return "Do not create another packet until `hyper repair` or `hyper complete` reconciles state."
+		return "Do not create another packet until `hyper repair` or the finish gate reconciles state."
 	}
 	if state.AutoContinue && runUntilReached(state, readiness) {
 		return targetReachedGuard(state)
@@ -817,9 +817,9 @@ func statusNextCommandWithRefresh(state projectState, derived goalState, readine
 	}
 	if derived.State == "active" {
 		if isFailedFinishGateReason(derived.Reason) {
-			return "fix " + strings.TrimSuffix(state.CurrentGoalPath, "goal.md") + "review.md, then run `hyper complete`"
+			return "agent fixes " + strings.TrimSuffix(state.CurrentGoalPath, "goal.md") + "review.md, then reruns the finish gate"
 		}
-		return "update " + strings.TrimSuffix(state.CurrentGoalPath, "goal.md") + "evidence.md and next.md, then run `hyper complete`"
+		return "agent finishes " + strings.TrimSuffix(state.CurrentGoalPath, "goal.md") + "evidence.md and next.md, then runs the finish gate"
 	}
 	if terminalPacketState(derived.State) {
 		return "hyper status --short"

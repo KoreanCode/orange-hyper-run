@@ -212,7 +212,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"Readiness gate: " + readinessGateSummary(readiness),
 				"Readiness pressure: " + readinessPressureSummary(readiness),
 				"Planned action: " + nextPlan.Action,
-				"Next action: " + nextPlan.Command,
+				"Next action: " + nextPacketActionDisplay(nextPlan),
 				"Why: " + nextPlan.Reason,
 				"Continuation guard: " + compactText(nextPacketGuard(stopState, nextPlan), 220),
 				nextPacketProgressGuardLine(stopState, nextPlan),
@@ -221,7 +221,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"No runtime packet created.",
 				"",
 				"Next:",
-				"  " + nextPlan.Command,
+				"  " + nextPacketActionDisplay(nextPlan),
 				"",
 			}), "\n")), nil
 		}
@@ -248,7 +248,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"Readiness gate: " + readinessGateSummary(readiness),
 				"Readiness pressure: " + readinessPressureSummary(readiness),
 				"Planned action: " + nextPlan.Action,
-				"Next action: " + nextPlan.Command,
+				"Next action: " + nextPacketActionDisplay(nextPlan),
 				"Why: " + nextPlan.Reason,
 				"Continuation guard: " + compactText(nextPacketGuard(stopState, nextPlan), 220),
 				nextPacketProgressGuardLine(stopState, nextPlan),
@@ -257,7 +257,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"No runtime packet created.",
 				"",
 				"Next:",
-				"  " + nextPlan.Command,
+				"  " + nextPacketActionDisplay(nextPlan),
 				"",
 			}), "\n")), nil
 		}
@@ -285,7 +285,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"Auto learn: " + formatAutoLearn(autoLearn),
 				"Readiness pressure: " + readinessPressureSummary(readiness),
 				"Planned action: " + nextPlan.Action,
-				"Next action: " + nextPlan.Command,
+				"Next action: " + nextPacketActionDisplay(nextPlan),
 				"Why: " + nextPlan.Reason,
 				"Continuation guard: " + compactText(nextPacketGuard(advanceState, nextPlan), 220),
 				nextPacketProgressGuardLine(advanceState, nextPlan),
@@ -294,7 +294,7 @@ func runHyper(fsys fsRoot, opts runOptions) (commandOutput, *hyperError) {
 				"No runtime packet created.",
 				"",
 				"Next:",
-				"  " + nextPlan.Command,
+				"  " + nextPacketActionDisplay(nextPlan),
 				"",
 			}), "\n")), nil
 		}
@@ -563,7 +563,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 			} else {
 				failedDerived = goalState{
 					State:  "active",
-					Reason: "Finish gate failed. Fix review.md findings, then run `hyper complete` again.",
+					Reason: "Finish gate failed. Fix review.md findings, then rerun the agent finish gate.",
 				}
 			}
 			growthForPlan := growthStateForStatus(root)
@@ -656,7 +656,6 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	if result.MemoryCount == 0 {
 		line = "No learnable signal yet."
 	}
-	nextCommand := nextPlan.Command
 	nextReason := nextPlan.Reason
 	lines := []string{
 		"Completed runtime packet: " + state.CurrentGoalID,
@@ -673,7 +672,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
 		"Planned action: " + nextPlan.Action,
-		"Next action: " + nextCommand,
+		"Next action: " + nextPacketActionDisplay(nextPlan),
 		"Why: " + nextReason,
 		"Continuation guard: " + compactText(nextPacketGuard(state, nextPlan), 220),
 	}
@@ -685,7 +684,7 @@ func completeHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		line,
 		"",
 	)
-	lines = append(lines, nextCommandBlock(nextCommand, "hyper status --short")...)
+	lines = append(lines, nextPacketCommandBlock(nextPlan, "hyper status --short")...)
 	lines = append(lines, "")
 	return stdout(strings.Join(lines, "\n")), nil
 }
@@ -743,7 +742,7 @@ func renderFailedFinishGateResumeBlock(root, goalID string, failed goalState) []
 		"Next:",
 		"  update "+displayRelPath(hyperDir, "goals", goalID, "evidence.md"),
 		"  update "+displayRelPath(hyperDir, "goals", goalID, "next.md"),
-		"  hyper complete",
+		"  rerun the agent finish gate internally",
 		"",
 	)
 	return lines
@@ -772,7 +771,7 @@ func blockingActiveGoal(root string, state projectState) string {
 			"Fix the same packet before creating another one:",
 			"  update "+displayRelPath(hyperDir, "goals", state.CurrentGoalID, "evidence.md"),
 			"  update "+displayRelPath(hyperDir, "goals", state.CurrentGoalID, "next.md"),
-			"  hyper complete",
+			"  rerun the agent finish gate internally",
 		)
 		return strings.Join(lines, "\n")
 	}
@@ -786,7 +785,7 @@ func blockingActiveGoal(root string, state projectState) string {
 			"Repair it before creating another packet:",
 			"  hyper status --short",
 			"  hyper repair",
-			"  hyper complete",
+			"  rerun the agent finish gate if the packet still needs closure",
 		}, "\n")
 	}
 	if state.Status != "" && state.Status != "active" {
@@ -803,9 +802,9 @@ func blockingActiveGoal(root string, state projectState) string {
 			"Reason: " + derived.Reason,
 			"",
 			"Finish it before creating another packet:",
-			"  hyper complete",
+			"  rerun the agent finish gate",
 			"  if the finish gate fails, fix " + strings.TrimSuffix(path, "goal.md") + "review.md",
-			"  then run hyper complete again",
+			"  then rerun the agent finish gate again",
 		}, "\n")
 	}
 	return strings.Join([]string{
@@ -816,7 +815,7 @@ func blockingActiveGoal(root string, state projectState) string {
 		"  hyper resume",
 		"  update " + strings.TrimSuffix(path, "goal.md") + "evidence.md",
 		"  update " + strings.TrimSuffix(path, "goal.md") + "next.md",
-		"  hyper complete",
+		"  rerun the agent finish gate internally",
 	}, "\n")
 }
 

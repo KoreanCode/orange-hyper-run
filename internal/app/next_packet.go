@@ -168,7 +168,7 @@ func nextPacketGuard(state projectState, plan plannedNextPacket) string {
 		}
 		return "Do not run `hyper advance` unless the user accepts the stage change."
 	case "complete-current":
-		return "Do not create a new runtime packet; fix the current packet evidence, next notes, and review findings before running `hyper complete`."
+		return "Do not create a new runtime packet; the agent must fix the current packet evidence, next notes, and review findings before rerunning the finish gate."
 	case "run":
 		return "Create the next runtime packet only after the current packet has passed the finish gate and completed."
 	case "stop":
@@ -221,7 +221,7 @@ func nextPacketCodexContinuation(state projectState, plan plannedNextPacket) str
 		}
 		return "Pause here. Tell the user the stage gate is ready and run `hyper advance` only after the user accepts the stage change."
 	case "complete-current":
-		return "Stay in the current runtime packet. Fix evidence, next notes, and review findings, then run `hyper complete` again."
+		return "Stay in the current runtime packet. Fix evidence, next notes, and review findings, then run `hyper complete` internally as the agent finish gate."
 	case "run":
 		return "Continue automatically by running the command above, then read the newly generated runtime packet and execute it checkpoint by checkpoint."
 	case "stop":
@@ -235,6 +235,32 @@ func nextPacketCodexContinuation(state projectState, plan plannedNextPacket) str
 	default:
 		return "Review `hyper status --short` before continuing."
 	}
+}
+
+func nextPacketActionDisplay(plan plannedNextPacket) string {
+	if plan.Action == "complete-current" {
+		return "agent finish current packet"
+	}
+	return plan.Command
+}
+
+func nextPacketCommandBlock(plan plannedNextPacket, fallbacks ...string) []string {
+	if plan.Action != "complete-current" {
+		commands := append([]string{plan.Command}, fallbacks...)
+		return nextCommandBlock(commands...)
+	}
+	lines := []string{"Next:"}
+	lines = append(lines, "  Agent: fix review.md/evidence.md/next.md in this packet, then run the finish gate internally.")
+	seen := map[string]bool{}
+	for _, command := range fallbacks {
+		command = strings.TrimSpace(command)
+		if command == "" || seen[command] {
+			continue
+		}
+		seen[command] = true
+		lines = append(lines, "  "+command)
+	}
+	return lines
 }
 
 func terminalPacketState(state string) bool {

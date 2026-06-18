@@ -89,7 +89,7 @@ func failedFinishGateGoalState(root, goalID string) (goalState, bool) {
 	reviewPath := displayRelPath(hyperDir, "goals", goalID, "review.md")
 	return goalState{
 		State:  "active",
-		Reason: "Finish gate failed. Fix " + reviewPath + " findings, then run `hyper complete` again.",
+		Reason: "Finish gate failed. Fix " + reviewPath + " findings, then rerun the agent finish gate.",
 	}, true
 }
 
@@ -480,7 +480,7 @@ func finishGateReturnPath(result finishGateResult) string {
 	case "waiting_user":
 		return "Packet is waiting for user input. Report the waiting reason and follow `.hyper/next-packet.md` before starting more work."
 	default:
-		return "Stay in the same runtime packet. Update `evidence.md` and `next.md`, then run `hyper complete` again."
+		return "Stay in the same runtime packet. Update `evidence.md` and `next.md`, then rerun the agent finish gate."
 	}
 }
 
@@ -542,7 +542,7 @@ func finishGateFailureMessage(state projectState, result finishGateResult) strin
 		"Next:",
 		"  update "+goalDir+"evidence.md",
 		"  update "+goalDir+"next.md",
-		"  hyper complete",
+		"  rerun the agent finish gate (`hyper complete`)",
 	)
 	return strings.Join(lines, "\n")
 }

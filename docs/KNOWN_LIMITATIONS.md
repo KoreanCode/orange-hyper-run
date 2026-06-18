@@ -6,7 +6,7 @@ Hyper Run is usable, but some parts are still early. This document is intentiona
 
 - Creating project-local Hyper Run state with `hyper init`.
 - Generating runtime packets with `hyper run`.
-- Closing packets with `hyper complete`.
+- Closing packets through the agent finish gate (`hyper complete` for agent/manual recovery).
 - Guarded auto continuation from `plan.md` `Target Stage` or `hyper run --auto --until <stage>`.
 - Explicit stage advancement with `hyper advance`.
 - Reading status and readiness with `hyper status`.
@@ -36,4 +36,4 @@ Hyper Run is usable, but some parts are still early. This document is intentiona
 
 - Hyper Run creates runtime packets; it does not force an AI agent to behave correctly.
 - Codex Desktop routing is a thin compatibility layer. The source of truth remains `plan.md`, `.hyper/`, and the native CLI.
-- Good evidence still depends on the agent or developer updating `evidence.md` and `next.md` honestly.
+- Good evidence still depends on the agent updating `evidence.md` and `next.md` honestly; manual developers can still do the same for recovery/debugging.

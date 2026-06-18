@@ -140,7 +140,7 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Readiness gate: "+readinessGateSummary(updatedReadiness),
 		"Readiness pressure: "+readinessPressureSummary(updatedReadiness),
 		"Planned action: "+nextPlan.Action,
-		"Next action: "+nextPlan.Command,
+		"Next action: "+nextPacketActionDisplay(nextPlan),
 		"Why: "+nextPlan.Reason,
 		"Continuation guard: "+compactText(nextPacketGuard(state, nextPlan), 220),
 	)
@@ -151,7 +151,7 @@ func advanceHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Next packet plan: "+displayRelPath(hyperDir, "next-packet.md"),
 		"",
 		"Next:",
-		"  "+nextPlan.Command,
+		"  "+nextPacketActionDisplay(nextPlan),
 	)
 	if nextPlan.Command != "hyper status --short" {
 		lines = append(lines, "  hyper status --short")

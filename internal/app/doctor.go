@@ -506,9 +506,9 @@ func doctorActionForCheck(check doctorCheck) string {
 		return "Run `hyper migrate`, then run `hyper doctor` again."
 	case "current packet":
 		if strings.Contains(detail, "finish gate failed") {
-			return "Fix review.md findings in the same packet, then run `hyper complete` again."
+			return "Let the agent fix review.md findings in the same packet, then rerun the finish gate internally."
 		}
-		return "Finish the current packet: update evidence.md and next.md, then run `hyper complete`."
+		return "Let the agent finish the current packet: update evidence.md and next.md, then run the finish gate internally."
 	case "growth migration", "readiness state":
 		return "Run `hyper migrate`, then run `hyper doctor` again."
 	case "next packet plan":

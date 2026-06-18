@@ -1,9 +1,45 @@
 .DS_Store
 *.swp
 *.swo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.csr
+*.p8
+*.p12
+*.asc
+*.sig
+*.bundle
+
+# Logs, coverage, and local diagnostics
+*.log
+*.out
+coverage/
+coverage.out
+*.prof
+*.test
+
+# Build and package outputs
 .hyper/
 !examples/**/.hyper/
 !examples/**/.hyper/**
 dist/
+bin/
+tmp/
+*.tar.gz
+*.zip
+*.dmg
+*.exe
+
+# Tool and editor caches
+.cache/
+.tmp/
+.vscode/
+.idea/
 HYPER_RUN_PRODUCT_PLAN.md
 HYPER_RUN_PRODUCT_PLAN_ko.md

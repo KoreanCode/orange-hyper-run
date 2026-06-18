@@ -32,8 +32,8 @@ Command mapping:
 - `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.
 - `$hyper run [focus]`: run `hyper run [focus]`; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target until that target stage's readiness proof is complete. Read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.
 - `$hyper run --auto --until <stage> [focus]`: run `hyper run --auto --until <stage> [focus]` as an explicit target override, then continue packet by packet using `.hyper/next-packet.md` until the target stage proof is complete or a guard stops progress.
-- `$hyper complete`: run `hyper complete` after evidence and next notes are written so project readiness is refreshed.
-- `$hyper status`: run `hyper status` and use the dashboard to decide whether to complete, repair, advance, migrate, or start the next packet.
+- `$hyper complete`: advanced/recovery command. Run it only as the agent finish gate after evidence and next notes are written so project readiness is refreshed.
+- `$hyper status`: run `hyper status` and use the dashboard to decide whether the agent should finish the packet, repair, advance, migrate, or start the next packet.
 - `$hyper status --short`: run `hyper status --short` when the user wants only the current stage, gate, proof, and next action.
 - `$hyper migrate`: run `hyper migrate` after CLI updates or when growth state/candidates look stale; then check `hyper status --short`.
 - `$hyper advance`: run `hyper advance` only after `hyper status` shows the stage gate is ready and either `.hyper/next-packet.md` is continuing an active auto target or the user accepts the stage change.
@@ -48,7 +48,7 @@ Execution rules:
 4. Run the safest available validation, or record why validation is blocked.
 5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.
 6. Write the active runtime packet's `next.md` with the next recommended runtime episode and Learn Notes.
-7. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.
+7. Run the agent finish gate with `hyper complete`; if it fails, fix the same packet using `review.md` before continuing.
 8. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.
-9. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.
+9. Do not start another `hyper run` before evidence, next notes, and the agent finish gate are done.
 10. Use `hyper advance` only when readiness says the gate is ready and either the planned auto target authorizes continuation or the user accepts the stage change.

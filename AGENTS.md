@@ -24,9 +24,9 @@ Required workflow:
 5. Run the safest available validation or record why validation is blocked.
 6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
 7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.
-8. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.
+8. Run the agent finish gate with `hyper complete`; if it fails, fix the same packet using `review.md` before continuing.
 9. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.
-10. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.
+10. Do not start another `hyper run` until evidence, next notes, and the agent finish gate are done.
 
 Use `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.
 

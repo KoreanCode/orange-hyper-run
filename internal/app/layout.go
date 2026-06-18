@@ -104,9 +104,9 @@ func agentsHyperRunSection() string {
 		"5. Run the safest available validation or record why validation is blocked.",
 		"6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.",
 		"7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.",
-		"8. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.",
+		"8. Run the agent finish gate with `hyper complete`; if it fails, fix the same packet using `review.md` before continuing.",
 		"9. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.",
-		"10. Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.",
+		"10. Do not start another `hyper run` until evidence, next notes, and the agent finish gate are done.",
 		"",
 		"Use `hyper init` only for project setup. Do not pass the project objective to `hyper init`; put product context in `plan.md` and use `hyper run [focus]` for the current execution focus.",
 		"",
@@ -186,8 +186,8 @@ func hyperRouterSkillGuide() string {
 		"- `$hyper init`: run `hyper init` in the current project root. Ask the user to review `plan.md` before deep implementation.",
 		"- `$hyper run [focus]`: run `hyper run [focus]`; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target until that target stage's readiness proof is complete. Read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.",
 		"- `$hyper run --auto --until <stage> [focus]`: run `hyper run --auto --until <stage> [focus]` as an explicit target override, then continue packet by packet using `.hyper/next-packet.md` until the target stage proof is complete or a guard stops progress.",
-		"- `$hyper complete`: run `hyper complete` after evidence and next notes are written so project readiness is refreshed.",
-		"- `$hyper status`: run `hyper status` and use the dashboard to decide whether to complete, repair, advance, migrate, or start the next packet.",
+		"- `$hyper complete`: advanced/recovery command. Run it only as the agent finish gate after evidence and next notes are written so project readiness is refreshed.",
+		"- `$hyper status`: run `hyper status` and use the dashboard to decide whether the agent should finish the packet, repair, advance, migrate, or start the next packet.",
 		"- `$hyper status --short`: run `hyper status --short` when the user wants only the current stage, gate, proof, and next action.",
 		"- `$hyper migrate`: run `hyper migrate` after CLI updates or when growth state/candidates look stale; then check `hyper status --short`.",
 		"- `$hyper advance`: run `hyper advance` only after `hyper status` shows the stage gate is ready and either `.hyper/next-packet.md` is continuing an active auto target or the user accepts the stage change.",
@@ -200,11 +200,11 @@ func hyperRouterSkillGuide() string {
 		"2. Read the generated runtime packet in `goal.md` and the checklist in `tasks.md` before editing project files.",
 		"3. Keep implementation scoped to the current runtime episode.",
 		"4. Run the safest available validation, or record why validation is blocked.",
-		"5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, decisions, reusable patterns, and blockers.",
+		"5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.",
 		"6. Write the active runtime packet's `next.md` with the next recommended runtime episode and Learn Notes.",
-		"7. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.",
+		"7. Run the agent finish gate with `hyper complete`; if it fails, fix the same packet using `review.md` before continuing.",
 		"8. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.",
-		"9. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.",
+		"9. Do not start another `hyper run` before evidence, next notes, and the agent finish gate are done.",
 		"10. Use `hyper advance` only when readiness says the gate is ready and either the planned auto target authorizes continuation or the user accepts the stage change.",
 		"",
 	}, "\n")
@@ -231,13 +231,13 @@ func hyperRunSkillGuide() string {
 		"- Run the safest available validation or record why validation is blocked.",
 		"- Update `evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.",
 		"- Write `next.md` with the next recommended runtime episode and Learn Notes.",
-		"- Run `hyper complete` after evidence and next notes are written; if the finish gate fails, fix the same packet using `review.md`.",
+		"- Run `hyper complete` internally as the agent finish gate after evidence and next notes are written; if it fails, fix the same packet using `review.md`.",
 		"- In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue through the planned command until a guard stops progress.",
 		"- If `.hyper/next-packet.md` says `Action: run`, execute only its `Command` and continue the next packet.",
 		"- If it says `Action: advance`, continue only when the Stage Advancement Review authorizes the active auto target or the user accepts the stage change.",
 		"- If it says `Action: complete-current`, stay in the same packet and fix evidence.md, next.md, and review.md findings.",
 		"- If it says `Action: stop`, report the reason shown in `.hyper/next-packet.md`; this may be target proof complete, blocked, waiting for user input, or another stop condition.",
-		"- Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.",
+		"- Do not start another `hyper run` until evidence, next notes, and the agent finish gate are done.",
 		"",
 	}, "\n")
 }
@@ -285,10 +285,10 @@ func codexDesktopGuide() string {
 		"5. Run the smallest safe validation available.",
 		"6. Update `evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.",
 		"7. Update `next.md` with the next recommended runtime episode and Learn Notes.",
-		"8. Run `hyper complete`; if the finish gate fails, fix the same packet using `review.md` before continuing.",
+		"8. Run the agent finish gate with `hyper complete`; if it fails, fix the same packet using `review.md` before continuing.",
 		"9. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.",
 		"10. Stop early for destructive actions, missing credentials, unclear product scope, or repeated validation failure.",
-		"11. Do not start another `hyper run` before evidence, next notes, and `hyper complete` are done.",
+		"11. Do not start another `hyper run` before evidence, next notes, and the agent finish gate are done.",
 		"",
 		"## $hyper doctor",
 		"",
@@ -311,7 +311,7 @@ func codexDesktopGuide() string {
 }
 
 func hyperRunCommandGuide() string {
-	return "# $hyper run\n\nMeaning: create the next Hyper Run runtime packet, execute the current episode, record evidence, capture Learn signals, and let repeated pressure become future structure. If `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target until that target stage's readiness proof is complete and remains the continuation command in `.hyper/next-packet.md` until a guard stops progress.\n\nGrowth order: " + growthLoopDefinition + "\n\nPrinciples: " + growthPrinciplesLine() + "\n\nRequired flow:\n\n1. Execute `hyper run [focus]`.\n2. Open the generated runtime packet under `.hyper/goals/<GOAL-ID>/`.\n3. Implement the smallest coherent step that satisfies the current episode in `goal.md`.\n4. Mark real progress in `evidence.md`, including validation, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.\n5. Write the next recommended runtime episode and Learn Notes in `next.md`.\n6. Execute `hyper complete` to close the packet and refresh Learn, Growth, and Readiness.\n7. Read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned command: if it says `run`, continue only through that command; if it says `advance`, continue only when the active auto target authorizes it after the Stage Advancement Review, otherwise wait for user review; if it says `complete-current`, fix review.md/evidence.md/next.md in the same packet and run `hyper complete` again; if it says `stop`, report the stop reason from `.hyper/next-packet.md` and wait.\n\nCompletion requires implementation evidence, Learn signals where applicable, a next recommendation, and a completed Hyper packet.\n"
+	return "# $hyper run\n\nMeaning: create the next Hyper Run runtime packet, execute the current episode, record evidence, capture Learn signals, and let repeated pressure become future structure. If `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target until that target stage's readiness proof is complete and remains the continuation command in `.hyper/next-packet.md` until a guard stops progress.\n\nGrowth order: " + growthLoopDefinition + "\n\nPrinciples: " + growthPrinciplesLine() + "\n\nRequired flow:\n\n1. Execute `hyper run [focus]`.\n2. Open the generated runtime packet under `.hyper/goals/<GOAL-ID>/`.\n3. Implement the smallest coherent step that satisfies the current episode in `goal.md`.\n4. Mark real progress in `evidence.md`, including validation, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.\n5. Write the next recommended runtime episode and Learn Notes in `next.md`.\n6. Run `hyper complete` internally as the agent finish gate to close the packet and refresh Learn, Growth, and Readiness.\n7. Read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned command: if it says `run`, continue only through that command; if it says `advance`, continue only when the active auto target authorizes it after the Stage Advancement Review, otherwise wait for user review; if it says `complete-current`, fix review.md/evidence.md/next.md in the same packet and rerun the agent finish gate; if it says `stop`, report the stop reason from `.hyper/next-packet.md` and wait.\n\nCompletion requires implementation evidence, Learn signals where applicable, a next recommendation, and a completed Hyper packet.\n"
 }
 
 func ensureMemoryFiles(root string) *hyperError {

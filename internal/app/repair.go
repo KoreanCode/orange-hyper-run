@@ -163,7 +163,7 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Readiness gate: " + readinessGateSummary(readiness),
 		"Readiness pressure: " + readinessPressureSummary(readiness),
 		"Planned action: " + nextPlan.Action,
-		"Next action: " + nextPlan.Command,
+		"Next action: " + nextPacketActionDisplay(nextPlan),
 		"Continuation guard: " + compactText(nextPacketGuard(state, nextPlan), 220),
 	}
 	if progressLine := nextPacketProgressGuardLine(state, nextPlan); progressLine != "" {
@@ -173,7 +173,7 @@ func repairHyper(fsys fsRoot) (commandOutput, *hyperError) {
 		"Next packet plan: "+displayRelPath(hyperDir, "next-packet.md"),
 		"",
 	)
-	lines = append(lines, nextCommandBlock(nextPlan.Command, "hyper status --short")...)
+	lines = append(lines, nextPacketCommandBlock(nextPlan, "hyper status --short")...)
 	lines = append(lines, "")
 	return stdout(strings.Join(lines, "\n")), nil
 }

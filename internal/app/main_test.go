@@ -367,8 +367,8 @@ func TestAutoRunHandoffExplainsCompleteCurrentWithoutRepairCommandConfusion(t *t
 	if err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
-	assertContains(t, out.Stdout, "After `hyper complete` passes")
-	assertContains(t, out.Stdout, "if Action is `complete-current`, stay in the same packet, fix review.md/evidence.md/next.md, and run `hyper complete` again")
+	assertContains(t, out.Stdout, "After the agent finish gate (`hyper complete`) passes")
+	assertContains(t, out.Stdout, "if Action is `complete-current`, stay in the same packet, fix review.md/evidence.md/next.md, and rerun the agent finish gate")
 	assertNotContains(t, out.Stdout, "if Action is `complete-current`, repair the current packet before continuing")
 }
 
@@ -435,7 +435,7 @@ func TestDoctorReportsProjectState(t *testing.T) {
 	assertContains(t, out.Stdout, "Current packet")
 	assertContains(t, out.Stdout, "Summary:")
 	assertContains(t, out.Stdout, "Next:")
-	assertContains(t, out.Stdout, "Finish the current packet: update evidence.md and next.md, then run `hyper complete`.")
+	assertContains(t, out.Stdout, "Let the agent finish the current packet: update evidence.md and next.md, then run the finish gate internally.")
 }
 
 func TestDoctorDoesNotRequireNextPacketBeforeFirstRuntimePacket(t *testing.T) {
@@ -905,8 +905,8 @@ func TestStatusShortPrioritizesActivePacketGuard(t *testing.T) {
 	}
 
 	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
-	assertContains(t, short, "Plan file: pending until `hyper complete`")
-	assertContains(t, short, "Next: update .hyper/goals/GOAL-0012/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, short, "Plan file: pending until the agent finish gate passes")
+	assertContains(t, short, "Next: agent finishes .hyper/goals/GOAL-0012/evidence.md and next.md, then runs the finish gate")
 	assertContains(t, short, "Guard: Do not start another `hyper run` until this packet is completed or blocked.")
 	assertNotContains(t, short, "Guard: accept the stage change before running `hyper advance`")
 }
@@ -953,7 +953,7 @@ func TestRunBlocksPendingActiveGoal(t *testing.T) {
 		t.Fatal("expected pending active goal to block next run")
 	}
 	assertContains(t, err.Message, "Current runtime packet is still active")
-	assertContains(t, err.Message, "hyper complete")
+	assertContains(t, err.Message, "rerun the agent finish gate internally")
 }
 
 func TestRunBlocksCompletedEvidenceBeforeFinishGate(t *testing.T) {
@@ -968,7 +968,7 @@ func TestRunBlocksCompletedEvidenceBeforeFinishGate(t *testing.T) {
 		t.Fatal("expected finish gate guard to block next run")
 	}
 	assertContains(t, err.Message, "has not passed the finish gate yet")
-	assertContains(t, err.Message, "hyper complete")
+	assertContains(t, err.Message, "rerun the agent finish gate")
 	assertContains(t, err.Message, "review.md")
 	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
 		t.Fatal("new runtime packet should not be created before the finish gate passes")
@@ -1008,7 +1008,7 @@ func TestRepairDoesNotBypassFailedFinishGate(t *testing.T) {
 		t.Fatalf("migrate after failed finish gate failed: %v", err)
 	}
 	assertContains(t, migrate.Stdout, "Planned action: complete-current")
-	assertContains(t, migrate.Stdout, "Next action: hyper complete")
+	assertContains(t, migrate.Stdout, "Next action: agent finish current packet")
 	assertContains(t, migrate.Stdout, "Next packet plan: .hyper/next-packet.md (complete-current)")
 	nextPacketAfterMigrate := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPacketAfterMigrate, "Action: complete-current")
@@ -1053,7 +1053,7 @@ func TestRepairDoesNotBypassFailedFinishGate(t *testing.T) {
 	assertContains(t, repair.Stdout, "State: repaired")
 	assertContains(t, repair.Stdout, "To: active")
 	assertContains(t, repair.Stdout, "Planned action: complete-current")
-	assertContains(t, repair.Stdout, "Next action: hyper complete")
+	assertContains(t, repair.Stdout, "Next action: agent finish current packet")
 	assertContains(t, repair.Stdout, "Next packet plan: .hyper/next-packet.md")
 	nextPacket := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPacket, "Action: complete-current")
@@ -1151,7 +1151,7 @@ func TestCompleteRunsFinishGateBeforeLearning(t *testing.T) {
 	assertContains(t, err.Message, "Finish gate failed for GOAL-0001")
 	assertContains(t, err.Message, "Record active capability evidence for: validator-smoke")
 	assertContains(t, err.Message, "Planned action: complete-current")
-	assertContains(t, err.Message, "Continuation guard: Do not create a new runtime packet; fix the current packet evidence, next notes, and review findings before running `hyper complete`.")
+	assertContains(t, err.Message, "Continuation guard: Do not create a new runtime packet; the agent must fix the current packet evidence, next notes, and review findings before rerunning the finish gate.")
 	assertContains(t, err.Message, "Next packet plan: .hyper/next-packet.md")
 	review := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "review.md"))
 	assertContains(t, review, "Status: failed")
@@ -1167,15 +1167,15 @@ func TestCompleteRunsFinishGateBeforeLearning(t *testing.T) {
 		t.Fatalf("doctor after finish gate failure failed: %v", doctorErr)
 	}
 	assertContains(t, doctor.Stdout, "[OK] Next packet plan: .hyper/next-packet.md matches current state")
-	assertContains(t, doctor.Stdout, "Fix review.md findings in the same packet, then run `hyper complete` again.")
+	assertContains(t, doctor.Stdout, "Let the agent fix review.md findings in the same packet, then rerun the finish gate internally.")
 	assertNotContains(t, doctor.Stdout, "Finish the current packet: update evidence.md and next.md")
 	status, statusErr := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
 	if statusErr != nil {
 		t.Fatalf("status after finish gate failure failed: %v", statusErr)
 	}
 	assertContains(t, status.Stdout, "Plan: complete-current")
-	assertContains(t, status.Stdout, "Next: fix .hyper/goals/GOAL-0001/review.md, then run `hyper complete`")
-	assertContains(t, status.Stdout, "Do: Fix review.md findings in this same packet, then run `hyper complete` again.")
+	assertContains(t, status.Stdout, "Next: agent fixes .hyper/goals/GOAL-0001/review.md, then reruns the finish gate")
+	assertContains(t, status.Stdout, "Do: Let the agent fix review.md findings in this same packet, then rerun the finish gate internally.")
 	assertContains(t, status.Stdout, "Review findings:")
 	assertContains(t, status.Stdout, "Record active capability evidence for: validator-smoke")
 	assertNotContains(t, status.Stdout, "Refresh:")
@@ -1853,14 +1853,14 @@ func TestRunUsesPlanTargetStageAsDefaultAutoTarget(t *testing.T) {
 	}
 	assertContains(t, out.Stdout, "Run mode: auto until Service Quality")
 	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
-	assertContains(t, out.Stdout, "After `hyper complete` passes, read `.hyper/next-packet.md`")
+	assertContains(t, out.Stdout, "After the agent finish gate (`hyper complete`) passes, read `.hyper/next-packet.md`")
 	assertContains(t, out.Stdout, "if Action is `run`, execute its Command and continue the next packet")
 	assertContains(t, out.Stdout, "if Action is `advance`, continue only when the Stage Advancement Review says the active auto target authorizes it")
 	resume, err := runCLI(args("resume"), testRoot(root), fakeUpdater{})
 	if err != nil {
 		t.Fatalf("resume failed: %v", err)
 	}
-	assertContains(t, resume.Stdout, "After `hyper complete` passes, read `.hyper/next-packet.md`")
+	assertContains(t, resume.Stdout, "After the agent finish gate (`hyper complete`) passes, read `.hyper/next-packet.md`")
 	assertContains(t, resume.Stdout, "if Action is `advance`, continue only when the Stage Advancement Review says the active auto target authorizes it")
 	state := readFile(t, filepath.Join(root, ".hyper", "state.json"))
 	assertContains(t, state, `"auto_continue": true`)
@@ -2638,7 +2638,7 @@ func TestRunAutoUntilEnteredTargetBeforeFirstPacketCreatesProofPacket(t *testing
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, status.Stdout, "Mode: auto until Usable MVP")
-	assertContains(t, status.Stdout, "Next: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, status.Stdout, "Next: agent finishes .hyper/goals/GOAL-0001/evidence.md and next.md, then runs the finish gate")
 	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
 	if err != nil {
 		t.Fatalf("doctor failed: %v", err)
@@ -2856,8 +2856,8 @@ func TestStatusAutoTargetReachedDoesNotHideActivePacket(t *testing.T) {
 
 	short := strings.Join(statusShortLines(state, derived, readiness, growthState{}), "\n")
 	assertContains(t, short, "Plan: complete-current")
-	assertContains(t, short, "Plan file: pending until `hyper complete`")
-	assertContains(t, short, "Next: update .hyper/goals/GOAL-0002/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, short, "Plan file: pending until the agent finish gate passes")
+	assertContains(t, short, "Next: agent finishes .hyper/goals/GOAL-0002/evidence.md and next.md, then runs the finish gate")
 	assertContains(t, short, "Why: The current runtime packet is still open")
 }
 
@@ -3085,8 +3085,8 @@ func TestStatusDoesNotPutMigrateBeforeActivePacketCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status --short failed: %v", err)
 	}
-	assertContains(t, short.Stdout, "Next: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
-	assertContains(t, short.Stdout, "Do: Update evidence.md and next.md for this packet, then run `hyper complete`.")
+	assertContains(t, short.Stdout, "Next: agent finishes .hyper/goals/GOAL-0001/evidence.md and next.md, then runs the finish gate")
+	assertContains(t, short.Stdout, "Do: Let the agent finish this packet: update evidence.md and next.md, then run the finish gate internally.")
 	assertContains(t, short.Stdout, "Refresh: legacy or noisy growth entries found; run `hyper migrate`")
 	assertNotContains(t, short.Stdout, "Next: hyper migrate")
 }
@@ -3430,7 +3430,7 @@ func TestMigrateDoesNotTellActivePacketToCompleteTooEarly(t *testing.T) {
 		t.Fatalf("migrate failed: %v", err)
 	}
 	assertContains(t, out.Stdout, "Planned action: complete-current")
-	assertContains(t, out.Stdout, "Next action: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, out.Stdout, "Next action: agent finishes .hyper/goals/GOAL-0001/evidence.md and next.md, then runs the finish gate")
 	assertContains(t, out.Stdout, "Next packet plan: unchanged while the current runtime packet is active")
 	assertNotContains(t, out.Stdout, "Next action: hyper complete")
 }
@@ -4136,7 +4136,7 @@ func TestStatusReflectsManualActiveCapabilityBeforeMigrate(t *testing.T) {
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, short.Stdout, "Gate: Service Quality -> Sustained Service Quality (ready)")
-	assertContains(t, short.Stdout, "Next: update .hyper/goals/GOAL-0001/evidence.md and next.md, then run `hyper complete`")
+	assertContains(t, short.Stdout, "Next: agent finishes .hyper/goals/GOAL-0001/evidence.md and next.md, then runs the finish gate")
 
 	full, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
 	if err != nil {

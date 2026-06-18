@@ -17,7 +17,7 @@ You write `plan.md` once, then use one product command:
 hyper run
 ```
 
-If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by packet toward that target. It does not run unchecked. Each packet must leave evidence, pass `hyper complete`, and either continue, fix the same packet, advance stage after review, or stop.
+If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by packet toward that target. It does not run unchecked. Each packet must leave evidence, pass the agent finish gate, and either continue, fix the same packet, advance stage after review, or stop.
 
 The goal is simple: start from a tiny MVP and keep upgrading it until it can behave like a real service, without every AI session losing the project thread.
 
@@ -44,7 +44,7 @@ What happens:
 2. It creates `.hyper/goals/<GOAL-ID>/goal.md` and `tasks.md`.
 3. The AI implements only that packet.
 4. The AI records proof in `evidence.md` and the next recommendation in `next.md`.
-5. `hyper complete` checks the packet.
+5. The agent runs the finish gate internally to check the packet.
 6. `.hyper/next-packet.md` tells Codex whether to continue, fix the same packet, advance stage, or stop.
 
 ## Why It Helps
@@ -63,7 +63,7 @@ It is not a project manager and not a big framework. It is a small CLI that crea
 ## The Short Loop
 
 ```text
-plan.md -> hyper run -> goal.md/tasks.md -> evidence.md/next.md -> hyper complete -> next packet
+plan.md -> hyper run -> goal.md/tasks.md -> evidence.md/next.md -> agent finish gate -> next packet
 ```
 
 What stays in your repo:
@@ -76,7 +76,7 @@ What stays in your repo:
 | `evidence.md` | What changed and how it was checked. |
 | `review.md` | What must be fixed if the packet is not good enough yet. |
 | `next.md` | One next step and reusable lessons. |
-| `hyper complete` | Checks the packet and prepares the next action. |
+| Agent finish gate (`hyper complete`) | Agent/runtime check that closes the packet and prepares the next action. |
 | `.hyper/next-packet.md` | The next allowed command and stop/continue guard. |
 | `hyper status --short` | Shows the current stage, blocker, and next action. |
 
@@ -137,7 +137,7 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 - If you used `--auto --until` and want to keep that override, follow the generated `--until` command; use plain `hyper run` to return to the `plan.md` target.
 - While an explicit override is active, `hyper status` shows both the active override target and the `plan.md` target when they differ.
 - If you change or remove `Target Stage`, the next status/run/migrate cycle follows the updated plan target.
-- `hyper complete` runs a finish gate before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps you in the same packet.
+- The agent finish gate runs before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps the agent in the same packet. The underlying recovery command is `hyper complete`.
 - If the same finish-gate findings repeat, Hyper Run records the repeat count and warns the agent to stop the auto loop unless the next fix directly addresses those findings.
 - `hyper run --auto --until <stage>` still works as an explicit override. It still requires ready proof before stage advancement.
 - `hyper advance` applies a stage change only after `hyper status` says the gate is ready. In an active auto target, `.hyper/next-packet.md` can carry that advancement after the Stage Advancement Review; outside auto mode, user acceptance is still required.
@@ -155,10 +155,9 @@ hyper init
 # edit plan.md once
 
 hyper run
-# implement the generated packet
-# update evidence.md and next.md
+# agent implements the generated packet
+# agent updates evidence.md/next.md and runs the finish gate internally
 
-hyper complete
 hyper status --short
 hyper advance   # when the stage gate is ready after review or an active auto target
 hyper doctor
@@ -173,7 +172,7 @@ flowchart TD
   B --> C["hyper run [focus]<br/>create the next work packet"]
   C --> D["Implement current GOAL<br/>read goal.md and tasks.md"]
   D --> E["Update evidence.md and next.md"]
-  E --> F["hyper complete<br/>check the packet"]
+  E --> F["Agent finish gate<br/>check the packet"]
   F --> G{"Enough proof?"}
   G -- "No" --> H["Write review.md findings<br/>fix the same GOAL"]
   H --> D
@@ -188,7 +187,7 @@ flowchart TD
   N -- "Yes" --> O["Stop and review<br/>choose the next service target"]
 ```
 
-`hyper complete` checks the packet before saving lessons. If validation, stage evidence, active checks, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps you in the same packet. The same findings are also surfaced in `.hyper/next-packet.md` and `hyper resume` so the next Codex step fixes the current packet instead of starting new work.
+The agent finish gate checks the packet before saving lessons. If validation, stage evidence, active checks, or `next.md` is not good enough yet, it writes findings to the current packet's `review.md` and keeps the agent in the same packet. The same findings are also surfaced in `.hyper/next-packet.md` and `hyper resume` so the next Codex step fixes the current packet instead of starting new work.
 
 For Service Quality and Sustained Service Quality packets, the evidence must also include a Self Review. Hyper Run expects the agent to judge plan alignment, core loop quality, product satisfaction, no drift, validation match, and an explicit `Verdict: pass`. A `fail` verdict keeps the same packet open for correction and carries the concrete quality gaps into `review.md`, `.hyper/next-packet.md`, and `hyper resume`.
 
@@ -395,7 +394,7 @@ hyper migrate
 hyper doctor
 ```
 
-If `hyper run` is blocked, finish the current packet first:
+If `hyper run` is blocked, the current packet must be finished first. In Codex Desktop, ask the agent to continue the current Hyper Run packet; it should update evidence/next and run the finish gate internally. For manual recovery:
 
 ```bash
 hyper resume
@@ -403,7 +402,7 @@ hyper resume
 hyper complete
 ```
 
-If `hyper complete` writes `review.md`, fix that same packet instead of starting a new `hyper run`.
+If the finish gate writes `review.md`, fix that same packet instead of starting a new `hyper run`.
 
 ## Project Setup
 
@@ -504,11 +503,11 @@ The important files are:
 - `evidence.md`: proof of what changed and what was validated
 - `next.md`: what should happen next
 
-Hyper Run blocks a new `hyper run` if the previous packet still has pending evidence. Finish the current packet with `hyper complete` first.
+Hyper Run blocks a new `hyper run` if the previous packet still has pending evidence. The agent must finish the current packet and pass the finish gate first.
 
-## What `hyper complete` Does
+## Agent Finish Gate (`hyper complete`)
 
-After implementation, update `evidence.md` and `next.md`, then run:
+After implementation, the agent updates `evidence.md` and `next.md`, then runs the finish gate internally:
 
 ```bash
 hyper complete
@@ -522,7 +521,7 @@ This closes the current packet and updates project memory:
 - constraints
 - readiness progress
 
-`hyper complete` also prints the next recommended action. If the gate is ready, it will tell you to run `hyper advance`. Otherwise it will point to the next smallest `hyper run` focus. The next `hyper run` uses the learned information to change the work boundary, validation signals, stop conditions, readiness pressure, capability candidates, and capability activation policy.
+`hyper complete` remains available as an advanced/manual recovery command for non-integrated agents and debugging. The normal human entrypoint remains `hyper run`. The next `hyper run` uses the learned information to change the work boundary, validation signals, stop conditions, readiness pressure, capability candidates, and capability activation policy.
 
 ## Readiness In Simple Terms
 
@@ -571,7 +570,7 @@ hyper init                  # install Hyper Run files in this project
 hyper run [focus]           # create the next packet; uses plan.md Target Stage when present
 hyper run --auto --until service-quality [focus]  # explicit target override
 hyper run --auto --until sustained-service-quality [focus]
-hyper complete              # run the finish gate, close the packet, and learn
+hyper complete              # agent/recovery finish gate; not the normal human entrypoint
 hyper advance               # apply a ready stage change after review or active auto target
 hyper status                # show current stage, gaps, and readiness
 hyper status --short        # show only stage, gate, proof, and next action
@@ -604,7 +603,7 @@ Then test it in another project:
 cd ../my-project
 ../orange-hyper-run/dist/hyper init
 ../orange-hyper-run/dist/hyper run "Build the smallest usable MVP"
-../orange-hyper-run/dist/hyper complete
+../orange-hyper-run/dist/hyper complete  # manual finish-gate smoke
 ```
 
 ## More Detail

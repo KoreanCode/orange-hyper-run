@@ -103,7 +103,7 @@ func migrateHyper(fsys fsRoot) (commandOutput, *hyperError) {
 					return commandOutput{}, nextErr
 				}
 				plannedAction = nextPlan.Action
-				nextAction = nextPlan.Command
+				nextAction = nextPacketActionDisplay(nextPlan)
 				nextPacketMessage = displayRelPath(hyperDir, "next-packet.md") + " (" + nextPlan.Action + ")"
 			}
 		} else if consistency.Repairable {
