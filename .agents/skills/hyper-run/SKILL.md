@@ -17,10 +17,10 @@ Behavior:
 - Run the safest available validation or record why validation is blocked.
 - Update `evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
 - Write `next.md` with the next recommended runtime episode and Learn Notes.
-- Run `hyper complete` after evidence and next notes are written; if the finish gate fails, fix the same packet using `review.md`.
+- Run `hyper complete` internally as the agent finish gate after evidence and next notes are written; if it fails, fix the same packet using `review.md`.
 - In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue through the planned command until a guard stops progress.
 - If `.hyper/next-packet.md` says `Action: run`, execute only its `Command` and continue the next packet.
 - If it says `Action: advance`, continue only when the Stage Advancement Review authorizes the active auto target or the user accepts the stage change.
 - If it says `Action: complete-current`, stay in the same packet and fix evidence.md, next.md, and review.md findings.
 - If it says `Action: stop`, report the reason shown in `.hyper/next-packet.md`; this may be target proof complete, blocked, waiting for user input, or another stop condition.
-- Do not start another `hyper run` until evidence, next notes, and `hyper complete` are done.
+- Do not start another `hyper run` until evidence, next notes, and the agent finish gate are done.
