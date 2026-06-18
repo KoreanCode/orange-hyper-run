@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.8 - 2026-06-18
+
+- Keep the normal human flow centered on `hyper run` by describing `hyper complete` as the agent finish gate and manual recovery command across README, status, doctor, run-blocking, repair, advance, migrate, resume, and generated Codex routing output.
+- Update generated runtime handoffs so `goal.md`/`tasks.md` still name the finish gate, while user-facing payloads, status, and doctor tell the agent to finish evidence/next notes and run the gate internally.
+- Refresh the project-installed `$hyper-run` skill routing through `hyper migrate` so it matches the generated agent finish-gate wording.
+- Harden `.gitignore` for local secrets, certificates, logs, coverage, temporary build outputs, and editor/cache files.
+
 ## v0.6.7 - 2026-06-16
 
 - Add generated runtime-packet sections for Decision Hierarchy, Autonomous Work Plan, Autonomous Safety Policy, Capability Expansion Policy, Research Evidence Policy, Loop Progress Policy, and Product Satisfaction Policy, with matching task and evidence rows.

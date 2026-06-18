@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.8 - 2026-06-18
+
+- 일반 사용자의 흐름을 `hyper run` 중심으로 유지하도록 README, status, doctor, run-blocking, repair, advance, migrate, resume, 생성된 Codex routing 출력에서 `hyper complete`를 agent finish gate 및 수동 복구 명령으로 설명하게 했습니다.
+- 생성 runtime handoff를 갱신했습니다. `goal.md`/`tasks.md`에는 finish gate를 계속 명시하되, user-facing payload, status, doctor는 agent가 evidence/next notes를 마무리하고 gate를 내부적으로 실행하도록 안내합니다.
+- `hyper migrate`가 project-installed `$hyper-run` skill routing을 최신 agent finish-gate wording에 맞게 갱신하게 했습니다.
+- local secret, certificate, log, coverage, 임시 build output, editor/cache file이 Git에 들어가지 않도록 `.gitignore`를 보강했습니다.
+
 ## v0.6.7 - 2026-06-16
 
 - Decision Hierarchy, Autonomous Work Plan, Autonomous Safety Policy, Capability Expansion Policy, Research Evidence Policy, Loop Progress Policy, Product Satisfaction Policy를 runtime packet에 생성하고, 이에 맞는 task/evidence row를 함께 생성하게 했습니다.
