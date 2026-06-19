@@ -27,15 +27,9 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	} else {
 		checks = append(checks, doctorCheck{"Executable", "OK", executable})
 		if path, err := exec.LookPath("hyper"); err == nil {
-			status := "OK"
-			detail := path
-			if filepath.Clean(path) != filepath.Clean(executable) {
-				status = "WARN"
-				detail = fmt.Sprintf("PATH resolves %s, current executable is %s", path, executable)
-			}
-			checks = append(checks, doctorCheck{"PATH", status, detail})
+			checks = append(checks, doctorPathCheck(executable, path, nil))
 		} else {
-			checks = append(checks, doctorCheck{"PATH", "WARN", "`hyper` is not found on PATH"})
+			checks = append(checks, doctorPathCheck(executable, "", err))
 		}
 	}
 	checks = append(checks, doctorCheck{"Version", "OK", buildinfo.Version + " (" + runtime.GOOS + "/" + runtime.GOARCH + ")"})
@@ -92,6 +86,48 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	}
 	lines = append(lines, "")
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func doctorPathCheck(executable string, path string, lookupErr error) doctorCheck {
+	if lookupErr != nil {
+		return doctorCheck{"PATH", "WARN", "`hyper` is not found on PATH"}
+	}
+	if filepath.Clean(path) == filepath.Clean(executable) {
+		return doctorCheck{"PATH", "OK", path}
+	}
+	if isLocalValidationExecutable(executable) {
+		return doctorCheck{
+			Name:   "PATH",
+			Status: "OK",
+			Detail: fmt.Sprintf("local validation executable %s is running; PATH resolves installed hyper at %s", executable, path),
+		}
+	}
+	return doctorCheck{"PATH", "WARN", fmt.Sprintf("PATH resolves %s, current executable is %s", path, executable)}
+}
+
+func isLocalValidationExecutable(executable string) bool {
+	executable = filepath.Clean(strings.TrimSpace(executable))
+	if executable == "" {
+		return false
+	}
+	gocache := strings.TrimSpace(os.Getenv("GOCACHE"))
+	if gocache != "" && pathWithinDir(filepath.Clean(gocache), executable) {
+		return true
+	}
+	for _, dir := range []string{os.TempDir(), "/private/tmp", "/tmp"} {
+		if strings.TrimSpace(dir) != "" && pathWithinDir(filepath.Clean(dir), executable) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathWithinDir(dir string, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 func doctorPlanTargetCheck(plan map[string]string) doctorCheck {

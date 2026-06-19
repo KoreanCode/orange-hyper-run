@@ -1,6 +1,6 @@
 ---
 name: hyper
-description: Thin Codex Desktop router for Hyper Run. Use when the user says $hyper, $hyper run, $hyper init, $hyper status, $hyper status --short, $hyper migrate, $hyper advance, $hyper doctor, $hyper resume, hyper run, or asks Hyper Run to continue the current project.
+description: Thin Codex Desktop router for Hyper Run. Use when the user says $hyper, $hyper run, $hyper init, $hyper status, $hyper status --short, $hyper verify, $hyper migrate, $hyper advance, $hyper doctor, $hyper resume, hyper run, or asks Hyper Run to continue the current project.
 ---
 
 # Hyper Router
@@ -33,6 +33,7 @@ Command mapping:
 - `$hyper run [focus]`: run `hyper run [focus]`; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target until that target stage's readiness proof is complete. Read the generated runtime packet, implement it in the current Codex session, update `evidence.md`, and write `next.md`.
 - `$hyper run --auto --until <stage> [focus]`: run `hyper run --auto --until <stage> [focus]` as an explicit target override, then continue packet by packet using `.hyper/next-packet.md` until the target stage proof is complete or a guard stops progress.
 - `$hyper complete`: advanced/recovery command. Run it only as the agent finish gate after evidence and next notes are written so project readiness is refreshed.
+- `$hyper verify -- <command>`: run repeatable validation through the CLI so exit code, log hashes, commit SHA, worktree status hash, goal ID, and run ID are recorded under `.hyper/verified-evidence/`.
 - `$hyper status`: run `hyper status` and use the dashboard to decide whether the agent should finish the packet, repair, advance, migrate, or start the next packet.
 - `$hyper status --short`: run `hyper status --short` when the user wants only the current stage, gate, proof, and next action.
 - `$hyper migrate`: run `hyper migrate` after CLI updates or when growth state/candidates look stale; then check `hyper status --short`.
@@ -45,8 +46,8 @@ Execution rules:
 1. Run a CLI command only when a new or resumed runtime packet is needed; if `plan.md` has `Target Stage`, plain `hyper run` uses it as the guarded auto target until that target stage's readiness proof is complete.
 2. Read the generated runtime packet in `goal.md` and the checklist in `tasks.md` before editing project files.
 3. Keep implementation scoped to the current runtime episode.
-4. Run the safest available validation, or record why validation is blocked.
-5. Update the active runtime packet's `evidence.md` with changed files, validation output, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.
+4. Run the safest available validation, or record why validation is blocked. Prefer `hyper verify -- <command>` when a real command can prove the behavior.
+5. Update the active runtime packet's `evidence.md` with changed files, validation output or Verified Evidence IDs, readiness evidence, active capability evidence, pressure signals, decisions, reusable patterns, and blockers.
 6. Write the active runtime packet's `next.md` with the next recommended runtime episode and Learn Notes.
 7. Run the agent finish gate with `hyper complete`; if it fails, fix the same packet using `review.md` before continuing.
 8. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.

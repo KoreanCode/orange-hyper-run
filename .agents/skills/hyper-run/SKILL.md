@@ -14,8 +14,8 @@ Behavior:
 - Run `hyper run --auto --until <stage> [focus]` when the user wants to override the plan target.
 - Read the generated runtime packet at `.hyper/goals/<GOAL-ID>/goal.md` and `tasks.md` before implementation.
 - Implement the work directly in the current Codex session.
-- Run the safest available validation or record why validation is blocked.
-- Update `evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
+- Run the safest available validation or record why validation is blocked; prefer `hyper verify -- <command>` for repeatable command proof.
+- Update `evidence.md` with validation output or Verified Evidence IDs, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
 - Write `next.md` with the next recommended runtime episode and Learn Notes.
 - Run `hyper complete` internally as the agent finish gate after evidence and next notes are written; if it fails, fix the same packet using `review.md`.
 - In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue through the planned command until a guard stops progress.

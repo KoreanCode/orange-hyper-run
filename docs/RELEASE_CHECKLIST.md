@@ -43,6 +43,8 @@ The disposable project check must confirm that generated packets include any new
 
 For autonomous runtime-template releases, confirm these generated sections before publishing:
 
+- `AI Control Charter`
+- `External Reference Evolution`
 - `Decision Hierarchy`
 - `Autonomous Work Plan`
 - `Autonomous Safety Policy`

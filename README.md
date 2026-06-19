@@ -21,7 +21,7 @@ If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by pack
 
 The goal is simple: start from a tiny MVP and keep upgrading it until it can behave like a real service, without every AI session losing the project thread.
 
-Current release: `v0.6.10`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, record command execution through Verified Evidence, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
+Current release: `v0.6.11`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, record command execution through Verified Evidence, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
 
 ## First Run
 
@@ -111,8 +111,10 @@ You do not need these terms to start, but they explain what Hyper Run is doing:
 | Term | Plain meaning |
 | --- | --- |
 | Runtime packet | The next AI work bundle. |
+| AI Control Charter | The packet rule that gives the AI ordinary execution control while reserving only policy-boundary decisions for humans. |
+| External Reference Evolution | The rule for treating outside prompts, docs, and benchmarks as raw material that must be transformed into stronger Hyper-native mechanisms before use. |
 | Evidence | Proof that the work was done and checked. |
-| Verified Evidence | Machine-recorded command proof from `hyper verify`, including exit code, log hashes, commit SHA, and goal/run metadata. |
+| Verified Evidence | Machine-recorded command proof from `hyper verify`, including exit code, log hashes, commit SHA, and goal/run metadata. Record writes are serialized so parallel validators do not overwrite the same evidence file. |
 | Proof Contract | The packet's proof checklist. |
 | Learn | Extracting reusable lessons from `evidence.md` and `next.md`. Not a summary. |
 | Pressure Ledger | A list of repeated needs, gaps, or failures the project keeps showing. |
@@ -333,6 +335,8 @@ From a local checkout, verify the source build before changing your active execu
 GOCACHE=/private/tmp/hyper-go-cache go build -o /private/tmp/hyper-local ./cmd/hyper
 /private/tmp/hyper-local version
 ```
+
+When you run Hyper Run directly from source or from a temporary release-candidate binary, `hyper doctor` may show that a local validation executable is running while `PATH` still resolves an installed `hyper`. That is expected during local validation; install the local build only when you intentionally want it to replace the active `hyper`.
 
 After the local binary is verified, install it to the standard user bin only when you intentionally want this checkout to replace the active `hyper`:
 

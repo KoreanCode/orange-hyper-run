@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -219,6 +220,76 @@ func TestVerifyCommandRecordsExecutionMetadata(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, hyperDir, "logs", "RUN-0001.jsonl")), `"type":"verified_command"`)
 }
 
+func TestVerifyCommandSerializesParallelEvidenceWrites(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Verified Evidence Lock", "Record parallel validation commands")
+	mustRun(t, root, "run", "Create parallel verified evidence records")
+
+	const count = 8
+	errs := make(chan string, count)
+	var wg sync.WaitGroup
+	for i := 0; i < count; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out, err := runCLI(args("verify", "--axis", "validation_coverage", "--name", fmt.Sprintf("parallel smoke %02d", i), "--", "go", "version"), testRoot(root), fakeUpdater{})
+			if err != nil {
+				errs <- fmt.Sprintf("verify %02d failed: %v", i, err)
+				return
+			}
+			if !strings.Contains(out.Stdout, "Verified evidence: VE-") {
+				errs <- fmt.Sprintf("verify %02d did not print a verified evidence ID: %s", i, out.Stdout)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for msg := range errs {
+		t.Error(msg)
+	}
+	if t.Failed() {
+		return
+	}
+
+	dir := filepath.Join(root, hyperDir, "verified-evidence")
+	paths, err := filepath.Glob(filepath.Join(dir, "VE-*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != count {
+		t.Fatalf("expected %d verified evidence records, got %d: %v", count, len(paths), paths)
+	}
+	seen := map[string]bool{}
+	for _, path := range paths {
+		fileID := strings.TrimSuffix(filepath.Base(path), ".json")
+		var record verifiedEvidenceRecord
+		if err := json.Unmarshal([]byte(readFile(t, path)), &record); err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if record.ID != fileID {
+			t.Fatalf("record %s has mismatched JSON id %q", fileID, record.ID)
+		}
+		if seen[record.ID] {
+			t.Fatalf("duplicate verified evidence id %s", record.ID)
+		}
+		seen[record.ID] = true
+		if !exists(filepath.Join(root, filepath.FromSlash(record.StdoutPath))) {
+			t.Fatalf("missing stdout file for %s", record.ID)
+		}
+		if !exists(filepath.Join(root, filepath.FromSlash(record.StderrPath))) {
+			t.Fatalf("missing stderr file for %s", record.ID)
+		}
+	}
+	if exists(filepath.Join(dir, ".writer.lock")) {
+		t.Fatal("verified evidence writer lock was not released")
+	}
+	logBody := readFile(t, filepath.Join(root, hyperDir, "logs", "verified-evidence.jsonl"))
+	if got := strings.Count(logBody, `"type":"verified_command"`); got != count {
+		t.Fatalf("expected %d verified evidence log events, got %d", count, got)
+	}
+}
+
 func TestFinishGateAcceptsVerifiedCommandEvidence(t *testing.T) {
 	root := t.TempDir()
 	mustInitWithPlan(t, root, "Verified Finish Gate", "Close packets with machine-recorded command proof")
@@ -263,7 +334,7 @@ func TestStatusShowsVerifiedEvidenceForCurrentPacket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status --short failed: %v", err)
 	}
-	assertContains(t, short.Stdout, "Verified Evidence: GOAL-0001 2 record(s); passed 1, failed 1; newest VE-0002 failed `git diff --check` exit 2")
+	assertContains(t, short.Stdout, "Verified Evidence: GOAL-0001 2 record(s); passed 1, failed 1, unresolved 1; newest VE-0002 failed `git diff --check` exit 2")
 
 	full, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
 	if err != nil {
@@ -271,9 +342,9 @@ func TestStatusShowsVerifiedEvidenceForCurrentPacket(t *testing.T) {
 	}
 	assertContains(t, full.Stdout, "Verified Evidence:")
 	assertContains(t, full.Stdout, "  Current packet: GOAL-0001")
-	assertContains(t, full.Stdout, "  Records: 2 total, 1 passed, 1 failed")
+	assertContains(t, full.Stdout, "  Records: 2 total, 1 passed, 1 failed, 1 unresolved")
 	assertContains(t, full.Stdout, "  Newest: VE-0002 failed `git diff --check` exit 2")
-	assertContains(t, full.Stdout, "  Latest failure: VE-0002 failed `git diff --check` exit 2")
+	assertContains(t, full.Stdout, "  Latest unresolved failure: VE-0002 failed `git diff --check` exit 2")
 }
 
 func TestDoctorWarnsOnFailedVerifiedEvidence(t *testing.T) {
@@ -287,8 +358,39 @@ func TestDoctorWarnsOnFailedVerifiedEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doctor failed: %v", err)
 	}
-	assertContains(t, doctor.Stdout, "[WARN] Verified Evidence: GOAL-0001 records=2 passed=1 failed=1; newest VE-0002 failed `git diff --check` exit 2")
+	assertContains(t, doctor.Stdout, "[WARN] Verified Evidence: GOAL-0001 records=2 passed=1 failed=1 unresolved=1; newest VE-0002 failed `git diff --check` exit 2")
 	assertContains(t, doctor.Stdout, "Inspect the failed Verified Evidence record, fix the command or implementation, then rerun `hyper verify -- <command>`.")
+}
+
+func TestStatusAndDoctorTreatLaterPassedVerifiedEvidenceAsResolved(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Verified Resolution", "Resolve failed verified evidence")
+	mustRun(t, root, "run", "Create a packet with resolved verified evidence")
+	writeVerifiedEvidenceFixture(t, root, "VE-0001", "GOAL-0001", "failed", "env XDG_CACHE_HOME=/tmp/cache /Users/planex/go/bin/staticcheck ./...", 1)
+	writeVerifiedEvidenceFixture(t, root, "VE-0002", "GOAL-0001", "passed", "env STATICCHECK_CACHE=/tmp/cache /Users/planex/go/bin/staticcheck ./...", 0)
+
+	short, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status --short failed: %v", err)
+	}
+	assertContains(t, short.Stdout, "Verified Evidence: GOAL-0001 2 record(s); passed 1, failed 1, unresolved 0; newest VE-0002 passed")
+	assertContains(t, short.Stdout, "historical failures resolved by later passing records")
+
+	full, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, full.Stdout, "  Records: 2 total, 1 passed, 1 failed, 0 unresolved")
+	assertContains(t, full.Stdout, "  Historical failures: 1 resolved by later passing records")
+	assertNotContains(t, full.Stdout, "Latest unresolved failure")
+
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[OK] Verified Evidence: GOAL-0001 records=2 passed=1 failed=1 unresolved=0")
+	assertContains(t, doctor.Stdout, "historical failures resolved by later passing records")
+	assertNotContains(t, doctor.Stdout, "Inspect the failed Verified Evidence record")
 }
 
 func TestInitRejectsObjectiveArgument(t *testing.T) {
@@ -387,6 +489,13 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertNotContains(t, goal, "Gate evidence:")
 	assertContains(t, goal, "## Stage Runtime Behavior")
 	assertContains(t, goal, "## Active Capabilities")
+	assertContains(t, goal, "## AI Control Charter")
+	assertContains(t, goal, "- Agent owns ordinary execution:")
+	assertContains(t, goal, "- Human owns policy boundaries only:")
+	assertContains(t, goal, "- Default action:")
+	assertContains(t, goal, "## External Reference Evolution")
+	assertContains(t, goal, "raw input, not authority")
+	assertContains(t, goal, "- Evolve only what makes Hyper Run stronger:")
 	assertContains(t, goal, "## Decision Hierarchy")
 	assertContains(t, goal, "- Safety boundary:")
 	assertContains(t, goal, "- Evidence gap:")
@@ -426,6 +535,13 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertNotContains(t, goal, "## Scope")
 	assertNotContains(t, goal, "## Non-goals")
 	evidence := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"))
+	assertContains(t, evidence, "## AI Control Evidence")
+	assertContains(t, evidence, "- Agent-owned work: Pending.")
+	assertContains(t, evidence, "- Human boundary: Pending.")
+	assertContains(t, evidence, "- Accountability trail: Pending.")
+	assertContains(t, evidence, "## External Reference Evolution Evidence")
+	assertContains(t, evidence, "- Source material: Pending. Use `Not used` when no external material changed this packet.")
+	assertContains(t, evidence, "- Hyper-native evolved mechanism: Pending.")
 	assertContains(t, evidence, "## Decision Hierarchy Evidence")
 	assertContains(t, evidence, "- Safety boundary: Pending.")
 	assertContains(t, evidence, "- Learning signal: Pending.")
@@ -452,6 +568,8 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, evidence, "## Readiness Evidence")
 	assertContains(t, evidence, "Core UX: Pending.")
 	tasks := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "tasks.md"))
+	assertContains(t, tasks, "Apply the AI Control Charter")
+	assertContains(t, tasks, "Apply External Reference Evolution")
 	assertContains(t, tasks, "Apply the Decision Hierarchy before editing")
 	assertContains(t, tasks, "Fill the Autonomous Work Plan before editing")
 	assertContains(t, tasks, "Classify the packet with the Autonomous Safety Policy before taking action")
@@ -550,6 +668,53 @@ func TestDoctorReportsProjectState(t *testing.T) {
 	assertContains(t, out.Stdout, "Summary:")
 	assertContains(t, out.Stdout, "Next:")
 	assertContains(t, out.Stdout, "Let the agent finish the current packet: update evidence.md and next.md, then run the finish gate internally.")
+}
+
+func TestDoctorPathCheckTreatsLocalValidationMismatchAsOK(t *testing.T) {
+	cache := t.TempDir()
+	t.Setenv("GOCACHE", cache)
+	executable := filepath.Join(cache, "ab", "abcdef-d", "hyper")
+	installed := filepath.Join(t.TempDir(), "hyper")
+
+	check := doctorPathCheck(executable, installed, nil)
+	if check.Status != "OK" {
+		t.Fatalf("expected local validation PATH mismatch to be OK, got %s: %s", check.Status, check.Detail)
+	}
+	assertContains(t, check.Detail, "local validation executable "+executable+" is running")
+	assertContains(t, check.Detail, "PATH resolves installed hyper at "+installed)
+	if actions := doctorActionLines([]doctorCheck{check}); len(actions) > 0 {
+		t.Fatalf("local validation PATH mismatch should not produce a next action, got %v", actions)
+	}
+}
+
+func TestDoctorPathCheckTreatsTempReleaseCandidateMismatchAsOK(t *testing.T) {
+	t.Setenv("GOCACHE", t.TempDir())
+	executable := filepath.Join(os.TempDir(), "hyper-v0.6.11")
+	installed := filepath.Join(t.TempDir(), "hyper")
+
+	check := doctorPathCheck(executable, installed, nil)
+	if check.Status != "OK" {
+		t.Fatalf("expected temp release candidate PATH mismatch to be OK, got %s: %s", check.Status, check.Detail)
+	}
+	assertContains(t, check.Detail, "local validation executable "+executable+" is running")
+	assertContains(t, check.Detail, "PATH resolves installed hyper at "+installed)
+	if actions := doctorActionLines([]doctorCheck{check}); len(actions) > 0 {
+		t.Fatalf("temp release candidate PATH mismatch should not produce a next action, got %v", actions)
+	}
+}
+
+func TestDoctorPathCheckWarnsOnInstalledMismatch(t *testing.T) {
+	t.Setenv("GOCACHE", t.TempDir())
+	executable := filepath.Join(string(os.PathSeparator), "opt", "hyper-run-current", "hyper")
+	pathExecutable := filepath.Join(string(os.PathSeparator), "usr", "local", "bin", "hyper")
+
+	check := doctorPathCheck(executable, pathExecutable, nil)
+	if check.Status != "WARN" {
+		t.Fatalf("expected installed PATH mismatch to warn, got %s: %s", check.Status, check.Detail)
+	}
+	assertContains(t, check.Detail, "PATH resolves "+pathExecutable)
+	assertContains(t, check.Detail, "current executable is "+executable)
+	assertContains(t, strings.Join(doctorActionLines([]doctorCheck{check}), "\n"), "Run `which hyper`; remove or reorder the older binary")
 }
 
 func TestDoctorDoesNotRequireNextPacketBeforeFirstRuntimePacket(t *testing.T) {

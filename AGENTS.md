@@ -3,7 +3,7 @@
 <!-- hyper-run:start -->
 ## Hyper Run
 
-When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper status`, `$hyper status --short`, `$hyper migrate`, `$hyper advance`, `$hyper doctor`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.
+When the user writes `$hyper`, `$hyper run`, `$hyper-run`, `$hyper status`, `$hyper status --short`, `$hyper verify`, `$hyper migrate`, `$hyper advance`, `$hyper doctor`, `hyper run`, or asks Hyper Run to continue the project, treat it as a project workflow command inside the current Codex session.
 
 Use `.agents/skills/hyper/SKILL.md` as the thin Codex Desktop router. Keep product judgment, execution state, learning, and generated project knowledge in `plan.md`, `.hyper/`, and the `hyper` CLI rather than in static skill text.
 
@@ -21,8 +21,8 @@ Required workflow:
 2. Read the generated runtime packet path from the CLI output, or read `.hyper/state.json` and use `current_goal_path`.
 3. Read `.hyper/goals/<GOAL-ID>/goal.md` and `.hyper/goals/<GOAL-ID>/tasks.md`.
 4. Implement the smallest coherent step that satisfies the current episode.
-5. Run the safest available validation or record why validation is blocked.
-6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
+5. Run the safest available validation or record why validation is blocked; prefer `hyper verify -- <command>` for repeatable command proof.
+6. Update `.hyper/goals/<GOAL-ID>/evidence.md` with validation output or Verified Evidence IDs, readiness evidence, active capability evidence, pressure signals, changed files, decisions, reusable patterns, and blockers.
 7. Write `.hyper/goals/<GOAL-ID>/next.md` with the next recommended runtime episode and Learn Notes.
 8. Run the agent finish gate with `hyper complete`; if it fails, fix the same packet using `review.md` before continuing.
 9. In auto mode, read `.hyper/next-packet.md`, obey its Guard and Progress Guard, and continue only through the planned next command: `run` continues, `advance` requires Stage Advancement Review authorization or user acceptance, `complete-current` fixes review.md/evidence.md/next.md in the same packet, and `stop` reports the stop reason and waits.

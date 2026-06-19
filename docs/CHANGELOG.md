@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.11 - 2026-06-19
+
+- Add generated runtime-packet guidance for an AI Control Charter and External Reference Evolution, keeping ordinary execution under AI control while treating outside prompts, docs, and benchmarks as raw material that must be transformed into stronger Hyper-native mechanisms before use.
+- Serialize Verified Evidence record writes behind a single-writer lock and add regression coverage so parallel `hyper verify` calls cannot reuse and overwrite the same `VE-*.json` record.
+- Make `hyper doctor` report source-built or temporary release-candidate validation as an expected local-build state when PATH still resolves an installed `hyper`, while preserving warnings for real installed-binary mismatches.
+- Update the release checklist so runtime-template releases explicitly confirm the new AI Control Charter and External Reference Evolution packet surfaces before publishing.
+
 ## v0.6.10 - 2026-06-19
 
 - Add `hyper verify [--axis axis] [--name name] -- <command>` to run validation commands directly and record exit code, stdout/stderr hashes, commit SHA, worktree status hash, run ID, and goal ID under `.hyper/verified-evidence/`.
