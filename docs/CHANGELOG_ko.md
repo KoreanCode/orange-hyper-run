@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.9 - 2026-06-19
+
+- `Sustained Service Quality`를 계속 운영하는 target으로 처리해, 해당 stage를 plan target으로 둔 경우 target-proof-complete로 멈추지 않고 focused quality packet을 계속 계획하게 했습니다.
+- 이 저장소의 `plan.md Target Stage`를 `Sustained Service Quality`로 설정하고, autonomous service-quality operating loop의 continue/stop 규칙과 validator promotion 경계를 문서화했습니다.
+- 영어/한국어 README의 현재 릴리즈 표기와 target-stage 안내를 갱신했습니다. 유한한 target은 proof 완료 시 멈추고, sustained service-quality 운영은 guard가 있는 packet으로 계속 이어집니다.
+- sustained target continuation을 보호하는 회귀 테스트를 추가하고, 유한한 target stop 동작은 유지했습니다.
+
 ## v0.6.8 - 2026-06-18
 
 - 일반 사용자의 흐름을 `hyper run` 중심으로 유지하도록 README, status, doctor, run-blocking, repair, advance, migrate, resume, 생성된 Codex routing 출력에서 `hyper complete`를 agent finish gate 및 수동 복구 명령으로 설명하게 했습니다.

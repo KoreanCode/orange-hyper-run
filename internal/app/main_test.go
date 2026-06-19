@@ -2709,12 +2709,14 @@ func TestRunAutoUntilSustainedQualityPromotesActiveValidator(t *testing.T) {
 		t.Fatalf("status failed: %v", err)
 	}
 	assertContains(t, status.Stdout, "Stage: Sustained Service Quality")
-	assertContains(t, status.Stdout, "Plan: stop")
-	assertContains(t, status.Stdout, "Next: hyper status --short")
-	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "next-packet.md")), "Action: stop")
+	assertContains(t, status.Stdout, "Plan: run")
+	nextPlan := readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
+	assertContains(t, nextPlan, "Mode: auto until Sustained Service Quality")
+	assertContains(t, nextPlan, "Action: run")
+	assertContains(t, nextPlan, "Continue automatically by running the command above")
 }
 
-func TestPlanTargetStageToSustainedQualityStopsAfterSustainedProof(t *testing.T) {
+func TestPlanTargetStageToSustainedQualityKeepsPlanningAfterSustainedEntry(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "plan.md"), strings.Join([]string{
 		"# Product Plan",
@@ -2820,23 +2822,23 @@ func TestPlanTargetStageToSustainedQualityStopsAfterSustainedProof(t *testing.T)
 	}
 	assertContains(t, advance.Stdout, "Stage advanced: Service Quality -> Sustained Service Quality")
 	assertContains(t, advance.Stdout, "Run target after advance: Sustained Service Quality (plan.md Target Stage)")
-	assertContains(t, advance.Stdout, "Planned action: stop")
-	assertContains(t, advance.Stdout, "Next action: hyper status --short")
-	assertContains(t, advance.Stdout, "Continuation guard: Run-until target proof is complete. Raise or remove `plan.md` Target Stage before starting more work.")
+	assertContains(t, advance.Stdout, "Planned action: run")
+	assertContains(t, advance.Stdout, "Next action: hyper run 'Run active quality checks and reduce one small operational, validation, or maintainability friction for Plan Target Sustained CLI.'")
 	assertNotContains(t, advance.Stdout, "--auto --until")
 	nextPlan = readFile(t, filepath.Join(root, ".hyper", "next-packet.md"))
 	assertContains(t, nextPlan, "Mode: auto until Sustained Service Quality")
-	assertContains(t, nextPlan, "Action: stop")
-	assertContains(t, nextPlan, "Run-until target proof is complete.")
+	assertContains(t, nextPlan, "Action: run")
+	assertContains(t, nextPlan, "Command: hyper run 'Run active quality checks and reduce one small operational, validation, or maintainability friction for Plan Target Sustained CLI.'")
 
 	out, err = runCLI(args("run"), testRoot(root), fakeUpdater{})
 	if err != nil {
-		t.Fatalf("target complete run should stop cleanly: %v", err)
+		t.Fatalf("sustained target run should continue cleanly: %v", err)
 	}
-	assertContains(t, out.Stdout, "Run-until target proof complete: Sustained Service Quality")
-	assertContains(t, out.Stdout, "No runtime packet created.")
-	if exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
-		t.Fatal("complete sustained plan target must not create another runtime packet")
+	assertContains(t, out.Stdout, "Runtime packet: GOAL-0002")
+	assertContains(t, out.Stdout, "Run mode: auto until Sustained Service Quality")
+	assertContains(t, out.Stdout, "Run target source: plan.md Target Stage")
+	if !exists(filepath.Join(root, ".hyper", "goals", "GOAL-0002")) {
+		t.Fatal("sustained plan target should keep creating focused quality packets")
 	}
 }
 

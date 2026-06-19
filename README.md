@@ -21,7 +21,7 @@ If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by pack
 
 The goal is simple: start from a tiny MVP and keep upgrading it until it can behave like a real service, without every AI session losing the project thread.
 
-Current release: `v0.6.7`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
+Current release: `v0.6.9`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
 
 ## First Run
 
@@ -221,7 +221,7 @@ The same planned action and guard are printed in the CLI output after packet com
 
 `Target Stage` means Hyper Run keeps going until that stage's readiness proof is complete, not merely until `plan.md Current Stage` has that name. For example, `Target Stage: Service Quality` continues into Service Quality packets until validation, operations, benchmark, satisfaction, maintainability, and active-quality evidence are good enough for the Service Quality gate.
 
-When the target proof is complete, plain `hyper run` stops by design. To keep going, raise `Target Stage`, remove it for manual packets, or run an explicit higher `--until` target.
+When a finite target proof is complete, plain `hyper run` stops by design. `Sustained Service Quality` is different: it is an ongoing operating target, so Hyper Run keeps planning focused quality packets until a guard, blocker, approval boundary, repeated no-progress signal, or user decision stops the loop. For finite targets, raise `Target Stage`, remove it for manual packets, or run an explicit higher `--until` target to keep going.
 
 In Codex Desktop you can use the same idea as a project command:
 

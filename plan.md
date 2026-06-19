@@ -30,6 +30,8 @@ Sustained Service Quality
 
 ## Target Stage
 
+Sustained Service Quality
+
 
 
 ## Build Style
@@ -69,4 +71,58 @@ Service Quality specifically requires repeatable validation, clear setup/update/
 
 ## Current Focus
 
-Before executing the next six product steps, add an auditable decision hierarchy that helps the AI choose work without exposing hidden chain-of-thought: safety boundary, product intent, evidence gap, smallest step, validation proof, learning/promotion signal. Then proceed step by step through autonomous packet format, safety policy, validator/harness expansion, research evidence, loop guard, and product satisfaction.
+Operate Hyper Run as an autonomous service-quality loop: the user should normally run only `hyper run`, while the AI reads the runtime packet, performs the smallest coherent step, validates it, writes evidence and next notes, runs the finish gate internally, and continues only when the next packet is safe, concrete, and evidence-producing.
+
+## Autonomous Service Quality Loop
+
+The loop exists to keep project direction intact while minimizing human attention. It should prefer project quality over activity volume.
+
+1. Human entrypoint
+   - The normal user action is `hyper run` or the equivalent Codex `$hyper-run` route.
+   - The user is not expected to run `hyper complete` in the ordinary flow.
+   - The user is asked only for approval-required actions, missing credentials/environments, ambiguous product ownership, or a deliberate scope change.
+
+2. Agent responsibility
+   - Read `plan.md`, the generated runtime packet, recent evidence, active capabilities, and `.hyper/next-packet.md`.
+   - Classify safety before action.
+   - Choose one smallest coherent episode.
+   - Run active validators or record a concrete reason they cannot run.
+   - Write evidence, next notes, durable Learn signals, and self review.
+   - Run the finish gate internally before starting another packet.
+
+3. Continue automatically when all are true
+   - `.hyper/next-packet.md` says `Action: run`.
+   - The next command is concrete and scoped to one episode.
+   - No destructive, credential-sensitive, publication, deployment, external-cost, production-data, or environment-changing action is required.
+   - The previous packet passed the finish gate.
+   - The next packet can produce code, validation evidence, readiness evidence, an active capability signal, a clearer blocker, or a changed next step.
+
+4. Stop when any are true
+   - Approval is needed for install/update, tag, push, release, deployment, branch deletion, credentials, external spend, production data, or similar high-risk action.
+   - A required environment is missing, such as Windows for Windows installer smoke or `cosign` for sigstore verification.
+   - Validation fails twice for the same reason.
+   - The next recommendation repeats without new evidence or a changed boundary.
+   - Product scope, target user, or current stage is unclear.
+   - `.hyper/next-packet.md` says `Action: stop`, or `Action: advance` without authorized stage advancement.
+
+5. Service-quality evidence
+   - Functional proof: active Go validators, targeted tests, command smoke, or artifact proof.
+   - Operational proof: install/update/release/checksum/signature/rollback/setup evidence when those surfaces are touched.
+   - Core UX proof: `hyper run`, `status`, `doctor`, and generated packet guidance keep users on the intended flow.
+   - Security proof: secrets are not exposed; release artifacts have checksum proof and signature proof when tooling exists.
+   - Maintainability proof: stale branches, dirty state, repeated friction, and unclear handoffs are closed or routed to the next packet.
+   - Product satisfaction proof: the result remains useful, coherent, and aligned with delegated autonomy, not merely test-passing.
+
+6. Validator and harness promotion
+   - Active validators are required until evidence says otherwise: `GOCACHE=/private/tmp/hyper-go-cache go test ./...`, `go test ./...`, and `git diff --check`.
+   - Promotable validators such as `hyper status --short`, fresh `init/run/status/doctor`, and stale wording guards should become active only after the activation threshold or explicit maintainer acceptance.
+   - A release-verification helper should wait until Windows smoke and sigstore-tooling decisions add one more stable pressure cycle.
+   - Do not create a harness from a single packet or from planning alone.
+
+7. Near-term service-quality order
+   - First, publish the autonomous-loop runtime fix as the next patch release using current-environment validation and release checks.
+   - Defer Windows installer smoke until a Windows-capable environment is available.
+   - Next, run optional `cosign` verification if installation is approved.
+   - Then promote repeated first-run/status validators only if another independent packet confirms the pressure.
+   - After that, audit operations and recovery notes for setup, update, rollback, and failed-packet recovery.
+   - Only after repeated release verification pressure should a project-owned release verification helper be created.
