@@ -49,8 +49,10 @@ Native Go CLI with project-local files, SQLite-backed event storage, Codex Deskt
 ## Constraints
 
 - User intervention should be minimized, but not removed for irreversible, destructive, credential, payment, publication, or high-risk operations.
+- Human control should sit at policy boundaries: approval, credentials, product ownership, spending, publication, destructive actions, and scope changes. Humans should not need to micromanage ordinary task selection or validation execution.
 - The AI must work in small coherent loops so progress is inspectable.
 - Every loop needs evidence: command output, smoke proof, browser proof, artifact proof, benchmark proof, or a concrete blocker.
+- Repeatable command validation should prefer `hyper verify -- <command>` so exit code, log hashes, commit SHA, worktree status hash, run ID, and goal ID are machine-recorded. Markdown evidence should summarize or cite those records, not replace them.
 - Harnesses, validators, skills, agents, and stricter workflows should be generated only after repeated pressure proves they are useful.
 - Project knowledge must live in `plan.md`, `.hyper/`, logs, evidence, and generated candidates, not in transient chat memory.
 - Auto continuation must include progress guards so repeated non-progress does not look like work.
@@ -86,7 +88,7 @@ The loop exists to keep project direction intact while minimizing human attentio
    - Read `plan.md`, the generated runtime packet, recent evidence, active capabilities, and `.hyper/next-packet.md`.
    - Classify safety before action.
    - Choose one smallest coherent episode.
-   - Run active validators or record a concrete reason they cannot run.
+   - Run active validators through `hyper verify -- <command>` when possible, or record a concrete reason they cannot run.
    - Write evidence, next notes, durable Learn signals, and self review.
    - Run the finish gate internally before starting another packet.
 
@@ -106,12 +108,13 @@ The loop exists to keep project direction intact while minimizing human attentio
    - `.hyper/next-packet.md` says `Action: stop`, or `Action: advance` without authorized stage advancement.
 
 5. Service-quality evidence
-   - Functional proof: active Go validators, targeted tests, command smoke, or artifact proof.
+   - Functional proof: active Go validators, targeted tests, command smoke, or artifact proof. Repeatable command proof should be backed by Verified Evidence records under `.hyper/verified-evidence/`.
    - Operational proof: install/update/release/checksum/signature/rollback/setup evidence when those surfaces are touched.
    - Core UX proof: `hyper run`, `status`, `doctor`, and generated packet guidance keep users on the intended flow.
    - Security proof: secrets are not exposed; release artifacts have checksum proof and signature proof when tooling exists.
    - Maintainability proof: stale branches, dirty state, repeated friction, and unclear handoffs are closed or routed to the next packet.
    - Product satisfaction proof: the result remains useful, coherent, and aligned with delegated autonomy, not merely test-passing.
+   - Verified Evidence proof: `hyper verify` records become the source of truth for command execution metadata; `evidence.md` remains the human-readable summary and decision ledger.
 
 6. Validator and harness promotion
    - Active validators are required until evidence says otherwise: `GOCACHE=/private/tmp/hyper-go-cache go test ./...`, `go test ./...`, and `git diff --check`.

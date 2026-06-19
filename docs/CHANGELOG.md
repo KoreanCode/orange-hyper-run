@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.10 - 2026-06-19
+
+- Add `hyper verify [--axis axis] [--name name] -- <command>` to run validation commands directly and record exit code, stdout/stderr hashes, commit SHA, worktree status hash, run ID, and goal ID under `.hyper/verified-evidence/`.
+- Let packet completion, finish gates, readiness evidence, and active validator checks consume passed Verified Evidence records instead of relying only on Markdown validation claims.
+- Update generated packet templates, Codex routing docs, `plan.md`, README, and README_ko so command proof is machine-recorded while humans stay focused on approval and policy boundaries.
+- Show the current packet's Verified Evidence summary in `hyper status` and `hyper doctor`, including record counts, newest command record, and failed exit code when a failed record exists.
+
 ## v0.6.9 - 2026-06-19
 
 - Treat `Sustained Service Quality` as an ongoing operating target so a plan target at that stage keeps planning focused quality packets instead of stopping as target-proof-complete.

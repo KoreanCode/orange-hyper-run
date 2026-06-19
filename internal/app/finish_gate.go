@@ -46,7 +46,7 @@ func runFinishGate(root string, state projectState, derived goalState, readiness
 		result.Status = "failed"
 		result.Findings = append(result.Findings, "Runtime packet is not completed yet: "+derived.Reason)
 	}
-	if !hasNonPendingSection(evidenceText, "Validation") {
+	if !hasNonPendingSection(evidenceText, "Validation") && !goalHasPassedVerifiedEvidence(root, state.CurrentGoalID) {
 		result.Status = "failed"
 		result.Findings = append(result.Findings, "Add concrete command, smoke, browser, or manual validation output under `## Validation`.")
 	}
@@ -54,11 +54,11 @@ func runFinishGate(root string, state projectState, derived goalState, readiness
 		result.Status = "failed"
 		result.Findings = append(result.Findings, "Add the next recommended runtime episode under `## Recommended Next Goal` in `next.md`.")
 	}
-	if finding := readinessFinishGateFinding(state, evidenceText, readiness); finding != "" {
+	if finding := readinessFinishGateFinding(root, state, evidenceText, readiness); finding != "" {
 		result.Status = "failed"
 		result.Findings = append(result.Findings, finding)
 	}
-	if finding := activeCapabilityFinishGateFinding(root, evidenceText); finding != "" {
+	if finding := activeCapabilityFinishGateFinding(root, state.CurrentGoalID, evidenceText); finding != "" {
 		result.Status = "failed"
 		result.Findings = append(result.Findings, finding)
 	}
@@ -128,13 +128,14 @@ func isFailedFinishGateReason(reason string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(reason)), "finish gate failed")
 }
 
-func readinessFinishGateFinding(state projectState, evidenceText string, readiness readinessState) string {
+func readinessFinishGateFinding(root string, state projectState, evidenceText string, readiness readinessState) string {
 	axis := strings.TrimSpace(readiness.NextPressure.Axis)
 	axisName := strings.TrimSpace(readiness.NextPressure.AxisName)
 	if axis == "" || axisName == "" || axis == "stage_advancement" || axis == "product_completeness" || axis == "reference_benchmark" {
 		return ""
 	}
 	records := readinessEvidenceRecordsFromGoalText(state.CurrentGoalID, evidenceText)
+	records = append(records, verifiedReadinessEvidenceRecords(root, state.CurrentGoalID, readinessDimensionDefs())...)
 	if axis == "sustained_quality" {
 		for _, record := range records {
 			if record.Axis == axis {
@@ -211,7 +212,7 @@ func readinessFinishGateHint(axis string) string {
 	}
 }
 
-func activeCapabilityFinishGateFinding(root, evidenceText string) string {
+func activeCapabilityFinishGateFinding(root, goalID, evidenceText string) string {
 	capabilities, err := activeCapabilities(root)
 	if err != nil || len(capabilities) == 0 {
 		return ""
@@ -223,6 +224,9 @@ func activeCapabilityFinishGateFinding(root, evidenceText string) string {
 			continue
 		}
 		if activeValidatorValidationCovers(capability, evidenceText) {
+			continue
+		}
+		if activeValidatorVerifiedEvidenceCovers(root, goalID, capability) {
 			continue
 		}
 		missing = append(missing, capability.Name)

@@ -69,6 +69,7 @@ func doctorHyper(fsys fsRoot) (commandOutput, *hyperError) {
 	checks = append(checks, doctorStateChecks(root)...)
 	checks = append(checks, doctorGrowthMigrationCheck(root))
 	checks = append(checks, doctorReadinessStateCheck(root))
+	checks = append(checks, doctorVerifiedEvidenceCheck(root))
 	checks = append(checks, doctorNextPacketPlanCheck(root))
 	checks = append(checks, doctorSignatureCheck())
 	checks = append(checks, doctorDBCheck(root))
@@ -516,6 +517,8 @@ func doctorActionForCheck(check doctorCheck) string {
 			return "Run `hyper repair`, then run `hyper doctor` again."
 		}
 		return "Run `hyper migrate`, then run `hyper doctor` again."
+	case "verified evidence":
+		return "Inspect the failed Verified Evidence record, fix the command or implementation, then rerun `hyper verify -- <command>`."
 	case "signature verification":
 		return "Install `cosign` or unset `HYPER_RUN_VERIFY_SIGNATURE`."
 	case "sqlite":

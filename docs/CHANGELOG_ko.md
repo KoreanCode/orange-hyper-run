@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.10 - 2026-06-19
+
+- `hyper verify [--axis axis] [--name name] -- <command>`를 추가했습니다. 검증 명령을 직접 실행하고 exit code, stdout/stderr hash, commit SHA, worktree status hash, run ID, goal ID를 `.hyper/verified-evidence/` 아래에 기록합니다.
+- Packet 완료 판정, finish gate, readiness evidence, active validator check가 Markdown validation 주장만 보지 않고 통과한 Verified Evidence record도 근거로 사용할 수 있게 했습니다.
+- Command proof는 기계 기록으로 남기고, 인간은 승인과 정책 경계에 집중하도록 generated packet template, Codex routing 문서, `plan.md`, README, README_ko를 갱신했습니다.
+- `hyper status`와 `hyper doctor`에서 현재 packet의 Verified Evidence 요약을 보여줍니다. record 수, 최신 command record, 실패 record의 exit code를 확인할 수 있습니다.
+
 ## v0.6.9 - 2026-06-19
 
 - `Sustained Service Quality`를 계속 운영하는 target으로 처리해, 해당 stage를 plan target으로 둔 경우 target-proof-complete로 멈추지 않고 focused quality packet을 계속 계획하게 했습니다.

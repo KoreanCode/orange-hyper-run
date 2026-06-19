@@ -28,10 +28,12 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "logs", "project.jsonl")), "project_initialized")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper run")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper status --short")
+	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper verify")
 	assertContains(t, readFile(t, filepath.Join(root, "AGENTS.md")), "$hyper migrate")
 	assertContains(t, readFile(t, filepath.Join(root, ".agents", "skills", "hyper", "SKILL.md")), "name: hyper")
 	assertContains(t, readFile(t, filepath.Join(root, ".agents", "skills", "hyper", "SKILL.md")), "compatibility shim")
 	assertContains(t, readFile(t, filepath.Join(root, ".agents", "skills", "hyper", "SKILL.md")), "$hyper status --short")
+	assertContains(t, readFile(t, filepath.Join(root, ".agents", "skills", "hyper", "SKILL.md")), "$hyper verify")
 	assertContains(t, readFile(t, filepath.Join(root, ".agents", "skills", "hyper", "SKILL.md")), "$hyper migrate")
 	assertContains(t, readFile(t, filepath.Join(root, ".agents", "skills", "hyper-run", "SKILL.md")), "name: hyper-run")
 	assertContains(t, readFile(t, filepath.Join(root, ".agents", "skills", "hyper-run", "SKILL.md")), "hyper run")
@@ -41,6 +43,9 @@ func TestInitCreatesProjectStateAndRules(t *testing.T) {
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"pressure_ledger"`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "growth", "state.json")), `"No structure before pressure."`)
 	assertContains(t, readFile(t, filepath.Join(root, ".hyper", "readiness", "state.json")), `"version": 1`)
+	if !exists(filepath.Join(root, ".hyper", "verified-evidence")) {
+		t.Fatal("expected verified evidence directory to be created")
+	}
 }
 
 func TestInitRejectsInvalidPlanCurrentStageBeforeStateWrite(t *testing.T) {
@@ -169,6 +174,7 @@ func TestSubcommandHelpDoesNotError(t *testing.T) {
 	}{
 		{args("run", "--help"), "Usage:\n  hyper run [--auto] [--until stage] [focus]"},
 		{args("status", "--help"), "Usage:\n  hyper status\n  hyper status --short"},
+		{args("verify", "--help"), "Usage:\n  hyper verify [--axis axis] [--name name] -- <command> [args...]"},
 		{args("update", "--help"), "Usage:\n  hyper update [source]"},
 	} {
 		out, err := runCLI(tc.args, testRoot(t.TempDir()), fakeUpdater{})
@@ -177,6 +183,112 @@ func TestSubcommandHelpDoesNotError(t *testing.T) {
 		}
 		assertContains(t, out.Stdout, tc.want)
 	}
+}
+
+func TestVerifyCommandRecordsExecutionMetadata(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Verified Evidence CLI", "Record real validation commands")
+	mustRun(t, root, "run", "Create a verified evidence record")
+
+	out, err := runCLI(args("verify", "--axis", "validation_coverage", "--name", "go version smoke", "--", "go", "version"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+
+	assertContains(t, out.Stdout, "Verified evidence: VE-0001")
+	assertContains(t, out.Stdout, "Status: passed")
+	assertContains(t, out.Stdout, "Exit code: 0")
+	assertContains(t, out.Stdout, "Command: go version")
+	assertContains(t, out.Stdout, "Goal: GOAL-0001")
+	assertContains(t, out.Stdout, "Record: .hyper/verified-evidence/VE-0001.json")
+	recordBody := readFile(t, filepath.Join(root, hyperDir, "verified-evidence", "VE-0001.json"))
+	assertContains(t, recordBody, `"id": "VE-0001"`)
+	assertContains(t, recordBody, `"type": "verified_command"`)
+	assertContains(t, recordBody, `"status": "passed"`)
+	assertContains(t, recordBody, `"axis": "validation_coverage"`)
+	assertContains(t, recordBody, `"goal_id": "GOAL-0001"`)
+	assertContains(t, recordBody, `"run_id": "RUN-0001"`)
+	assertContains(t, recordBody, `"exit_code": 0`)
+	assertContains(t, recordBody, `"stdout_sha256"`)
+	assertContains(t, recordBody, `"stderr_sha256"`)
+	assertContains(t, recordBody, `"commit_sha"`)
+	assertContains(t, recordBody, `"worktree_status_sha256"`)
+	assertContains(t, recordBody, `"command": [`)
+	assertContains(t, readFile(t, filepath.Join(root, hyperDir, "verified-evidence", "VE-0001.stdout.txt")), "go version")
+	assertContains(t, readFile(t, filepath.Join(root, hyperDir, "logs", "verified-evidence.jsonl")), `"type":"verified_command"`)
+	assertContains(t, readFile(t, filepath.Join(root, hyperDir, "logs", "RUN-0001.jsonl")), `"type":"verified_command"`)
+}
+
+func TestFinishGateAcceptsVerifiedCommandEvidence(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Verified Finish Gate", "Close packets with machine-recorded command proof")
+	mustRun(t, root, "run", "Record core CLI proof")
+	if _, err := runCLI(args("verify", "--axis", "core_ux", "--name", "primary CLI smoke", "--", "go", "version"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+	goalDir := filepath.Join(root, hyperDir, "goals", "GOAL-0001")
+	writeFile(t, filepath.Join(goalDir, "evidence.md"), strings.Join([]string{
+		"# GOAL-0001 Evidence",
+		"",
+		"## Validation",
+		"",
+		"Pending.",
+		"",
+		"## Readiness Evidence",
+		"",
+		"Core UX: Pending.",
+		"",
+		"## Blocker",
+		"",
+		"None blocking.",
+	}, "\n"))
+	writeFile(t, filepath.Join(goalDir, "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nRun the next focused packet after verified evidence has been accepted.\n")
+
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("complete should accept verified evidence: %v", err)
+	}
+	assertContains(t, out.Stdout, "Finish gate: passed")
+	assertContains(t, readFile(t, filepath.Join(goalDir, "review.md")), "Status: passed")
+}
+
+func TestStatusShowsVerifiedEvidenceForCurrentPacket(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Verified Status", "Show verified evidence in status")
+	mustRun(t, root, "run", "Create a packet with verified evidence")
+	writeVerifiedEvidenceFixture(t, root, "VE-0001", "GOAL-0001", "passed", "go test ./...", 0)
+	writeVerifiedEvidenceFixture(t, root, "VE-0002", "GOAL-0001", "failed", "git diff --check", 2)
+
+	short, err := runCLI(args("status", "--short"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status --short failed: %v", err)
+	}
+	assertContains(t, short.Stdout, "Verified Evidence: GOAL-0001 2 record(s); passed 1, failed 1; newest VE-0002 failed `git diff --check` exit 2")
+
+	full, err := runCLI(args("status"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	assertContains(t, full.Stdout, "Verified Evidence:")
+	assertContains(t, full.Stdout, "  Current packet: GOAL-0001")
+	assertContains(t, full.Stdout, "  Records: 2 total, 1 passed, 1 failed")
+	assertContains(t, full.Stdout, "  Newest: VE-0002 failed `git diff --check` exit 2")
+	assertContains(t, full.Stdout, "  Latest failure: VE-0002 failed `git diff --check` exit 2")
+}
+
+func TestDoctorWarnsOnFailedVerifiedEvidence(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Verified Doctor", "Show verified evidence in doctor")
+	mustRun(t, root, "run", "Create a packet with failed verified evidence")
+	writeVerifiedEvidenceFixture(t, root, "VE-0001", "GOAL-0001", "passed", "go test ./...", 0)
+	writeVerifiedEvidenceFixture(t, root, "VE-0002", "GOAL-0001", "failed", "git diff --check", 2)
+
+	doctor, err := runCLI(args("doctor"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+	assertContains(t, doctor.Stdout, "[WARN] Verified Evidence: GOAL-0001 records=2 passed=1 failed=1; newest VE-0002 failed `git diff --check` exit 2")
+	assertContains(t, doctor.Stdout, "Inspect the failed Verified Evidence record, fix the command or implementation, then rerun `hyper verify -- <command>`.")
 }
 
 func TestInitRejectsObjectiveArgument(t *testing.T) {
@@ -335,6 +447,8 @@ func TestRunCreatesGoalAfterInit(t *testing.T) {
 	assertContains(t, evidence, "## Product Satisfaction Evidence")
 	assertContains(t, evidence, "- Target-user fit: Pending.")
 	assertContains(t, evidence, "- Verdict: Pending. Use pass or fail.")
+	assertContains(t, evidence, "## Verified Evidence")
+	assertContains(t, evidence, "Prefer `hyper verify -- <command>`")
 	assertContains(t, evidence, "## Readiness Evidence")
 	assertContains(t, evidence, "Core UX: Pending.")
 	tasks := readFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "tasks.md"))
@@ -1611,6 +1725,24 @@ func TestCompleteAcceptsValidationOutputForActiveValidator(t *testing.T) {
 	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
 	if err != nil {
 		t.Fatalf("validation output should satisfy active validator proof: %v", err)
+	}
+	assertContains(t, out.Stdout, "Finish gate: passed")
+}
+
+func TestCompleteAcceptsVerifiedEvidenceForActiveValidator(t *testing.T) {
+	root := t.TempDir()
+	mustInitWithPlan(t, root, "Tiny CLI", "Build a tiny CLI MVP")
+	mustRun(t, root, "run")
+	writeFile(t, filepath.Join(root, ".hyper", "capabilities", "active", "validator", "validator-go-version.md"), "# validator-go-version\n\nStatus: active\nKind: validator\nSignal: Run `go version` before completing packets.\n")
+	if _, err := runCLI(args("verify", "--axis", "core_ux", "--name", "go version smoke", "--", "go", "version"), testRoot(root), fakeUpdater{}); err != nil {
+		t.Fatalf("verify failed: %v", err)
+	}
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "evidence.md"), "# GOAL-0001 Evidence\n\n## Validation\n\nPending.\n\n## Readiness Evidence\n\nCore UX: Pending.\n\n## Active Capability Evidence\n\nvalidator-go-version: Pending. Required behavior: Run `go version` before completing packets.\n\n## Blocker\n\nNone blocking.\n")
+	writeFile(t, filepath.Join(root, ".hyper", "goals", "GOAL-0001", "next.md"), "# GOAL-0001 Next\n\n## Recommended Next Goal\n\nReview the next focused quality packet.\n")
+
+	out, err := runCLI(args("complete"), testRoot(root), fakeUpdater{})
+	if err != nil {
+		t.Fatalf("verified evidence should satisfy active validator proof: %v", err)
 	}
 	assertContains(t, out.Stdout, "Finish gate: passed")
 }
@@ -4600,19 +4732,21 @@ func TestNextPacketProgressGuardExplainsAutoActions(t *testing.T) {
 }
 
 func TestOpenFailureFinishGateAcceptsClosureEvidence(t *testing.T) {
+	root := t.TempDir()
 	evidence := "# GOAL-0003 Evidence\n\n## Validation\n\n`go test ./...` passed and covers file write failure handling.\n\n## Readiness Evidence\n\nError handling: File write failures are returned from `Store.Add`, failed writes are rolled back from memory, and API save failures return HTTP 500.\n\n## Blocker\n\nNone blocking.\n"
 	readiness := readinessState{NextPressure: readinessPressure{Axis: "open_failure", AxisName: "Open failure"}}
-	if finding := readinessFinishGateFinding(projectState{CurrentGoalID: "GOAL-0003"}, evidence, readiness); finding != "" {
+	if finding := readinessFinishGateFinding(root, projectState{CurrentGoalID: "GOAL-0003"}, evidence, readiness); finding != "" {
 		t.Fatalf("expected open failure closure evidence to pass, got %q", finding)
 	}
 
 	weak := "# GOAL-0003 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: tests passed.\n\n## Blocker\n\nNone blocking.\n"
-	if finding := readinessFinishGateFinding(projectState{CurrentGoalID: "GOAL-0003"}, weak, readiness); finding == "" {
+	if finding := readinessFinishGateFinding(root, projectState{CurrentGoalID: "GOAL-0003"}, weak, readiness); finding == "" {
 		t.Fatal("expected weak open failure closure evidence to fail")
 	}
 }
 
 func TestReadinessFinishGateFindingShowsOtherGateGaps(t *testing.T) {
+	root := t.TempDir()
 	evidence := "# GOAL-0003 Evidence\n\n## Validation\n\n`go test ./...` passed.\n\n## Readiness Evidence\n\nValidation coverage: `go test ./...` passed and is repeatable.\n\n## Blocker\n\nNone blocking.\n"
 	readiness := readinessState{
 		NextPressure: readinessPressure{Axis: "security_baseline", AxisName: "Security baseline"},
@@ -4623,7 +4757,7 @@ func TestReadinessFinishGateFindingShowsOtherGateGaps(t *testing.T) {
 		}},
 	}
 
-	finding := readinessFinishGateFinding(projectState{CurrentGoalID: "GOAL-0003"}, evidence, readiness)
+	finding := readinessFinishGateFinding(root, projectState{CurrentGoalID: "GOAL-0003"}, evidence, readiness)
 	assertContains(t, finding, "Add covered readiness evidence for `Security baseline`")
 	assertContains(t, finding, "Other current gate gaps:")
 	assertContains(t, finding, "Deployment readiness: The project is not yet proven runnable outside the local development path.")
@@ -6661,6 +6795,37 @@ func writeFile(t *testing.T, path, body string) {
 	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func writeVerifiedEvidenceFixture(t *testing.T, root, id, goalID, status, command string, exitCode int) {
+	t.Helper()
+	dir := filepath.Join(root, hyperDir, "verified-evidence")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	record := verifiedEvidenceRecord{
+		ID:          id,
+		Type:        verifiedEvidenceEventType,
+		Status:      status,
+		Axis:        "validation_coverage",
+		Name:        command,
+		Command:     strings.Fields(command),
+		CommandLine: command,
+		GoalID:      goalID,
+		RunID:       strings.Replace(goalID, "GOAL", "RUN", 1),
+		ExitCode:    exitCode,
+		RecordPath:  displayRelPath(hyperDir, "verified-evidence", id+".json"),
+		StdoutPath:  displayRelPath(hyperDir, "verified-evidence", id+".stdout.txt"),
+		StderrPath:  displayRelPath(hyperDir, "verified-evidence", id+".stderr.txt"),
+		RecordedBy:  "test",
+	}
+	body, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, id+".json"), string(body)+"\n")
+	writeFile(t, filepath.Join(dir, id+".stdout.txt"), "")
+	writeFile(t, filepath.Join(dir, id+".stderr.txt"), "")
 }
 
 func insertTestMemory(t *testing.T, db *sql.DB, kind, text string) {
