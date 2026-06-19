@@ -21,7 +21,7 @@ hyper run
 
 목표는 단순합니다. 작은 MVP에서 시작해, AI 세션이 바뀌어도 문맥을 잃지 않고 실제 서비스처럼 다룰 수 있는 수준까지 계속 개선하는 것입니다.
 
-현재 릴리즈는 `v0.6.9`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
+현재 릴리즈는 `v0.6.10`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, 명령 실행은 Verified Evidence로 기록할 수 있고, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
 
 ## 첫 실행
 
@@ -46,6 +46,14 @@ $hyper run
 4. `evidence.md`에 검증 증거를 남기고 `next.md`에 다음 추천 작업을 씁니다.
 5. agent가 finish gate를 내부적으로 실행해 packet을 확인합니다.
 6. `.hyper/next-packet.md`가 계속할지, 같은 packet을 고칠지, stage를 올릴지, 멈출지 알려줍니다.
+
+반복 가능한 명령이 packet을 증명한다면 agent는 가능한 한 이렇게 기록합니다.
+
+```bash
+hyper verify --axis validation_coverage --name "go tests" -- go test ./...
+```
+
+이 명령은 exit code, stdout/stderr hash, commit SHA, worktree status hash, run ID, goal ID를 `.hyper/verified-evidence/` 아래에 저장합니다. `evidence.md`는 Verified Evidence ID를 인용하고, 그 기록이 어떤 판단을 뒷받침하는지 설명하는 사람이 읽는 요약 역할을 합니다.
 
 ## 왜 도움이 되나요
 
@@ -74,6 +82,8 @@ repo 안에 남는 것은 이 정도입니다.
 | `hyper run` | 계획과 이전 evidence를 읽고 다음 packet을 만듭니다. |
 | `goal.md` / `tasks.md` | AI가 지금 해야 할 작업입니다. |
 | `evidence.md` | 무엇을 바꿨고 어떻게 확인했는지 남기는 파일입니다. |
+| `hyper verify -- <command>` | 검증 명령을 실행하고 기계가 읽을 수 있는 proof를 저장합니다. |
+| `.hyper/verified-evidence/` | 검증된 명령 기록, stdout/stderr 로그, hash, commit SHA, goal/run metadata입니다. |
 | `review.md` | packet이 아직 부족하면 고칠 내용을 남기는 파일입니다. |
 | `next.md` | 다음 작업 하나와 재사용 가능한 배운 점을 남기는 파일입니다. |
 | Agent finish gate (`hyper complete`) | agent/runtime이 packet을 닫고 다음 행동을 준비하는 확인 단계입니다. |
@@ -102,6 +112,7 @@ Hyper Run은 첫날부터 하네스를 만들라고 하지 않습니다.
 | --- | --- |
 | Runtime packet | 다음 AI 작업 묶음입니다. |
 | Evidence | 작업이 됐고 확인했다는 증거입니다. |
+| Verified Evidence | `hyper verify`가 남기는 기계 기록입니다. exit code, log hash, commit SHA, goal/run metadata를 포함합니다. |
 | Proof Contract | 이번 packet의 증명 체크리스트입니다. |
 | Learn | `evidence.md`와 `next.md`에서 다음 작업에 다시 쓸 신호만 뽑는 단계입니다. 단순 요약이 아닙니다. |
 | Pressure Ledger | 프로젝트가 반복해서 보여준 필요, gap, 실패를 모아둔 목록입니다. |
@@ -138,6 +149,8 @@ Service Quality benchmark 예시는 [Reference Benchmark Evidence 예시](docs/e
 - 명시 override가 켜져 있고 `plan.md` 목표와 다르면 `hyper status`가 현재 override 목표와 `plan.md` 목표를 같이 보여줍니다.
 - `Target Stage`를 바꾸거나 제거하면 다음 status/run/migrate 흐름이 수정된 plan target을 따릅니다.
 - Agent finish gate는 packet을 학습하기 전에 실행됩니다. evidence가 약하면 `review.md`에 보강할 내용을 남기고 agent가 같은 packet에 머무릅니다. 내부 복구 명령은 `hyper complete`입니다.
+- `hyper verify`는 반복 가능한 명령 검증을 직접 실행하고 기계가 읽는 Verified Evidence를 저장합니다. Finish gate와 readiness는 Markdown 주장만이 아니라 이 기록도 근거로 사용할 수 있습니다.
+- `hyper status`와 `hyper doctor`는 현재 packet의 Verified Evidence record 수, 최신 record ID, command, status, 실패한 exit code를 요약해 보여줍니다.
 - 같은 finish-gate finding이 반복되면 반복 횟수를 기록하고, 다음 수정이 그 finding을 직접 해결하지 않는 한 auto loop를 멈추도록 경고합니다.
 - `hyper run --auto --until <stage>`는 명시적인 override로 계속 사용할 수 있습니다. stage advancement 전에는 여전히 ready proof가 필요합니다.
 - `hyper advance`는 `hyper status`가 gate ready라고 말할 때만 적용합니다. active auto target 안에서는 `.hyper/next-packet.md`가 Stage Advancement Review 뒤의 advancement를 이어갈 수 있고, auto mode 밖에서는 사용자 승인이 필요합니다.
@@ -156,6 +169,7 @@ hyper init
 
 hyper run
 # agent가 생성된 packet을 구현합니다
+# 반복 가능한 명령 proof가 있으면 agent가 hyper verify로 기록합니다
 # agent가 evidence.md/next.md를 업데이트하고 finish gate를 내부 실행합니다
 
 hyper status --short

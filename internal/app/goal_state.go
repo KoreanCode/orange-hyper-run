@@ -11,10 +11,14 @@ func deriveCurrentGoalState(root, goalID string) goalState {
 		return goalState{State: "initialized", Reason: "No current runtime packet recorded."}
 	}
 	goalDir := filepath.Join(root, hyperDir, "goals", goalID)
-	return deriveGoalState(readIfExists(filepath.Join(goalDir, "evidence.md")), readIfExists(filepath.Join(goalDir, "next.md")))
+	return deriveGoalStateWithVerified(readIfExists(filepath.Join(goalDir, "evidence.md")), readIfExists(filepath.Join(goalDir, "next.md")), goalHasPassedVerifiedEvidence(root, goalID))
 }
 
 func deriveGoalState(evidenceText, nextText string) goalState {
+	return deriveGoalStateWithVerified(evidenceText, nextText, false)
+}
+
+func deriveGoalStateWithVerified(evidenceText, nextText string, hasVerifiedEvidence bool) goalState {
 	if status := firstNonBlank(explicitStatus(evidenceText), explicitStatus(nextText)); status != "" {
 		reason := firstNonBlank(firstLabelValue(evidenceText, "Reason"), firstLabelValue(nextText, "Reason"), "Explicit status marker: "+status)
 		return goalState{State: status, Reason: reason}
@@ -23,7 +27,7 @@ func deriveGoalState(evidenceText, nextText string) goalState {
 	if len(blockers) > 0 {
 		return goalState{State: "blocked", Reason: firstNonBlank(blockers[0], "Blocker section is populated.")}
 	}
-	if hasNonPendingSection(nextText, "Recommended Next Goal") && hasNonPendingSection(evidenceText, "Validation") {
+	if hasNonPendingSection(nextText, "Recommended Next Goal") && (hasNonPendingSection(evidenceText, "Validation") || hasVerifiedEvidence) {
 		if surfaceProofFollowupRequiredFromEvidence(evidenceText) {
 			return goalState{State: "completed", Reason: "Evidence and next recommendation are populated; surface proof follow-up is needed."}
 		}

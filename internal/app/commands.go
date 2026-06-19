@@ -448,12 +448,29 @@ func statusHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	refresh := statusRefreshFor(root, state)
 	if short {
 		lines := statusShortLinesWithRefresh(state, derived, readiness, growth, refresh)
+		lines = appendStatusVerifiedEvidence(lines, root, state.CurrentGoalID, true)
 		lines = appendStatusReviewFindings(lines, root, state.CurrentGoalID, derived)
 		return stdout(strings.Join(lines, "\n")), nil
 	}
 	lines := statusDashboardLinesWithRefresh(state, derived, readiness, growth, runs, goals, refresh)
+	lines = appendStatusVerifiedEvidence(lines, root, state.CurrentGoalID, false)
 	lines = appendStatusReviewFindings(lines, root, state.CurrentGoalID, derived)
 	return stdout(strings.Join(lines, "\n")), nil
+}
+
+func appendStatusVerifiedEvidence(lines []string, root, goalID string, short bool) []string {
+	if strings.TrimSpace(goalID) == "" {
+		return lines
+	}
+	if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if short {
+		lines = append(lines, verifiedEvidenceShortLine(root, goalID))
+		return append(lines, "")
+	}
+	lines = append(lines, verifiedEvidenceDashboardLines(root, goalID)...)
+	return append(lines, "")
 }
 
 func appendStatusReviewFindings(lines []string, root, goalID string, derived goalState) []string {

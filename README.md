@@ -21,7 +21,7 @@ If `plan.md` has a `Target Stage`, plain `hyper run` keeps moving packet by pack
 
 The goal is simple: start from a tiny MVP and keep upgrading it until it can behave like a real service, without every AI session losing the project thread.
 
-Current release: `v0.6.9`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
+Current release: `v0.6.10`. It can continue packet by packet toward a target stage, stop and write review notes when evidence is weak, record command execution through Verified Evidence, require approval before changing stages, compare Service Quality work against category references, verify release downloads, and recover stale stage state with `hyper migrate`.
 
 ## First Run
 
@@ -46,6 +46,14 @@ What happens:
 4. The AI records proof in `evidence.md` and the next recommendation in `next.md`.
 5. The agent runs the finish gate internally to check the packet.
 6. `.hyper/next-packet.md` tells Codex whether to continue, fix the same packet, advance stage, or stop.
+
+When a repeatable command proves the packet, the agent should prefer:
+
+```bash
+hyper verify --axis validation_coverage --name "go tests" -- go test ./...
+```
+
+This records exit code, stdout/stderr hashes, commit SHA, worktree status hash, run ID, and goal ID under `.hyper/verified-evidence/`. `evidence.md` should cite the Verified Evidence ID and explain what decision it supports.
 
 ## Why It Helps
 
@@ -74,6 +82,8 @@ What stays in your repo:
 | `hyper run` | Creates the next focused packet from the plan and prior evidence. |
 | `goal.md` / `tasks.md` | What the AI should do now. |
 | `evidence.md` | What changed and how it was checked. |
+| `hyper verify -- <command>` | Runs a validation command and records machine-readable proof. |
+| `.hyper/verified-evidence/` | Verified command records, stdout/stderr logs, hashes, commit SHA, and goal/run metadata. |
 | `review.md` | What must be fixed if the packet is not good enough yet. |
 | `next.md` | One next step and reusable lessons. |
 | Agent finish gate (`hyper complete`) | Agent/runtime check that closes the packet and prepares the next action. |
@@ -102,6 +112,7 @@ You do not need these terms to start, but they explain what Hyper Run is doing:
 | --- | --- |
 | Runtime packet | The next AI work bundle. |
 | Evidence | Proof that the work was done and checked. |
+| Verified Evidence | Machine-recorded command proof from `hyper verify`, including exit code, log hashes, commit SHA, and goal/run metadata. |
 | Proof Contract | The packet's proof checklist. |
 | Learn | Extracting reusable lessons from `evidence.md` and `next.md`. Not a summary. |
 | Pressure Ledger | A list of repeated needs, gaps, or failures the project keeps showing. |
@@ -138,6 +149,8 @@ For Service Quality benchmark examples, see [Reference Benchmark Evidence Exampl
 - While an explicit override is active, `hyper status` shows both the active override target and the `plan.md` target when they differ.
 - If you change or remove `Target Stage`, the next status/run/migrate cycle follows the updated plan target.
 - The agent finish gate runs before learning from the packet. If evidence is weak, it writes `review.md` findings and keeps the agent in the same packet. The underlying recovery command is `hyper complete`.
+- `hyper verify` can run repeatable command checks directly and store machine-readable Verified Evidence. Finish gates and readiness can use those records instead of relying only on Markdown claims.
+- `hyper status` and `hyper doctor` summarize the current packet's Verified Evidence records, including counts, newest record ID, command, status, and failed exit code when one exists.
 - If the same finish-gate findings repeat, Hyper Run records the repeat count and warns the agent to stop the auto loop unless the next fix directly addresses those findings.
 - `hyper run --auto --until <stage>` still works as an explicit override. It still requires ready proof before stage advancement.
 - `hyper advance` applies a stage change only after `hyper status` says the gate is ready. In an active auto target, `.hyper/next-packet.md` can carry that advancement after the Stage Advancement Review; outside auto mode, user acceptance is still required.
@@ -156,6 +169,7 @@ hyper init
 
 hyper run
 # agent implements the generated packet
+# agent records repeatable command proof with hyper verify when available
 # agent updates evidence.md/next.md and runs the finish gate internally
 
 hyper status --short

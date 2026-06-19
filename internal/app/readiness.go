@@ -239,6 +239,7 @@ func loadReadinessEvidence(root string, defs []readinessDimensionDef) ([]readine
 		}
 		records = append(records, inferReadinessEvidenceFromReferenceBenchmark(goalID, usefulSectionLines(body, "Reference Benchmark Evidence"))...)
 	}
+	records = append(records, verifiedReadinessEvidenceRecords(root, "", defs)...)
 	return records, nil
 }
 

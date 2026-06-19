@@ -63,6 +63,11 @@ func runCLI(args []string, fsys fsRoot, updater updater) (commandOutput, *hyperE
 			return stdout(commandUsage("status")), nil
 		}
 		return statusHyper(fsys, rest)
+	case "verify":
+		if helpRequested(rest) {
+			return stdout(commandUsage("verify")), nil
+		}
+		return verifyHyper(fsys, rest)
 	case "doctor":
 		if helpRequested(rest) {
 			return stdout(commandUsage("doctor")), nil
@@ -147,6 +152,7 @@ func usage() string {
 		"  hyper advance",
 		"  hyper status",
 		"  hyper status --short",
+		"  hyper verify [--axis axis] [--name name] -- <command> [args...]",
 		"  hyper doctor",
 		"  hyper repair",
 		"  hyper resume",
@@ -159,6 +165,7 @@ func usage() string {
 		"  Edit plan.md, set `Target Stage` when you want continuation, then use plain `hyper run` to create the next runtime packet.",
 		"  Use `hyper run --auto --until service-quality [focus]` only when you need to override the plan target from the command line.",
 		"  The agent updates evidence.md and next.md, then runs the finish gate internally before another packet starts.",
+		"  Use `hyper verify -- <command>` when command proof should be recorded with exit code, log hashes, commit SHA, and worktree state.",
 		"  When `hyper status` says the stage gate is ready, use `hyper advance` after user acceptance or an active auto-target review.",
 		"",
 		"Advanced/recovery:",
@@ -202,6 +209,14 @@ func commandUsage(command string) string {
 			"  hyper status --short",
 			"",
 			"Shows current stage, gate, proof, pressure, next action, and blocking gaps.",
+		},
+		"verify": {
+			"Usage:",
+			"  hyper verify [--axis axis] [--name name] -- <command> [args...]",
+			"",
+			"Runs a validation command directly and records verified evidence under `.hyper/verified-evidence/`.",
+			"Captured metadata includes exit code, stdout/stderr hashes, commit SHA, worktree status hash, duration, run ID, and goal ID.",
+			"Use `--axis` to attach the proof to a readiness axis such as validation_coverage, core_ux, or sustained_quality.",
 		},
 		"doctor": {
 			"Usage:",
