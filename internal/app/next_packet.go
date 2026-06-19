@@ -315,6 +315,9 @@ func runUntilReached(state projectState, readiness readinessState) bool {
 }
 
 func targetStageProofComplete(target string, readiness readinessState) bool {
+	if normalizeRuntimeStage(target) == runtimeStage.SustainedServiceQuality {
+		return false
+	}
 	if readiness.StageGate.Status != "ready" {
 		return false
 	}

@@ -21,7 +21,7 @@ hyper run
 
 목표는 단순합니다. 작은 MVP에서 시작해, AI 세션이 바뀌어도 문맥을 잃지 않고 실제 서비스처럼 다룰 수 있는 수준까지 계속 개선하는 것입니다.
 
-현재 릴리즈는 `v0.6.7`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
+현재 릴리즈는 `v0.6.9`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
 
 ## 첫 실행
 
@@ -221,7 +221,7 @@ packet 완료나 stage advancement 이후 CLI 출력에도 같은 planned action
 
 `Target Stage`는 `plan.md Current Stage` 이름이 그 단계가 되는 순간을 뜻하지 않습니다. 그 단계의 readiness proof가 완료될 때까지 계속한다는 뜻입니다. 예를 들어 `Target Stage: Service Quality`는 Service Quality packet 안에서도 validation, operations, benchmark, satisfaction, maintainability, active-quality evidence가 충분해질 때까지 계속 진행합니다.
 
-target proof가 완료되면 plain `hyper run`은 의도적으로 멈춥니다. 계속 진행하려면 `Target Stage`를 더 높이거나, manual packet을 위해 제거하거나, 더 높은 `--until` target을 명시하세요.
+유한한 target proof가 완료되면 plain `hyper run`은 의도적으로 멈춥니다. `Sustained Service Quality`는 다릅니다. 계속 운영하는 목표이므로 guard, blocker, 승인 경계, 반복된 무진전 신호, 사용자 결정이 멈출 때까지 focused quality packet을 계속 계획합니다. 유한한 target에서 계속 진행하려면 `Target Stage`를 더 높이거나, manual packet을 위해 제거하거나, 더 높은 `--until` target을 명시하세요.
 
 Codex Desktop에서는 프로젝트 명령처럼 사용할 수 있습니다.
 

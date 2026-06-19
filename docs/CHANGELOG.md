@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.9 - 2026-06-19
+
+- Treat `Sustained Service Quality` as an ongoing operating target so a plan target at that stage keeps planning focused quality packets instead of stopping as target-proof-complete.
+- Set this repository's `plan.md Target Stage` to `Sustained Service Quality` and document the autonomous service-quality operating loop, including continue/stop rules and validator promotion boundaries.
+- Update English and Korean README release wording and target-stage guidance so finite targets still stop on proof completion while sustained service-quality operation continues through guarded packets.
+- Add regression coverage for sustained target continuation while preserving finite target stop behavior.
+
 ## v0.6.8 - 2026-06-18
 
 - Keep the normal human flow centered on `hyper run` by describing `hyper complete` as the agent finish gate and manual recovery command across README, status, doctor, run-blocking, repair, advance, migrate, resume, and generated Codex routing output.
