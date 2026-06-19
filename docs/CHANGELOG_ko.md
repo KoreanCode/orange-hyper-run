@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.11 - 2026-06-19
+
+- Runtime packet에 AI Control Charter와 External Reference Evolution 안내를 생성하게 했습니다. 일반 실행 제어권은 AI가 갖고, 외부 prompt, 문서, benchmark는 그대로 수용하지 않고 더 강한 Hyper-native 메커니즘으로 변환할 때만 쓰도록 합니다.
+- Verified Evidence record write를 single-writer lock으로 직렬화하고, 병렬 `hyper verify` 호출이 같은 `VE-*.json` record를 재사용하거나 덮어쓰지 못하도록 회귀 테스트를 추가했습니다.
+- `hyper doctor`가 source-built 또는 임시 release-candidate 검증 상태를 정상적인 local-build 상태로 설명하게 했습니다. 실제 설치 binary mismatch 경고는 유지합니다.
+- Runtime-template release를 publish하기 전에 새 AI Control Charter와 External Reference Evolution packet surface를 명시적으로 확인하도록 release checklist를 갱신했습니다.
+
 ## v0.6.10 - 2026-06-19
 
 - `hyper verify [--axis axis] [--name name] -- <command>`를 추가했습니다. 검증 명령을 직접 실행하고 exit code, stdout/stderr hash, commit SHA, worktree status hash, run ID, goal ID를 `.hyper/verified-evidence/` 아래에 기록합니다.

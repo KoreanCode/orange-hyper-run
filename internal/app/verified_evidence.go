@@ -14,7 +14,11 @@ import (
 	"time"
 )
 
-const verifiedEvidenceEventType = "verified_command"
+const (
+	verifiedEvidenceEventType   = "verified_command"
+	verifiedEvidenceLockTimeout = 15 * time.Second
+	verifiedEvidenceLockPoll    = 10 * time.Millisecond
+)
 
 type verifiedEvidenceRecord struct {
 	ID                    string   `json:"id"`
@@ -51,12 +55,15 @@ type verifyOptions struct {
 }
 
 type verifiedEvidenceGoalSummary struct {
-	GoalID       string
-	Total        int
-	Passed       int
-	Failed       int
-	Newest       verifiedEvidenceRecord
-	LatestFailed verifiedEvidenceRecord
+	GoalID                    string
+	Total                     int
+	Passed                    int
+	Failed                    int
+	UnresolvedFailed          int
+	Newest                    verifiedEvidenceRecord
+	LatestFailed              verifiedEvidenceRecord
+	LatestUnresolvedFailed    verifiedEvidenceRecord
+	HistoricalFailuresCleared bool
 }
 
 func verifyHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
@@ -70,7 +77,8 @@ func verifyHyper(fsys fsRoot, args []string) (commandOutput, *hyperError) {
 	}
 	state := readStateIfExists(root)
 	record, stdoutText, stderrText, runErr := runVerifiedCommand(root, state, opts)
-	if recordErr := persistVerifiedEvidence(root, state, record, stdoutText, stderrText); recordErr != nil {
+	record, recordErr := persistVerifiedEvidence(root, state, record, stdoutText, stderrText)
+	if recordErr != nil {
 		return commandOutput{}, recordErr
 	}
 	out := renderVerifiedEvidenceOutput(record)
@@ -159,46 +167,83 @@ func runVerifiedCommand(root string, state projectState, opts verifyOptions) (ve
 	}
 	stdoutText := stdoutBuf.String()
 	stderrText := stderrBuf.String()
-	recordID := nextVerifiedEvidenceID(root)
-	recordRel := displayRelPath(hyperDir, "verified-evidence", recordID+".json")
-	stdoutRel := displayRelPath(hyperDir, "verified-evidence", recordID+".stdout.txt")
-	stderrRel := displayRelPath(hyperDir, "verified-evidence", recordID+".stderr.txt")
 	commandLine := strings.Join(opts.Command, " ")
 	record := verifiedEvidenceRecord{
-		ID:                    recordID,
-		Type:                  verifiedEvidenceEventType,
-		Status:                status,
-		Axis:                  opts.Axis,
-		Name:                  opts.Name,
-		Command:               append([]string{}, opts.Command...),
-		CommandLine:           commandLine,
-		CWD:                   root,
-		RunID:                 state.ActiveRunID,
-		GoalID:                state.CurrentGoalID,
-		StartedAt:             startedAt,
-		FinishedAt:            finished.UTC().Format("2006-01-02T15:04:05.000Z"),
-		DurationMillis:        finished.Sub(start).Milliseconds(),
-		ExitCode:              exitCode,
-		CommitSHA:             gitCommitSHA(root),
-		WorktreeStatusSHA256:  hashText(gitStatusShort(root)),
-		StdoutSHA256:          hashText(stdoutText),
-		StderrSHA256:          hashText(stderrText),
-		StdoutBytes:           len([]byte(stdoutText)),
-		StderrBytes:           len([]byte(stderrText)),
-		StdoutPath:            stdoutRel,
-		StderrPath:            stderrRel,
-		RecordPath:            recordRel,
-		RecordedBy:            "hyper verify",
-		ReadinessEvidenceText: verifiedReadinessEvidenceText(opts.Axis, commandLine, status, exitCode, recordID),
+		Type:                 verifiedEvidenceEventType,
+		Status:               status,
+		Axis:                 opts.Axis,
+		Name:                 opts.Name,
+		Command:              append([]string{}, opts.Command...),
+		CommandLine:          commandLine,
+		CWD:                  root,
+		RunID:                state.ActiveRunID,
+		GoalID:               state.CurrentGoalID,
+		StartedAt:            startedAt,
+		FinishedAt:           finished.UTC().Format("2006-01-02T15:04:05.000Z"),
+		DurationMillis:       finished.Sub(start).Milliseconds(),
+		ExitCode:             exitCode,
+		CommitSHA:            gitCommitSHA(root),
+		WorktreeStatusSHA256: hashText(gitStatusShort(root)),
+		StdoutSHA256:         hashText(stdoutText),
+		StderrSHA256:         hashText(stderrText),
+		StdoutBytes:          len([]byte(stdoutText)),
+		StderrBytes:          len([]byte(stderrText)),
+		RecordedBy:           "hyper verify",
 	}
 	return record, stdoutText, stderrText, runErr
 }
 
-func persistVerifiedEvidence(root string, state projectState, record verifiedEvidenceRecord, stdoutText, stderrText string) *hyperError {
+func persistVerifiedEvidence(root string, state projectState, record verifiedEvidenceRecord, stdoutText, stderrText string) (verifiedEvidenceRecord, *hyperError) {
+	var persisted verifiedEvidenceRecord
+	if err := withVerifiedEvidenceWriteLock(root, func() *hyperError {
+		record = assignVerifiedEvidencePaths(root, record)
+		if err := persistVerifiedEvidenceLocked(root, state, record, stdoutText, stderrText); err != nil {
+			return err
+		}
+		persisted = record
+		return nil
+	}); err != nil {
+		return verifiedEvidenceRecord{}, err
+	}
+	return persisted, nil
+}
+
+func assignVerifiedEvidencePaths(root string, record verifiedEvidenceRecord) verifiedEvidenceRecord {
+	recordID := nextVerifiedEvidenceID(root)
+	record.ID = recordID
+	record.RecordPath = displayRelPath(hyperDir, "verified-evidence", recordID+".json")
+	record.StdoutPath = displayRelPath(hyperDir, "verified-evidence", recordID+".stdout.txt")
+	record.StderrPath = displayRelPath(hyperDir, "verified-evidence", recordID+".stderr.txt")
+	record.ReadinessEvidenceText = verifiedReadinessEvidenceText(record.Axis, record.CommandLine, record.Status, record.ExitCode, recordID)
+	return record
+}
+
+func withVerifiedEvidenceWriteLock(root string, fn func() *hyperError) *hyperError {
 	dir := filepath.Join(root, hyperDir, "verified-evidence")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return ioError(err)
 	}
+	lockPath := filepath.Join(dir, ".writer.lock")
+	deadline := time.Now().Add(verifiedEvidenceLockTimeout)
+	for {
+		file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if err == nil {
+			_, _ = fmt.Fprintf(file, "pid=%d created_at=%s\n", os.Getpid(), nowISO())
+			_ = file.Close()
+			defer os.Remove(lockPath)
+			return fn()
+		}
+		if !os.IsExist(err) {
+			return ioError(err)
+		}
+		if time.Now().After(deadline) {
+			return newError("Timed out waiting for the Verified Evidence writer lock. Another `hyper verify` may still be writing; retry after it finishes.", 1)
+		}
+		time.Sleep(verifiedEvidenceLockPoll)
+	}
+}
+
+func persistVerifiedEvidenceLocked(root string, state projectState, record verifiedEvidenceRecord, stdoutText, stderrText string) *hyperError {
 	// Re-run is not acceptable for evidence, so write the buffers captured during
 	// command execution through the paths embedded in the record.
 	if err := writeText(filepath.Join(root, filepath.FromSlash(record.StdoutPath)), stdoutText); err != nil {
@@ -424,10 +469,13 @@ func activeValidatorVerifiedEvidenceCovers(root, goalID string, capability activ
 
 func verifiedEvidenceSummaryForGoal(root, goalID string) verifiedEvidenceGoalSummary {
 	summary := verifiedEvidenceGoalSummary{GoalID: strings.TrimSpace(goalID)}
+	records := []verifiedEvidenceRecord{}
+	latestByCommand := map[string]verifiedEvidenceRecord{}
 	for _, record := range loadVerifiedEvidenceRecords(root) {
 		if !verifiedEvidenceGoalMatches(record, goalID) {
 			continue
 		}
+		records = append(records, record)
 		summary.Total++
 		switch record.Status {
 		case "passed":
@@ -442,8 +490,54 @@ func verifiedEvidenceSummaryForGoal(root, goalID string) verifiedEvidenceGoalSum
 			summary.LatestFailed = record
 		}
 		summary.Newest = record
+		key := verifiedEvidenceResolutionKey(record)
+		if key == "" {
+			key = record.ID
+		}
+		latestByCommand[key] = record
+	}
+	for _, record := range records {
+		key := verifiedEvidenceResolutionKey(record)
+		if key == "" {
+			key = record.ID
+		}
+		latest := latestByCommand[key]
+		if latest.ID != record.ID || !verifiedEvidenceRecordFailed(record) {
+			continue
+		}
+		summary.UnresolvedFailed++
+		summary.LatestUnresolvedFailed = record
+	}
+	if summary.Failed > 0 && summary.UnresolvedFailed == 0 {
+		summary.HistoricalFailuresCleared = true
 	}
 	return summary
+}
+
+func verifiedEvidenceResolutionKey(record verifiedEvidenceRecord) string {
+	command := append([]string{}, record.Command...)
+	if len(command) == 0 {
+		command = strings.Fields(record.CommandLine)
+	}
+	if len(command) == 0 {
+		return ""
+	}
+	if filepath.Base(command[0]) == "env" {
+		idx := 1
+		for idx < len(command) && strings.Contains(command[idx], "=") {
+			idx++
+		}
+		command = command[idx:]
+	}
+	if len(command) == 0 {
+		return ""
+	}
+	command[0] = filepath.Base(command[0])
+	return strings.Join(command, "\x00")
+}
+
+func verifiedEvidenceRecordFailed(record verifiedEvidenceRecord) bool {
+	return record.Status == "failed" || record.ExitCode != 0
 }
 
 func verifiedEvidenceShortLine(root, goalID string) string {
@@ -452,15 +546,18 @@ func verifiedEvidenceShortLine(root, goalID string) string {
 	if summary.Total == 0 {
 		return "Verified Evidence: " + goal + " has no records yet"
 	}
-	line := fmt.Sprintf("Verified Evidence: %s %d record(s); passed %d, failed %d; newest %s",
+	line := fmt.Sprintf("Verified Evidence: %s %d record(s); passed %d, failed %d, unresolved %d; newest %s",
 		goal,
 		summary.Total,
 		summary.Passed,
 		summary.Failed,
+		summary.UnresolvedFailed,
 		verifiedEvidenceRecordStatusPhrase(summary.Newest),
 	)
-	if summary.Failed > 0 && summary.LatestFailed.ID != summary.Newest.ID {
-		line += "; latest failed " + verifiedEvidenceRecordStatusPhrase(summary.LatestFailed)
+	if summary.UnresolvedFailed > 0 && summary.LatestUnresolvedFailed.ID != summary.Newest.ID {
+		line += "; latest unresolved failed " + verifiedEvidenceRecordStatusPhrase(summary.LatestUnresolvedFailed)
+	} else if summary.HistoricalFailuresCleared {
+		line += "; historical failures resolved by later passing records"
 	}
 	return line
 }
@@ -473,12 +570,14 @@ func verifiedEvidenceDashboardLines(root, goalID string) []string {
 		return append(lines, "  Records: none yet")
 	}
 	lines = append(lines,
-		fmt.Sprintf("  Records: %d total, %d passed, %d failed", summary.Total, summary.Passed, summary.Failed),
+		fmt.Sprintf("  Records: %d total, %d passed, %d failed, %d unresolved", summary.Total, summary.Passed, summary.Failed, summary.UnresolvedFailed),
 		"  Newest: "+verifiedEvidenceRecordStatusPhrase(summary.Newest),
 		"  Record: "+summary.Newest.RecordPath,
 	)
-	if summary.Failed > 0 {
-		lines = append(lines, "  Latest failure: "+verifiedEvidenceRecordStatusPhrase(summary.LatestFailed))
+	if summary.UnresolvedFailed > 0 {
+		lines = append(lines, "  Latest unresolved failure: "+verifiedEvidenceRecordStatusPhrase(summary.LatestUnresolvedFailed))
+	} else if summary.HistoricalFailuresCleared {
+		lines = append(lines, fmt.Sprintf("  Historical failures: %d resolved by later passing records", summary.Failed))
 	}
 	return lines
 }
@@ -493,19 +592,22 @@ func doctorVerifiedEvidenceCheck(root string) doctorCheck {
 	if summary.Total == 0 {
 		return doctorCheck{"Verified Evidence", "OK", "no records for " + goalID + " yet"}
 	}
-	detail := fmt.Sprintf("%s records=%d passed=%d failed=%d; newest %s",
+	detail := fmt.Sprintf("%s records=%d passed=%d failed=%d unresolved=%d; newest %s",
 		goalID,
 		summary.Total,
 		summary.Passed,
 		summary.Failed,
+		summary.UnresolvedFailed,
 		verifiedEvidenceRecordStatusPhrase(summary.Newest),
 	)
 	status := "OK"
-	if summary.Failed > 0 {
+	if summary.UnresolvedFailed > 0 {
 		status = "WARN"
-		if summary.LatestFailed.ID != summary.Newest.ID {
-			detail += "; latest failed " + verifiedEvidenceRecordStatusPhrase(summary.LatestFailed)
+		if summary.LatestUnresolvedFailed.ID != summary.Newest.ID {
+			detail += "; latest unresolved failed " + verifiedEvidenceRecordStatusPhrase(summary.LatestUnresolvedFailed)
 		}
+	} else if summary.HistoricalFailuresCleared {
+		detail += "; historical failures resolved by later passing records"
 	}
 	return doctorCheck{"Verified Evidence", status, detail}
 }

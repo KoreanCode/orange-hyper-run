@@ -21,7 +21,7 @@ hyper run
 
 목표는 단순합니다. 작은 MVP에서 시작해, AI 세션이 바뀌어도 문맥을 잃지 않고 실제 서비스처럼 다룰 수 있는 수준까지 계속 개선하는 것입니다.
 
-현재 릴리즈는 `v0.6.10`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, 명령 실행은 Verified Evidence로 기록할 수 있고, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
+현재 릴리즈는 `v0.6.11`입니다. 목표 stage까지 packet 단위로 이어가고, evidence가 약하면 멈춰서 review를 남기며, 명령 실행은 Verified Evidence로 기록할 수 있고, stage 변경은 사용자가 승인할 때만 적용합니다. Service Quality에서는 비슷한 reference와 비교할 수 있고, 설치/업데이트를 검증하며, 오래된 stage 상태는 `hyper migrate`로 복구합니다.
 
 ## 첫 실행
 
@@ -111,8 +111,10 @@ Hyper Run은 첫날부터 하네스를 만들라고 하지 않습니다.
 | 용어 | 쉽게 말하면 |
 | --- | --- |
 | Runtime packet | 다음 AI 작업 묶음입니다. |
+| AI Control Charter | 일반 실행 제어권은 AI가 갖고, 인간은 정책 경계 결정만 맡도록 packet에 명시하는 규칙입니다. |
+| External Reference Evolution | 외부 프롬프트, 문서, 벤치마크를 그대로 받아들이지 않고 더 강한 Hyper-native 메커니즘으로 변환할 때만 쓰는 규칙입니다. |
 | Evidence | 작업이 됐고 확인했다는 증거입니다. |
-| Verified Evidence | `hyper verify`가 남기는 기계 기록입니다. exit code, log hash, commit SHA, goal/run metadata를 포함합니다. |
+| Verified Evidence | `hyper verify`가 남기는 기계 기록입니다. exit code, log hash, commit SHA, goal/run metadata를 포함합니다. 병렬 validator가 같은 evidence file을 덮어쓰지 않도록 record write는 직렬화됩니다. |
 | Proof Contract | 이번 packet의 증명 체크리스트입니다. |
 | Learn | `evidence.md`와 `next.md`에서 다음 작업에 다시 쓸 신호만 뽑는 단계입니다. 단순 요약이 아닙니다. |
 | Pressure Ledger | 프로젝트가 반복해서 보여준 필요, gap, 실패를 모아둔 목록입니다. |
@@ -321,9 +323,20 @@ hyper version
 
 ## Source에서 설치
 
+일반 사용자는 release installer 또는 `hyper update`를 우선 권장합니다. Source 설치는 신뢰하는 local checkout을 직접 검증하고, 그 checkout을 현재 `PATH`의 active `hyper`로 바꾸려는 경우에 사용합니다.
+
 ```bash
 go install github.com/KoreanCode/orange-hyper-run/cmd/hyper@latest
 ```
+
+Local checkout에서 source build를 검증할 때는 먼저 별도 binary로 확인합니다.
+
+```bash
+GOCACHE=/private/tmp/hyper-go-cache go build -o /private/tmp/hyper-local ./cmd/hyper
+/private/tmp/hyper-local version
+```
+
+Source 또는 임시 release-candidate binary에서 직접 실행하는 동안 `hyper doctor`가 local validation executable은 실행 중이지만 `PATH`는 설치된 `hyper`를 가리킨다고 표시할 수 있습니다. 이는 local 검증 중에는 정상입니다. 해당 checkout을 active `hyper`로 바꾸고 싶을 때만 의도적으로 설치합니다.
 
 ## 업데이트
 
